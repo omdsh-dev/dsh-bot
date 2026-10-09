@@ -1,0 +1,146 @@
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index a2773904c8..5f7c213484 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -5479,6 +5479,103 @@ importers:
+         specifier: ^4.2.0
+         version: 4.3.1
+
++  packages/experimental/bot-mode:
++    dependencies:
++      "@deepseek-ai/dsh-brand":
++        specifier: workspace:^
++        version: link:../../util/brand
++      "@deepseek-ai/dsh-llm":
++        specifier: workspace:^
++        version: link:../../llm/llm
++      "@deepseek-ai/schemastery":
++        specifier: link:../../../vendor/schemastery
++        version: link:../../../vendor/schemastery
++      zod:
++        specifier: ^4.4.3
++        version: 4.4.3
++    devDependencies:
++      "@deepseek-ai/dsh-client-test-runtime":
++        specifier: workspace:^
++        version: link:../../test-support/client-runtime
++      "@deepseek-ai/cordis":
++        specifier: workspace:^
++        version: link:../../../vendor/cordis
++      "@deepseek-ai/cordis-plugin-include":
++        specifier: workspace:^
++        version: link:../../../vendor/include
++      "@deepseek-ai/cordis-plugin-loader":
++        specifier: workspace:^
++        version: link:../../../vendor/loader
++      "@deepseek-ai/dsh-agent":
++        specifier: workspace:^
++        version: link:../../core/agent
++      "@deepseek-ai/dsh-agent-loop":
++        specifier: workspace:^
++        version: link:../../core/agent-loop
++      "@deepseek-ai/dsh-api-gateway":
++        specifier: workspace:^
++        version: link:../../api/gateway
++      "@deepseek-ai/dsh-api-session-controller":
++        specifier: workspace:^
++        version: link:../../api/session-controller
++      "@deepseek-ai/dsh-client-locale":
++        specifier: workspace:^
++        version: link:../../client/locale
++      "@deepseek-ai/dsh-client-store":
++        specifier: workspace:^
++        version: link:../../client/store
++      "@deepseek-ai/dsh-client-ui-layout":
++        specifier: workspace:^
++        version: link:../../client/ui-layout
++      "@deepseek-ai/dsh-client-ui-primitives":
++        specifier: workspace:^
++        version: link:../../client/ui-primitives
++      "@deepseek-ai/dsh-client-ui-renderer":
++        specifier: workspace:^
++        version: link:../../client/ui-renderer
++      "@deepseek-ai/dsh-client-ui-sidebar":
++        specifier: workspace:^
++        version: link:../../client/ui-sidebar
++      "@deepseek-ai/dsh-client-ui-slots":
++        specifier: workspace:^
++        version: link:../../client/ui-slots
++      "@deepseek-ai/dsh-client-ui-workspace":
++        specifier: workspace:^
++        version: link:../../client/ui-workspace
++      "@deepseek-ai/dsh-loader-smoke":
++        specifier: workspace:^
++        version: link:../../test-support/loader-smoke
++      "@deepseek-ai/dsh-session":
++        specifier: workspace:^
++        version: link:../../core/session
++      "@deepseek-ai/dsh-session-projection":
++        specifier: workspace:^
++        version: link:../../session/session-projection
++      "@deepseek-ai/dsh-storage":
++        specifier: workspace:^
++        version: link:../../storage/storage
++      "@deepseek-ai/dsh-storage-domain":
++        specifier: workspace:^
++        version: link:../../storage/storage-domain
++      "@deepseek-ai/dsh-storage-json":
++        specifier: workspace:^
++        version: link:../../storage/storage-json
++      "@deepseek-ai/dsh-system-prompt":
++        specifier: workspace:^
++        version: link:../../core/system-prompt
++      "@deepseek-ai/dsh-typert-protocol":
++        specifier: workspace:^
++        version: link:../../typert/protocol
++      "@types/react":
++        specifier: ~18.3.1
++        version: 18.3.31
++      clsx:
++        specifier: ^2.1.1
++        version: 2.1.1
++      react:
++        specifier: ^18.2.0
++        version: 18.3.1
++
+   packages/experimental/client-ui-agent-team:
+     dependencies:
+       react:
+diff --git a/tsconfig.base.json b/tsconfig.base.json
+index 245d733e82..b6e9a8a219 100644
+--- a/tsconfig.base.json
++++ b/tsconfig.base.json
+@@ -28,6 +28,9 @@
+     // not declaration path aliases, keep each package/vendor source compiled
+     // under its own tsconfig boundary.
+     "paths": {
++      "@deepseek-ai/dsh-experimental-bot-mode": ["./packages/experimental/bot-mode/src/index.ts"],
++      "@deepseek-ai/dsh-experimental-bot-mode/types": ["./packages/experimental/bot-mode/src/types.ts"],
++      "@deepseek-ai/dsh-experimental-bot-mode/client": ["./packages/experimental/bot-mode/src/client/index.ts"],
+       "@deepseek-ai/cordis": ["./vendor/cordis/src"],
+       "@deepseek-ai/cosmokit": ["./vendor/cosmokit/src"],
+       "@deepseek-ai/schemastery": ["./vendor/schemastery/src"],
+diff --git a/tsconfig.client.json b/tsconfig.client.json
+index 494e4f762f..600f4772d2 100644
+--- a/tsconfig.client.json
++++ b/tsconfig.client.json
+@@ -41,6 +41,7 @@
+     "packages/client/*/tests/**/*.host.spec.ts"
+   ],
+   "references": [
++    { "path": "./packages/experimental/bot-mode/tsconfig.client.json" },
+     // Producer-to-UI spill tests execute the real nested dispatch worker.
+     { "path": "./packages/code-runtime/code-runtime-worker-thread" },
+     // Shared leaf: web e2e boots the real host webserver (fixture + real-host
+diff --git a/tsconfig.host.json b/tsconfig.host.json
+index c5a3f118b3..f2a738d29b 100644
+--- a/tsconfig.host.json
++++ b/tsconfig.host.json
+@@ -133,6 +133,7 @@
+     "scripts/client-bundle-purity.spec.ts"
+   ],
+   "references": [
++    { "path": "./packages/experimental/bot-mode/tsconfig.host.json" },
+     { "path": "./packages/client/ui-deliverables/tsconfig.host.json" },
+     { "path": "./vendor/cosmokit" },
+     { "path": "./vendor/schemastery" },

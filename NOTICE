@@ -1,0 +1,11 @@
+DSH Bot is an independent community plugin for DeepSeek Harness.
+
+DeepSeek Harness: https://github.com/deepseek-ai/deepseek-harness
+Copyright (c) 2026 DeepSeek. Distributed under the MIT License.
+The upstream copyright and license text are retained in LICENSE.
+
+DSH Bot plugin and distribution additions:
+Copyright (c) 2026 DSH Bot contributors. MIT License.
+
+The @deepseek-ai workspace package name identifies the DSH integration;
+it does not imply endorsement or official publication by DeepSeek.

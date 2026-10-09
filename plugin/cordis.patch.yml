@@ -1,0 +1,5 @@
+# Native opt-in overlay; build before launch. Paths resolve beside this patch.
+# node apps/cli/lib/bin.js --profile web --patch ./packages/experimental/bot-mode/cordis.patch.yml
+- insert:
+    - id: bot-mode
+      name: './lib/index.js'

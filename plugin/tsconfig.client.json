@@ -1,0 +1,61 @@
+{
+  "extends": "../../../tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
+  },
+  "files": [
+    "src/client/index.ts",
+    "src/client/model.ts",
+    "src/client/Panel.tsx",
+    "src/client/locales.ts",
+    "src/types.ts",
+    "src/css-modules.d.ts",
+    "src/client/registration.ts",
+    "src/client/view-store.ts",
+    "src/client/Avatar.tsx",
+    "src/client/Composer.tsx"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../packages/util/brand"
+    },
+    {
+      "path": "../../../packages/core/session"
+    },
+    {
+      "path": "../../../packages/api/gateway/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/api/session-controller/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/client/locale"
+    },
+    {
+      "path": "../../../packages/client/store"
+    },
+    {
+      "path": "../../../packages/client/ui-primitives"
+    },
+    {
+      "path": "../../../packages/client/ui-slots"
+    },
+    {
+      "path": "../../../packages/client/ui-renderer"
+    },
+    {
+      "path": "../../../packages/client/ui-layout"
+    },
+    {
+      "path": "../../../packages/client/ui-sidebar"
+    },
+    {
+      "path": "../../../packages/client/ui-workspace"
+    }
+  ]
+}
