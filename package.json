@@ -16,6 +16,7 @@
     "test": "node --test scripts/start.test.mjs && node scripts/test.mjs",
     "check": "node scripts/check.mjs",
     "pack": "node scripts/pack.mjs",
-    "test:package": "node --test scripts/package.test.mjs"
+    "test:package": "node --test scripts/package.test.mjs",
+    "test:registry": "node --test scripts/registry.test.mjs"
   }
 }

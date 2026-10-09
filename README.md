@@ -21,11 +21,11 @@ Bots respond only to a human send or retry. Their messages do not automatically 
 
 Version **0.2.1** includes a compiled plugin bundle for **DSH 0.1.5-rc.2**, pinned to the same upstream revision as the source distribution. Shared DSH dependencies have exact peer versions; other releases are not yet verified. A different shared dependency version is rejected by Desktop's plugin validator.
 
-**npm publication is pending.** The [GitHub prerelease](https://github.com/zzzpyyy/dsh-bot/releases/tag/v0.2.1) provides `zzzpyyy-dsh-bot-0.2.1.tgz` and `SHA256SUMS` for inspection and testing. Desktop's plugin manager accepts registry packages, not GitHub URLs or local archives, so this artifact is not yet a one-click Desktop install.
+**Available on [npm](https://www.npmjs.com/package/@zzzpyyy/dsh-bot).** In Desktop's plugin manager, enter `@zzzpyyy/dsh-bot@0.2.1`. This experimental version is published under the `next` tag; use the exact version shown here. The [GitHub prerelease](https://github.com/zzzpyyy/dsh-bot/releases/tag/v0.2.1) also provides the same archive and `SHA256SUMS`. Desktop's plugin manager accepts registry packages, not GitHub URLs or local archives.
 
-After npm publication, install `@zzzpyyy/dsh-bot@0.2.1` through Desktop's plugin manager, enable it, and open **DSH Bots**. Configure the model through DSH's native settings. Desktop uses the same Bot code as Web, runs through the native `dsh-app://` transport, and does not use port 3093. It keeps its own DSH data; existing Web chats are not imported automatically. Do not enable another copy of Bot Mode alongside this bundle.
+After installation, enable the plugin and open **DSH Bots**. Configure the model through DSH's native settings. Desktop uses the same Bot code as Web, runs through the native `dsh-app://` transport, and does not use port 3093. It keeps its own DSH data; existing Web chats are not imported automatically. Do not enable another copy of Bot Mode alongside this bundle.
 
-The actual archive has been tested through Desktop's Host and Web authentication/asset serving. A macOS Electron window has also been checked interactively, including sending `@all` and receiving replies from two Bots. Tests use a deterministic model; the published package contains no test model or fixture. Installation from the npm registry and Windows Desktop remain unverified until publication and platform testing.
+The actual archive has been tested through Desktop's Host and Web authentication/asset serving. A macOS Electron window has also been checked interactively, including sending `@all` and receiving replies from two Bots. Tests use a deterministic model; the published package contains no test model or fixture. Installation from npm has been verified with DSH's real Desktop plugin manager in a fresh profile, followed by a native Host group-chat test. Windows Desktop is not yet verified.
 
 ## Web quick start (source)
 
@@ -100,7 +100,7 @@ npm run pack
 npm run test:package
 ```
 
-Tests run inside the prepared DSH workspace and cover routing, native slots and UI interactions, persistence, stop, and process restart. `pack` creates the compiled archive and checksums in `dist/`; `test:package` unpacks that archive into isolated profiles and checks Desktop's dependency validator, native byte-pipe transport, restart continuity, and authenticated Web loading. The Desktop Host test does not require Electron or a display. Only tests substitute a deterministic model; no API key is needed. GitHub Actions performs a clean setup/build and the same tests, then retains the archive as a CI artifact. It does not publish to npm.
+Tests run inside the prepared DSH workspace and cover routing, native slots and UI interactions, persistence, stop, and process restart. `pack` creates the compiled archive and checksums in `dist/`; `test:package` unpacks that archive into isolated profiles and checks Desktop's dependency validator, native byte-pipe transport, restart continuity, and authenticated Web loading. The Desktop Host test does not require Electron or a display. Only tests substitute a deterministic model; no API key is needed. GitHub Actions performs a clean setup/build and the same tests, then retains the archive as a CI artifact. It does not publish to npm. After publication, `npm run test:registry` separately verifies an online installation through Desktop's real plugin manager; it requires public registry access and is not part of CI.
 
 See the [architecture](docs/architecture.md), [full plugin reference](docs/plugin-reference.md), and [release notes](CHANGELOG.md). When changing the DSH pin, update the integration patch and validate a fresh installation rather than assuming compatibility with pre-stable APIs.
 

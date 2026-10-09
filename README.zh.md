@@ -21,11 +21,11 @@
 
 **0.2.1** 提供适配 **DSH 0.1.5-rc.2** 的编译后插件包，使用与源码分发相同的上游提交。共享 DSH 依赖声明为精确版本的 peer dependency；其他版本尚未验证，共享依赖版本不匹配时会被桌面插件校验器拒绝。
 
-**npm 尚未发布。** [GitHub 预发布](https://github.com/zzzpyyy/dsh-bot/releases/tag/v0.2.1) 提供 `zzzpyyy-dsh-bot-0.2.1.tgz` 和 `SHA256SUMS`，可用于检查与测试。桌面插件管理器只接受 npm registry 包，不接受 GitHub URL 或本地压缩包，因此目前还不能在桌面端一键安装此附件。
+**已发布到 [npm](https://www.npmjs.com/package/@zzzpyyy/dsh-bot)。** 在桌面插件管理器输入 `@zzzpyyy/dsh-bot@0.2.1` 即可安装。实验版本使用 `next` 标签，建议按这里的精确版本安装。[GitHub 预发布](https://github.com/zzzpyyy/dsh-bot/releases/tag/v0.2.1) 同时提供相同压缩包及 `SHA256SUMS`。桌面插件管理器接受 npm registry 包，不接受 GitHub URL 或本地压缩包。
 
-npm 发布后，在桌面插件管理器安装 `@zzzpyyy/dsh-bot@0.2.1`，启用后打开 **DSH Bots**，通过 DSH 原生设置配置模型。桌面端与 Web 复用同一份 Bot 代码，使用原生 `dsh-app://` 传输，不占用 3093 端口。桌面端使用自己的 DSH 数据，现有 Web 聊天不会自动导入。请勿同时启用另一份 Bot Mode。
+安装并启用后打开 **DSH Bots**，通过 DSH 原生设置配置模型。桌面端与 Web 复用同一份 Bot 代码，使用原生 `dsh-app://` 传输，不占用 3093 端口。桌面端使用自己的 DSH 数据，现有 Web 聊天不会自动导入。请勿同时启用另一份 Bot Mode。
 
-实际安装包已通过桌面 Host 和 Web 认证、资源加载测试，也在 macOS Electron 窗口中手动验证了 `@all` 发送与两个 Bot 回复。测试使用确定性模型，发布包不包含模拟模型或测试夹具。npm registry 安装需待发布后验证，Windows 桌面端尚未验证。
+实际安装包已通过桌面 Host 和 Web 认证、资源加载测试，也在 macOS Electron 窗口中手动验证了 `@all` 发送与两个 Bot 回复。测试使用确定性模型，发布包不包含模拟模型或测试夹具。已使用 DSH 原生桌面插件管理器从 npm 安装到全新 profile，并验证原生 Host 群聊调用；Windows 桌面端尚未验证。
 
 ## Web 源码安装
 
@@ -100,7 +100,7 @@ npm run pack
 npm run test:package
 ```
 
-测试在准备好的 DSH 工作区中运行，覆盖消息路由、原生 UI 插槽和交互、持久化、停止与进程重启。`pack` 在 `dist/` 中生成编译包与校验和；`test:package` 将该压缩包解压到隔离 profile，验证桌面依赖校验器、原生管道传输、重启恢复和 Web 认证加载。桌面 Host 测试无需 Electron 或显示器。仅测试使用确定性模拟模型，无需 API Key。GitHub Actions 会从干净环境执行安装、构建和相同测试，并保留安装包作为 CI 附件，不自动发布 npm。
+测试在准备好的 DSH 工作区中运行，覆盖消息路由、原生 UI 插槽和交互、持久化、停止与进程重启。`pack` 在 `dist/` 中生成编译包与校验和；`test:package` 将该压缩包解压到隔离 profile，验证桌面依赖校验器、原生管道传输、重启恢复和 Web 认证加载。桌面 Host 测试无需 Electron 或显示器。仅测试使用确定性模拟模型，无需 API Key。GitHub Actions 会从干净环境执行安装、构建和相同测试，并保留安装包作为 CI 附件，不自动发布 npm。发布后可单独运行 `npm run test:registry`，通过 Desktop 原生插件管理器验证线上安装；该检查需要访问公共 registry，不属于 CI。
 
 详见[架构说明](docs/architecture.zh.md)、[完整插件参考](docs/plugin-reference.zh.md)和[版本说明](CHANGELOG.md)。更新 DSH 提交时需要同步集成补丁，并重新验证完整安装；其接口仍处于稳定前阶段。
 

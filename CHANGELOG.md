@@ -2,6 +2,10 @@
 
 ## 0.2.1
 
+Published as `@zzzpyyy/dsh-bot@0.2.1` on npm under the experimental `next` tag. Compatible with DSH `0.1.5-rc.2`.
+
+- Verified registry installation through the real Desktop plugin manager, followed by a native Host group-chat test in a fresh profile. `npm run test:registry` makes this post-publication check reproducible.
+
 - Remove the declaration-only `dsh-client-ui-slots` runtime peer, which is not supplied by the production Desktop package set.
 - Test against the exact first-party dependency closure selected by Desktop's own packaging code, excluding development-only packages.
 - Supersedes the withdrawn 0.2.0 GitHub preview. No 0.2.0 npm package was published.
