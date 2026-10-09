@@ -19,11 +19,11 @@ Bots respond only to a human send or retry. Their messages do not automatically 
 
 ## Desktop compatibility
 
-Version **0.2.0** includes a compiled plugin bundle for **DSH 0.1.5-rc.2**, pinned to the same upstream revision as the source distribution. Shared DSH dependencies have exact peer versions; other releases are not yet verified. A different shared dependency version is rejected by Desktop's plugin validator.
+Version **0.2.1** includes a compiled plugin bundle for **DSH 0.1.5-rc.2**, pinned to the same upstream revision as the source distribution. Shared DSH dependencies have exact peer versions; other releases are not yet verified. A different shared dependency version is rejected by Desktop's plugin validator.
 
-**npm publication is pending.** The [GitHub prerelease](https://github.com/zzzpyyy/dsh-bot/releases/tag/v0.2.0) provides `zzzpyyy-dsh-bot-0.2.0.tgz` and `SHA256SUMS` for inspection and testing. Desktop's plugin manager accepts registry packages, not GitHub URLs or local archives, so this artifact is not yet a one-click Desktop install.
+**npm publication is pending.** The [GitHub prerelease](https://github.com/zzzpyyy/dsh-bot/releases/tag/v0.2.1) provides `zzzpyyy-dsh-bot-0.2.1.tgz` and `SHA256SUMS` for inspection and testing. Desktop's plugin manager accepts registry packages, not GitHub URLs or local archives, so this artifact is not yet a one-click Desktop install.
 
-After npm publication, install `@zzzpyyy/dsh-bot@0.2.0` through Desktop's plugin manager, enable it, and open **DSH Bots**. Configure the model through DSH's native settings. Desktop uses the same Bot code as Web, runs through the native `dsh-app://` transport, and does not use port 3093. It keeps its own DSH data; existing Web chats are not imported automatically. Do not enable another copy of Bot Mode alongside this bundle.
+After npm publication, install `@zzzpyyy/dsh-bot@0.2.1` through Desktop's plugin manager, enable it, and open **DSH Bots**. Configure the model through DSH's native settings. Desktop uses the same Bot code as Web, runs through the native `dsh-app://` transport, and does not use port 3093. It keeps its own DSH data; existing Web chats are not imported automatically. Do not enable another copy of Bot Mode alongside this bundle.
 
 The actual archive has been tested through Desktop's Host and Web authentication/asset serving. A macOS Electron window has also been checked interactively, including sending `@all` and receiving replies from two Bots. Tests use a deterministic model; the published package contains no test model or fixture. Installation from the npm registry and Windows Desktop remain unverified until publication and platform testing.
 

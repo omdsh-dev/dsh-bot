@@ -17,7 +17,9 @@ for (const entry of ['index.js', 'client.js', 'typert.host.js', 'typert.remote-c
 }
 
 const packages = workspacePackages()
-const shared = new Set([...Object.keys(internal.peerDependencies), ...Object.keys(internal.dependencies).filter(name => name.startsWith('@deepseek-ai/')), '@deepseek-ai/dsh'])
+// ui-slots is a declaration-only import; Desktop does not ship that development package.
+const runtimePeers = Object.keys(internal.peerDependencies).filter(name => name !== '@deepseek-ai/dsh-client-ui-slots')
+const shared = new Set([...runtimePeers, ...Object.keys(internal.dependencies).filter(name => name.startsWith('@deepseek-ai/')), '@deepseek-ai/dsh'])
 const peerDependencies = Object.fromEntries([...shared].sort().map(name => {
   const version = packages.get(name)?.version
   if (!version) throw new Error(`Pinned DSH has no shared package ${name}`)

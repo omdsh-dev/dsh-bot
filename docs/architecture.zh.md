@@ -17,3 +17,5 @@ Desktop 与浏览器发现的是同一个 `dsh.client.platform: web` 入口，�
 配置、模型可见影响和待实现功能见[插件参考](plugin-reference.zh.md)。Profile 测试会启动两次真实构建的 DSH，仅替换外部模型，检查身份隔离、群聊与私聊上下文、取消、消息订阅顺序和持久化。
 
 安装包测试会解压实际发布的压缩包，调用 Desktop 的真实依赖校验器，并在不启用开发链接豁免的情况下启动原生 Desktop Host，仅替换外部模型。测试通过 `dsh-app://` 请求已注册的 Bot Client 模块，重启 Host 后核对 Session ID，并让同一压缩包通过 Web 认证传输加载。测试资源树不是签名应用包，macOS 窗口交互另行验证；registry 安装仍待 npm 发布后验证。
+
+安装包测试使用 Desktop 自己的依赖闭包选择器限定共享包集合，避免开发依赖掩盖缺失项。仅声明使用的 `dsh-client-ui-slots` 不列入发布包的运行时 peer；它仍在源码工作区中用于类型检查。

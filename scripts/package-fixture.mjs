@@ -35,8 +35,15 @@ export async function materializePackage(home) {
   entries.set('@deepseek-ai/dsh-desktop-host', join(runtime, 'apps/desktop-host'))
   for (const [name, item] of workspacePackages()) entries.set(name, item.path)
   entries.delete('@deepseek-ai/dsh-experimental-bot-mode')
+  // Use Desktop's own production closure selector so development-only packages cannot hide missing peers.
+  const { selectDesktopPackageClosure } = await import(pathToFileURL(join(runtime, 'apps/desktop/scripts/prepare-package-set.ts')).href)
+  const available = new Map([...entries].filter(([name]) => name.startsWith('@deepseek-ai/')).map(([name, path]) => [name, {
+    tarball: '', manifest: JSON.parse(readFileSync(join(path, 'package.json'), 'utf8')),
+  }]))
+  const production = new Set(selectDesktopPackageClosure(available).map(item => item.manifest.name))
   const sharedPackages = []
   for (const [name, path] of entries) {
+    if (name.startsWith('@deepseek-ai/') && !production.has(name)) continue
     const target = join(modules, name)
     mkdirSync(join(target, '..'), { recursive: true })
     if (name.startsWith('@deepseek-ai/')) {

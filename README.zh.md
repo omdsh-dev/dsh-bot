@@ -19,11 +19,11 @@
 
 ## 桌面版兼容情况
 
-**0.2.0** 提供适配 **DSH 0.1.5-rc.2** 的编译后插件包，使用与源码分发相同的上游提交。共享 DSH 依赖声明为精确版本的 peer dependency；其他版本尚未验证，共享依赖版本不匹配时会被桌面插件校验器拒绝。
+**0.2.1** 提供适配 **DSH 0.1.5-rc.2** 的编译后插件包，使用与源码分发相同的上游提交。共享 DSH 依赖声明为精确版本的 peer dependency；其他版本尚未验证，共享依赖版本不匹配时会被桌面插件校验器拒绝。
 
-**npm 尚未发布。** [GitHub 预发布](https://github.com/zzzpyyy/dsh-bot/releases/tag/v0.2.0) 提供 `zzzpyyy-dsh-bot-0.2.0.tgz` 和 `SHA256SUMS`，可用于检查与测试。桌面插件管理器只接受 npm registry 包，不接受 GitHub URL 或本地压缩包，因此目前还不能在桌面端一键安装此附件。
+**npm 尚未发布。** [GitHub 预发布](https://github.com/zzzpyyy/dsh-bot/releases/tag/v0.2.1) 提供 `zzzpyyy-dsh-bot-0.2.1.tgz` 和 `SHA256SUMS`，可用于检查与测试。桌面插件管理器只接受 npm registry 包，不接受 GitHub URL 或本地压缩包，因此目前还不能在桌面端一键安装此附件。
 
-npm 发布后，在桌面插件管理器安装 `@zzzpyyy/dsh-bot@0.2.0`，启用后打开 **DSH Bots**，通过 DSH 原生设置配置模型。桌面端与 Web 复用同一份 Bot 代码，使用原生 `dsh-app://` 传输，不占用 3093 端口。桌面端使用自己的 DSH 数据，现有 Web 聊天不会自动导入。请勿同时启用另一份 Bot Mode。
+npm 发布后，在桌面插件管理器安装 `@zzzpyyy/dsh-bot@0.2.1`，启用后打开 **DSH Bots**，通过 DSH 原生设置配置模型。桌面端与 Web 复用同一份 Bot 代码，使用原生 `dsh-app://` 传输，不占用 3093 端口。桌面端使用自己的 DSH 数据，现有 Web 聊天不会自动导入。请勿同时启用另一份 Bot Mode。
 
 实际安装包已通过桌面 Host 和 Web 认证、资源加载测试，也在 macOS Electron 窗口中手动验证了 `@all` 发送与两个 Bot 回复。测试使用确定性模型，发布包不包含模拟模型或测试夹具。npm registry 安装需待发布后验证，Windows 桌面端尚未验证。
 

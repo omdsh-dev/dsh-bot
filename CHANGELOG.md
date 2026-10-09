@@ -1,6 +1,12 @@
 # Release notes
 
-## 0.2.0
+## 0.2.1
+
+- Remove the declaration-only `dsh-client-ui-slots` runtime peer, which is not supplied by the production Desktop package set.
+- Test against the exact first-party dependency closure selected by Desktop's own packaging code, excluding development-only packages.
+- Supersedes the withdrawn 0.2.0 GitHub preview. No 0.2.0 npm package was published.
+
+## 0.2.0 (withdrawn preview)
 
 Compiled plugin bundle for DSH Web and Desktop `0.1.5-rc.2`.
 
