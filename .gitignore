@@ -8,3 +8,4 @@ lib/
 *.tsbuildinfo
 *.log
 .DS_Store
+dist/

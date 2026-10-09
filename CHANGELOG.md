@@ -1,5 +1,17 @@
 # Release notes
 
+## 0.2.0
+
+Compiled plugin bundle for DSH Web and Desktop `0.1.5-rc.2`.
+
+- Public bundle manifest and activation patch, with the generated implementation identity preserved inside the archive.
+- Exact peer dependencies for host-owned DSH packages, ordinary dependencies kept separate, and no lifecycle scripts or test fixtures in the release package.
+- Archive tests through the real Desktop Host and Web transport, including dependency mismatch rejection, Bot context isolation, cancellation, and Session continuity across Desktop restarts.
+- macOS Electron interaction check: open DSH Bots, send `@all`, and receive two Bot replies using a test model.
+- Bilingual installation/compatibility documentation and CI archive artifacts.
+
+The GitHub prerelease includes the compiled `.tgz` and SHA-256 checksum. npm publication is pending; Desktop's registry-only plugin manager cannot install the GitHub attachment directly. Other DSH versions, registry installation, and Windows Desktop have not been verified.
+
 ## 0.1.0
 
 Initial experimental source release of the native DSH Bot Mode plugin.

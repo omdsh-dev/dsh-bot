@@ -17,7 +17,17 @@ This is an independent, experimental community plugin. It is not an official Dee
 
 Bots respond only to a human send or retry. Their messages do not automatically trigger each other.
 
-## Quick start
+## Desktop compatibility
+
+Version **0.2.0** includes a compiled plugin bundle for **DSH 0.1.5-rc.2**, pinned to the same upstream revision as the source distribution. Shared DSH dependencies have exact peer versions; other releases are not yet verified. A different shared dependency version is rejected by Desktop's plugin validator.
+
+**npm publication is pending.** The [GitHub prerelease](https://github.com/zzzpyyy/dsh-bot/releases/tag/v0.2.0) provides `zzzpyyy-dsh-bot-0.2.0.tgz` and `SHA256SUMS` for inspection and testing. Desktop's plugin manager accepts registry packages, not GitHub URLs or local archives, so this artifact is not yet a one-click Desktop install.
+
+After npm publication, install `@zzzpyyy/dsh-bot@0.2.0` through Desktop's plugin manager, enable it, and open **DSH Bots**. Configure the model through DSH's native settings. Desktop uses the same Bot code as Web, runs through the native `dsh-app://` transport, and does not use port 3093. It keeps its own DSH data; existing Web chats are not imported automatically. Do not enable another copy of Bot Mode alongside this bundle.
+
+The actual archive has been tested through Desktop's Host and Web authentication/asset serving. A macOS Electron window has also been checked interactively, including sending `@all` and receiving replies from two Bots. Tests use a deterministic model; the published package contains no test model or fixture. Installation from the npm registry and Windows Desktop remain unverified until publication and platform testing.
+
+## Web quick start (source)
 
 Requirements: Git, **Node.js 24+**, **pnpm 11.7.0**, a C/C++ build toolchain, and a model provider supported by DSH. On macOS, install Xcode Command Line Tools (`xcode-select --install`). On Ubuntu, install `build-essential` and `python3`. Source installation downloads and builds the DSH workspace; allow several minutes and several GB of free disk space. macOS is locally verified; Linux is covered by the repository's CI workflow. Windows installation is not yet verified.
 
@@ -33,7 +43,7 @@ Open the authenticated URL printed by `dsh web`, then select **DSH Bots** in the
 
 Setup downloads the exact [DSH commit](https://github.com/deepseek-ai/deepseek-harness/commit/c291e7961a515f6d7af9304e7fd1d257929aef26) recorded in [dsh-version.json](dsh-version.json), copies the plugin into that managed workspace, applies TypeScript registration and a plugin-only lockfile addition, installs with a frozen lockfile, and builds the native Web profile. Run setup again after changing plugin source. Edit `plugin/`, not the managed copy under `.runtime/`. Setup never modifies a separate DSH installation.
 
-The plugin retains its internal `@deepseek-ai/dsh-experimental-bot-mode` workspace name and `private: true`; this release distributes source through GitHub, not an npm package. It cannot be installed with `npm install dsh-bot` or dropped into an arbitrary DSH version.
+The source plugin retains its internal `@deepseek-ai/dsh-experimental-bot-mode` workspace identity. The public bundle wraps its compiled implementation as `@zzzpyyy/dsh-bot`; it is not the unscoped `dsh-bot` npm package. Both distribution paths require the pinned DSH version.
 
 ## Port, data, and working directory
 
@@ -86,9 +96,11 @@ After setup:
 ```sh
 npm run check
 npm test
+npm run pack
+npm run test:package
 ```
 
-Tests run inside the prepared DSH workspace and cover routing, native slots and UI interactions, persistence, stop, and process restart. Only tests substitute a deterministic model; no API key is needed. The GitHub Actions workflow performs a clean setup/build and the same tests.
+Tests run inside the prepared DSH workspace and cover routing, native slots and UI interactions, persistence, stop, and process restart. `pack` creates the compiled archive and checksums in `dist/`; `test:package` unpacks that archive into isolated profiles and checks Desktop's dependency validator, native byte-pipe transport, restart continuity, and authenticated Web loading. The Desktop Host test does not require Electron or a display. Only tests substitute a deterministic model; no API key is needed. GitHub Actions performs a clean setup/build and the same tests, then retains the archive as a CI artifact. It does not publish to npm.
 
 See the [architecture](docs/architecture.md), [full plugin reference](docs/plugin-reference.md), and [release notes](CHANGELOG.md). When changing the DSH pin, update the integration patch and validate a fresh installation rather than assuming compatibility with pre-stable APIs.
 

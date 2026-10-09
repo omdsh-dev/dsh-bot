@@ -1,6 +1,7 @@
 name: Plugin checks
 on:
   push:
+    branches: [main]
   pull_request:
 permissions:
   contents: read
@@ -18,3 +19,12 @@ jobs:
       - run: npm run check
       - run: npm run setup
       - run: npm test
+      - run: npm run pack
+      - run: npm run test:package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-bot-package
+          path: |
+            dist/*.tgz
+            dist/SHA256SUMS
+          if-no-files-found: error

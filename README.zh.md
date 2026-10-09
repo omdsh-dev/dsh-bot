@@ -17,7 +17,17 @@
 
 只有用户发送消息或点击重试才会调度 Bot，Bot 的回复不会自动触发其他 Bot。
 
-## 快速开始
+## 桌面版兼容情况
+
+**0.2.0** 提供适配 **DSH 0.1.5-rc.2** 的编译后插件包，使用与源码分发相同的上游提交。共享 DSH 依赖声明为精确版本的 peer dependency；其他版本尚未验证，共享依赖版本不匹配时会被桌面插件校验器拒绝。
+
+**npm 尚未发布。** [GitHub 预发布](https://github.com/zzzpyyy/dsh-bot/releases/tag/v0.2.0) 提供 `zzzpyyy-dsh-bot-0.2.0.tgz` 和 `SHA256SUMS`，可用于检查与测试。桌面插件管理器只接受 npm registry 包，不接受 GitHub URL 或本地压缩包，因此目前还不能在桌面端一键安装此附件。
+
+npm 发布后，在桌面插件管理器安装 `@zzzpyyy/dsh-bot@0.2.0`，启用后打开 **DSH Bots**，通过 DSH 原生设置配置模型。桌面端与 Web 复用同一份 Bot 代码，使用原生 `dsh-app://` 传输，不占用 3093 端口。桌面端使用自己的 DSH 数据，现有 Web 聊天不会自动导入。请勿同时启用另一份 Bot Mode。
+
+实际安装包已通过桌面 Host 和 Web 认证、资源加载测试，也在 macOS Electron 窗口中手动验证了 `@all` 发送与两个 Bot 回复。测试使用确定性模型，发布包不包含模拟模型或测试夹具。npm registry 安装需待发布后验证，Windows 桌面端尚未验证。
+
+## Web 源码安装
 
 需要 Git、**Node.js 24+**、**pnpm 11.7.0**、C/C++ 构建工具，以及一个 DSH 支持的模型服务。macOS 可通过 `xcode-select --install` 安装 Xcode Command Line Tools；Ubuntu 需要 `build-essential` 和 `python3`。源码安装会下载并构建 DSH 工作区，需要几分钟及数 GB 可用磁盘。macOS 已在本地验证，仓库 CI 配置了 Linux 检查；Windows 安装尚未验证。
 
@@ -33,7 +43,7 @@ npm start
 
 安装脚本按 [dsh-version.json](dsh-version.json) 下载固定的 [DSH 提交](https://github.com/deepseek-ai/deepseek-harness/commit/c291e7961a515f6d7af9304e7fd1d257929aef26)，复制插件，补充 TypeScript 注册及插件锁文件条目，按冻结锁文件安装依赖，并构建原生 Web profile。修改插件源码后再次运行 setup。源码请改 `plugin/`，不要改 `.runtime/` 中的安装副本。安装脚本不会修改其他 DSH 安装。
 
-插件保留内部工作区名称 `@deepseek-ai/dsh-experimental-bot-mode` 和 `private: true`；这个版本通过 GitHub 分发源码，尚未发布 npm 包，不能通过 `npm install dsh-bot` 安装，也不承诺兼容任意 DSH 版本。
+源码插件保留内部工作区身份 `@deepseek-ai/dsh-experimental-bot-mode`，公共分发包以 `@zzzpyyy/dsh-bot` 包装其编译结果，不是 npm 上无 scope 的 `dsh-bot`。两种分发方式都要求固定的 DSH 版本。
 
 ## 端口、数据和工作目录
 
@@ -86,9 +96,11 @@ npm start -- --patch /absolute/path/bot-settings.patch.yml
 ```sh
 npm run check
 npm test
+npm run pack
+npm run test:package
 ```
 
-测试在准备好的 DSH 工作区中运行，覆盖消息路由、原生 UI 插槽和交互、持久化、停止与进程重启。仅测试使用确定性模拟模型，无需 API Key。GitHub Actions 会从干净环境执行安装、构建和相同测试。
+测试在准备好的 DSH 工作区中运行，覆盖消息路由、原生 UI 插槽和交互、持久化、停止与进程重启。`pack` 在 `dist/` 中生成编译包与校验和；`test:package` 将该压缩包解压到隔离 profile，验证桌面依赖校验器、原生管道传输、重启恢复和 Web 认证加载。桌面 Host 测试无需 Electron 或显示器。仅测试使用确定性模拟模型，无需 API Key。GitHub Actions 会从干净环境执行安装、构建和相同测试，并保留安装包作为 CI 附件，不自动发布 npm。
 
 详见[架构说明](docs/architecture.zh.md)、[完整插件参考](docs/plugin-reference.zh.md)和[版本说明](CHANGELOG.md)。更新 DSH 提交时需要同步集成补丁，并重新验证完整安装；其接口仍处于稳定前阶段。
 
