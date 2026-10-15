@@ -119,7 +119,7 @@ export async function apply(ctx) {
     let first
     for (const phase of ['first', 'resume']) {
       const result = join(home, phase + '.json')
-      host = new DesktopHostProcess(process.execPath, fixture.resources, fixture.profile, undefined, { ...process.env, DSH_HOME: home,
+      host = new DesktopHostProcess(process.execPath, fixture.resources, fixture.profile, undefined, { ...fixture.environment, DSH_HOME: home,
         MANAGED_SDK_FILE: join(sdk, 'index.cjs'), MANAGED_PHASE: phase, MANAGED_RESULT: result })
       await host.start()
       const report = await readReport(result)

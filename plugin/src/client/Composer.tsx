@@ -1,6 +1,6 @@
 /** Chat input with keyboard-safe addressing; dispatch remains a Host command. */
 import { useId, useRef, useState } from 'react'
-import { Button, IconCloseOutline16, IconSendOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconCloseOutlineRegular, IconSendOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Bot, ChatMessage } from '../types.ts'
 import type { BotKey } from './locales.ts'
 import { Avatar } from './Avatar.tsx'
@@ -53,7 +53,7 @@ export function Composer({ bots, disabled, draft, onDraft, reply, onCancelReply,
     </div>}
     <form className={css.composer} onSubmit={(event) => { event.preventDefault(); if (!disabled && draft.trim()) onSend() }}>
       {reply && <div className={css.replyPreview}><div><strong>{t('replying')} {bots.find(bot => bot.id === reply.botId)?.name ?? t('you')}</strong><span>{reply.text}</span></div>
-        <Button size="sm" aria-label={t('removeReply')} icon={<IconCloseOutline16 />} onClick={onCancelReply} /></div>}
+        <Button size="sm" aria-label={t('removeReply')} icon={<IconCloseOutlineRegular />} onClick={onCancelReply} /></div>}
       {open && <div className={css.mentionMenu} role="listbox" id={menuId} aria-label={t('invite')}>
         <div className={css.menuLabel}>{t('invite')}</div>
         {options.map((bot, index) => <button type="button" key={bot.id} role="option" id={`${menuId}-${index}`} aria-selected={index === activeIndex}
@@ -78,7 +78,7 @@ export function Composer({ bots, disabled, draft, onDraft, reply, onCancelReply,
         }} />
       <div className={css.composerTools}>
         <Button size="sm" onClick={() => { invite() }} aria-label={t('invite')}><span className={css.atMark}>@</span>{t('invite')}</Button>
-        <div className={css.sendTools}><span>{t('sendHint')}</span><Button type="submit" variant="primary" aria-label={t('send')} title={t('send')} disabled={disabled || !draft.trim()} icon={<IconSendOutline16 />} /></div>
+        <div className={css.sendTools}><span>{t('sendHint')}</span><Button type="submit" variant="primary" aria-label={t('send')} title={t('send')} disabled={disabled || !draft.trim()} icon={<IconSendOutlineRegular size={16} />} /></div>
       </div>
     </form>
     <p className={css.composerHint}>{t('addressHint')}</p>

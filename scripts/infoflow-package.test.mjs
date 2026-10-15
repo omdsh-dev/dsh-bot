@@ -15,7 +15,7 @@ test('the optional archive resolves Host dependencies, receives through the SDK,
     const { DesktopHostProcess } = await desktopModule('host-process')
     const first = join(home, 'first.json')
     host = new DesktopHostProcess(process.execPath, fixture.resources, fixture.profile, undefined,
-      { ...process.env, DSH_HOME: home, BOT_TEST_PHASE: 'first', BOT_TEST_RESULT: first })
+      { ...fixture.environment, DSH_HOME: home, BOT_TEST_PHASE: 'first', BOT_TEST_RESULT: first })
     await host.start()
     const seed = await readReport(first)
     assert.equal(seed.ok, true, seed.error)
@@ -58,14 +58,13 @@ module.exports = { Client, WSClient };
     manifest.dependencies[info.name] = info.version
     manifest.dsh.profile.bundles.push(info.name)
     await writeFile(manifestPath, JSON.stringify(manifest))
-    const { validateDesktopPluginGraph } = await desktopModule('profile-packages')
-    validateDesktopPluginGraph(fixture.profile, fixture.resources, fixture.descriptor, [fixture.info.name, info.name])
+    fixture.validate()
     const patchPath = join(fixture.profile, 'cordis.patch.yml')
     await writeFile(patchPath, await readFile(patchPath, 'utf8') + '\n- id: bot-infoflow\n  disabled: false\n  config:\n    managed: false\n    accountId: fixture\n    robotId: robot\n    appKeyRef: INFOFLOW_TEST_KEY\n    appSecretRef: INFOFLOW_TEST_SECRET\n    botIds: [architect, critic]\n    defaultBot: architect\n    allowUsers: [alice]\n    pollMs: 100\n')
     const second = join(home, 'resume.json')
     const delivery = join(home, 'deliveries.jsonl')
     host = new DesktopHostProcess(process.execPath, fixture.resources, fixture.profile, undefined,
-      { ...process.env, DSH_HOME: home, BOT_TEST_PHASE: 'resume', BOT_TEST_RESULT: second,
+      { ...fixture.environment, DSH_HOME: home, BOT_TEST_PHASE: 'resume', BOT_TEST_RESULT: second,
         INFOFLOW_TEST_KEY: 'synthetic-key', INFOFLOW_TEST_SECRET: 'synthetic-secret', INFOFLOW_TEST_REPORT: delivery })
     await host.start()
     const report = await readReport(second)

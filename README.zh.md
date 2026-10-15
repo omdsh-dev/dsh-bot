@@ -6,7 +6,7 @@
 
 这是独立的实验性社区插件，不是 DeepSeek 官方产品，与 Grok、Cue、Muse 没有关联。
 
-**0.5.0 版本**支持从 Web、飞书和如流调用同一个 Bot。在 **DSH Bots → IM 接入** 统一配置两个平台，为每个 Bot 绑定机器人，并从 DSH 创建平台群聊。
+**0.6.0 版本**适配 **DSH 0.2.0-rc.2**，支持从 Web、飞书和如流调用同一个 Bot。在 **DSH Bots → IM 接入** 统一配置两个平台，为每个 Bot 绑定机器人，并从 DSH 创建平台群聊。
 
 同一个 Bot 可以同时绑定飞书和如流。角色指令、模型和工具共用；聊天记录、模型对话上下文和回复目的地按平台及具体聊天隔离。工具访问的文件和外部记忆仍由部署权限决定。
 
@@ -36,32 +36,36 @@
 
 ## 从 npm 安装或更新
 
-要求 **DSH 0.1.5-rc.2**。这些实验性包使用 `next` 标签，建议安装下表中的精确版本。共享 DSH 依赖固定到 [dsh-version.json](dsh-version.json) 记录的上游版本，其他 DSH 版本尚未验证。
+要求 **DSH 0.2.0-rc.2**。这些实验性包使用 `next` 标签，建议安装下表中的精确版本。共享 DSH 依赖固定到 [dsh-version.json](dsh-version.json) 记录的上游版本，其他 DSH 版本尚未验证。
 
 | 包 | 版本 | 用途 |
 | --- | --- | --- |
-| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.5.0` | 必装主包，提供 Web 聊天和 IM 配置面板 |
-| [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.1.0` | 可选，提供飞书连接和建群能力 |
-| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.2.1` | 可选，提供如流连接；需能获取企业 SDK |
+| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.6.0` | 必装主包，提供 Web 聊天和 IM 配置面板 |
+| [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.2.0` | 可选，提供飞书连接和建群能力 |
+| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.3.0` | 可选，提供如流连接；需能获取企业 SDK |
 
-在 **Desktop → 插件管理器** 安装 `@zzzpyyy/dsh-bot@0.5.0`，再按需向同一个 profile 添加配套插件。桌面插件管理器接受 registry 包，不接受 GitHub URL 或本地压缩包。
+如果仍使用 DSH **0.1.5-rc.2**，请保留旧配套版本：主包 **0.5.0**、飞书 **0.1.0**、如流 **0.2.1**。新配套版本适用于 **0.2.0-rc.2**，请先更新 DSH，不要跳过兼容性检查。
+
+在 **Desktop → 插件管理器** 安装 `@zzzpyyy/dsh-bot@0.6.0`，再按需向同一个 profile 添加配套插件。
+
+飞书安装若报 `ERR_PNPM_IGNORED_BUILDS: protobufjs`，按[飞书安装说明](docs/feishu.zh.md#安装与开发)在目标 profile 中明确禁用该可选安装脚本，再重试。
 
 已有兼容版本的 **DSH CLI Web profile** 可执行：
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot@0.5.0
-dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.1.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot@0.6.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.2.0
 ```
 
 如流额外依赖企业 SDK `@baidu/infoflow-sdk-nodejs@2026.8.28`。先在目标 profile 的包管理环境中配置组织授权的 `@baidu` registry，再安装如流配套包；公共包不附带私有 SDK 或凭据：
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.2.1
+dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.3.0
 ```
 
 使用与当前服务相同的 `DSH_HOME` 和 profile。升级时先备份数据目录，等待正在执行的回复完成，停止 Host，将主包和已安装的配套包更新到上表版本，再重启。Bot 身份、绑定和历史继续保存在同一数据目录。安装配套包只提供配置入口，不自动创建机器人或启用尚未配置的连接。权限及配置步骤见[飞书接入](docs/feishu.zh.md)和[如流接入](docs/infoflow.zh.md)。
 
-安装并启用后打开 **DSH Bots**，通过 DSH 原生设置配置模型。桌面端与 Web 复用同一份 Bot 代码，使用原生 `dsh-app://` 传输，不占用 3093 端口。桌面端使用自己的 DSH 数据，现有 Web 聊天不会自动导入。请勿同时启用另一份 Bot Mode。
+安装并启用后打开 **DSH Bots**，通过 DSH 原生设置配置模型。桌面端与 Web 复用同一份 Bot 代码，通过 DSH 0.2.0 提供的认证 Web Host 连接。桌面端使用自己的 DSH 数据，现有 Web 聊天不会自动导入。请勿同时启用另一份 Bot Mode。
 
 安装包测试覆盖 Desktop Host、Web 认证和资源加载，以及两个 IM 配套插件的私聊/群聊路由、重复消息、共享群和重启后的会话隔离。测试使用确定性模型和传输夹具，发布包不包含这些测试实现。Windows 桌面端尚未验证。
 
@@ -79,7 +83,7 @@ npm start
 
 打开 `dsh web` 输出的带认证参数的地址，然后点击侧栏中的 **DSH Bots**。在 DSH 原生设置中配置模型，再创建第一个 Bot；有多个 Bot 后即可创建群聊。仓库不附带模型密钥，`npm start` 不会加载模拟模型。
 
-安装脚本按 [dsh-version.json](dsh-version.json) 下载固定的 [DSH 提交](https://github.com/deepseek-ai/deepseek-harness/commit/c291e7961a515f6d7af9304e7fd1d257929aef26)，复制插件，补充 TypeScript 注册及插件锁文件条目，按冻结锁文件安装依赖，并构建原生 Web profile。修改插件源码后可运行 `npm run build:plugin` 增量构建；首次安装仍使用 setup。源码请改 `plugin/`，不要改 `.runtime/` 中的安装副本。安装脚本不会修改其他 DSH 安装。
+安装脚本按 [dsh-version.json](dsh-version.json) 下载固定的 [DSH 提交](https://github.com/deepseek-ai/deepseek-harness/commit/639ed015397290b3745d163aafe02ffee4aa3f84)，将插件复制到独立的 `.runtime/deepseek-harness-<版本>` 工作区，补充 TypeScript 注册及插件锁文件条目，按冻结锁文件安装依赖，并构建原生 Web profile。修改插件源码后可运行 `npm run build:plugin` 增量构建；首次安装仍使用 setup。源码请改 `plugin/`，不要改 `.runtime/` 中的安装副本。安装脚本不会修改其他 DSH 安装。
 
 源码插件保留内部工作区身份 `@deepseek-ai/dsh-experimental-bot-mode`，公共分发包以 `@zzzpyyy/dsh-bot` 包装其编译结果，不是 npm 上无 scope 的 `dsh-bot`。两种分发方式都要求固定的 DSH 版本。
 
@@ -137,13 +141,14 @@ npm test
 npm run pack
 npm run pack:feishu
 npm run pack:infoflow
+npm run test:install
 npm run test:package
 npm run test:feishu-package
 npm run test:infoflow-managed-package
 npm run test:im-isolation-package
 ```
 
-测试在准备好的 DSH 工作区中运行，覆盖消息路由、原生 UI 插槽和交互、持久化、停止与进程重启。`pack` 在 `dist/` 中生成编译包与校验和；`test:package` 将该压缩包解压到隔离 profile，验证桌面依赖校验器、原生管道传输、重启恢复和 Web 认证加载。桌面 Host 测试无需 Electron 或显示器。仅测试使用确定性模拟模型，无需 API Key。GitHub Actions 会从干净环境执行安装、构建和相同测试，并保留安装包作为 CI 附件，不自动发布 npm。发布后可单独运行 `npm run test:registry`，通过 Desktop 原生插件管理器验证线上安装；该检查需要访问公共 registry，不属于 CI。
+测试在准备好的 DSH 工作区中运行，覆盖消息路由、原生 UI 插槽和交互、持久化、停止与进程重启。`pack` 在 `dist/` 中生成编译包与校验和；`test:package` 将该压缩包解压到隔离 profile，验证 DSH 兼容性检查、Desktop / Web Host 认证、资源加载与重启恢复。桌面 Host 测试无需 Electron 或显示器。仅测试使用确定性模拟模型，无需 API Key。GitHub Actions 会从干净环境执行安装、构建和相同测试，并保留安装包作为 CI 附件，不自动发布 npm。`npm run test:install` 通过 DSH 统一插件管理器验证本地主包和飞书包；发布后可单独运行 `npm run test:registry` 验证 npm 线上安装；该检查需要访问公共 registry，不属于 CI。
 
 详见[架构说明](docs/architecture.zh.md)、[完整插件参考](docs/plugin-reference.zh.md)和[版本说明](CHANGELOG.md)。更新 DSH 提交时需要同步集成补丁，并重新验证完整安装；其接口仍处于稳定前阶段。
 

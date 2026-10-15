@@ -22,6 +22,7 @@ jobs:
       - run: npm run pack
       - run: npm run pack:infoflow
       - run: npm run pack:feishu
+      - run: npm run test:install
       - run: npm run test:package
       - run: npm run test:infoflow-package
       - run: npm run test:infoflow-managed-package

@@ -1,6 +1,6 @@
 # 如流文本接入
 
-本功能属于 DSH Bot 0.5.0，配套插件为 `@zzzpyyy/dsh-bot-infoflow@0.2.1`，要求 DSH `0.1.5-rc.2`。如流插件作为同一 Host 的可选 Cordis 插件运行；基础 Bot 包不依赖如流 SDK。安装配套包不会自动连接机器人，必须先配置并启用。
+本功能属于 DSH Bot 0.6.0，配套插件为 `@zzzpyyy/dsh-bot-infoflow@0.3.0`，要求 DSH `0.2.0-rc.2`。如流插件作为同一 Host 的可选 Cordis 插件运行；基础 Bot 包不依赖如流 SDK。安装配套包不会自动连接机器人，必须先配置并启用。
 
 ## 能力与会话
 
@@ -21,8 +21,8 @@
 已有匹配版本 DSH CLI 时，先配置组织授权的 `@baidu` registry，再将以下包安装到当前服务使用的 Web profile：
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot@0.5.0
-dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.2.1
+dsh plugin --profile web add @zzzpyyy/dsh-bot@0.6.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.3.0
 ```
 
 Desktop 可在插件管理器中按相同顺序安装这两个精确版本，同样需要能解析企业 SDK 依赖。包使用 `next` 标签；安装时建议指定版本。
@@ -35,13 +35,13 @@ npm run pack
 npm run pack:infoflow
 ```
 
-首次安装源码仍使用 `npm run setup`。上述增量构建要求工作区及依赖已安装，会重新生成 Remote 编解码器。产物分别是 `dist/zzzpyyy-dsh-bot-0.5.0.tgz` 和 `dist/zzzpyyy-dsh-bot-infoflow-0.2.1.tgz`。
+首次安装源码仍使用 `npm run setup`。上述增量构建要求工作区及依赖已安装，会重新生成 Remote 编解码器。产物分别是 `dist/zzzpyyy-dsh-bot-0.6.0.tgz` 和 `dist/zzzpyyy-dsh-bot-infoflow-0.3.0.tgz`。
 
 对于已有匹配版本 DSH CLI 的 Web profile，可从本仓库目录执行以下命令；使用你实际的 `DSH_HOME`，并先配置好组织授权的 SDK registry：
 
 ```sh
-dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-0.5.0.tgz
-dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-infoflow-0.2.1.tgz
+dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-0.6.0.tgz
+dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-infoflow-0.3.0.tgz
 ```
 
 配套包依赖企业 SDK `@baidu/infoflow-sdk-nodejs@2026.8.28`。在目标 profile 的包管理环境中配置组织授权的 `@baidu` registry；仓库和公共配套包不携带私有 registry、令牌或 SDK。CLI 的 `dsh plugin add` 支持 tarball，安装到同一 profile 时先安装基础包，再安装配套包。请使用与目标 profile 相同的 `DSH_HOME`。Desktop 插件管理器只接受 registry 包，不能直接安装本地 tarball。

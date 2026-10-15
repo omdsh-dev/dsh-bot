@@ -198,7 +198,7 @@ export async function apply(ctx) {
     const { DesktopHostProcess } = await desktopModule('host-process'); let first
     for (const phase of ['first', 'resume', 'migrate']) {
       const result = join(home, phase + '.json')
-      host = new DesktopHostProcess(process.execPath, fixture.resources, fixture.profile, undefined, { ...process.env, DSH_HOME: home,
+      host = new DesktopHostProcess(process.execPath, fixture.resources, fixture.profile, undefined, { ...fixture.environment, DSH_HOME: home,
         FEISHU_SDK_FILE: join(sdk, 'index.cjs'), FEISHU_PHASE: phase, FEISHU_RESULT: result })
       await host.start(); const report = await readReport(result)
       assert.equal(report.ok, true, report.error + '\n' + host.stderr)

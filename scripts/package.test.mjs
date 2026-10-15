@@ -1,12 +1,12 @@
-/** Exercise the shipped tarball through Desktop's real Host, dependency validator, and byte-pipe transport. */
+/** Exercise the shipped tarball through Desktop's real Host, profile admission, and authenticated Web transport. */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pin } from './common.mjs'
-import { desktopModule, materializePackage, readReport } from './package-fixture.mjs'
+import { desktopModule, hostRequest, materializePackage, readReport } from './package-fixture.mjs'
 
 async function within(promise, milliseconds) {
   let timer
@@ -36,8 +36,7 @@ test('the npm archive loads in Desktop, renders its bundle, and resumes separate
   try {
     const fixture = await materializePackage(home)
     const { DesktopHostProcess } = await desktopModule('host-process')
-    const { packageNameFromSpec } = await desktopModule('project-manager')
-    assert.equal(packageNameFromSpec(`${fixture.info.name}@${fixture.info.version}`), fixture.info.name)
+    assert.equal(fixture.descriptor.release.version, pin.version)
     const manifestFile = join(fixture.plugin, 'package.json')
     const manifestText = await readFile(manifestFile, 'utf8')
     const manifest = JSON.parse(manifestText)
@@ -45,23 +44,23 @@ test('the npm archive loads in Desktop, renders its bundle, and resumes separate
     assert.ok(!manifest.scripts, 'Installation must not require lifecycle scripts.')
     assert.ok(!manifestText.includes('workspace:'))
     const incompatible = structuredClone(manifest)
-    incompatible.peerDependencies['@deepseek-ai/cordis'] = '0.0.0'
+    incompatible.peerDependencies['@deepseek-ai/dsh'] = '0.1.5-rc.2'
     try {
       await writeFile(manifestFile, JSON.stringify(incompatible))
-      assert.throws(fixture.validate, /requires.*cordis@0.0.0/)
+      assert.throws(fixture.validate, /incompatible.*peerDependencies.*0\.1\.5-rc\.2/)
     } finally { await writeFile(manifestFile, manifestText) }
+    assert.doesNotThrow(fixture.validate)
     let first
     for (const phase of ['first', 'resume']) {
       const result = join(home, `${phase}.json`)
       const host = new DesktopHostProcess(process.execPath, fixture.resources, fixture.profile, undefined, {
-        ...process.env, DSH_HOME: home, BOT_TEST_PHASE: phase, BOT_TEST_RESULT: result,
+        ...fixture.environment, DSH_HOME: home, BOT_TEST_PHASE: phase, BOT_TEST_RESULT: result,
       })
       try {
         const ready = await within(host.start(), 45000)
-        assert.equal(ready.dshVersion, pin.version)
         const report = await readReport(result)
         assert.equal(report.ok, true, report.error)
-        await verifyBotAssets(path => host.fetch(new Request(new URL(path, 'dsh-app://app/'), { signal: AbortSignal.timeout(10000) })))
+        await verifyBotAssets(await hostRequest(ready.url))
         const group = report.state.rooms.find(room => room.kind === 'group')
         if (phase === 'first') first = group
         else {
@@ -69,7 +68,7 @@ test('the npm archive loads in Desktop, renders its bundle, and resumes separate
           assert.ok(group.messages.length > first.messages.length)
         }
       } catch (error) {
-        // The upstream carrier can report pipe closure before it includes child stderr.
+        // Include child diagnostics when the Host exits before announcing readiness.
         throw new Error(`${error.message}\n${host.stderr ?? ''}`, { cause: error })
       } finally { await host.stop() }
     }
@@ -83,11 +82,12 @@ test('the same npm archive loads through the authenticated Web transport', { tim
   let output = ''
   try {
     const fixture = await materializePackage(home)
+    const profile = join(home, 'profiles/web')
+    await cp(fixture.profile, profile, { recursive: true })
     const result = join(home, 'web.json')
-    child = spawn(process.execPath, [join(fixture.resources, 'node_modules/@deepseek-ai/dsh/lib/bin.js'),
-      '--profile', 'web', '--patch', join(fixture.plugin, 'cordis.patch.yml'),
-      '--patch', join(fixture.profile, 'cordis.patch.yml'), '--port', '0', '--no-open'], {
-      cwd: fixture.profile, env: { ...process.env, DSH_HOME: home, BOT_TEST_PHASE: 'first', BOT_TEST_RESULT: result },
+    child = spawn(process.execPath, ['--expose-internals', join(fixture.resources, 'node_modules/@deepseek-ai/dsh/lib/bin.js'),
+      '--profile', 'web', '--port', '0', '--no-open'], {
+      cwd: profile, env: { ...fixture.environment, DSH_HOME: home, BOT_TEST_PHASE: 'first', BOT_TEST_RESULT: result },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     let spawnError
@@ -110,12 +110,7 @@ test('the same npm archive loads through the authenticated Web transport', { tim
     const unauthenticated = await fetch(url.origin, { signal: AbortSignal.timeout(5000) })
     assert.equal(unauthenticated.status, 401)
     await unauthenticated.text()
-    const login = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(5000) })
-    assert.equal(login.status, 303)
-    const cookie = login.headers.get('set-cookie')?.split(';')[0]
-    assert.ok(cookie)
-    await login.text()
-    await verifyBotAssets(path => fetch(new URL(path, url.origin), { headers: { cookie }, signal: AbortSignal.timeout(10000) }))
+    await verifyBotAssets(await hostRequest(url))
   } catch (error) {
     throw new Error(`${error.message}\n${output.replace(/token=[^\s)]+/g, 'token=[redacted]')}`, { cause: error })
   } finally {

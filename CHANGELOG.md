@@ -1,5 +1,15 @@
 # Release notes
 
+## 0.6.0 — 2026-10-15
+
+Targets DSH `0.2.0-rc.2` with `@zzzpyyy/dsh-bot@0.6.0`, `@zzzpyyy/dsh-bot-feishu@0.2.0`, and `@zzzpyyy/dsh-bot-infoflow@0.3.0`. DSH `0.1.5-rc.2` users should keep the previous package set.
+
+- Rebuild all three packages against the pinned DSH 0.2.0 runtime and exact matching peers, resolving the installation rejection of the 0.5.0 package on DSH 0.2.0.
+- Adapt the Client locale project reference and native icon exports to the new DSH UI packages.
+- Qualify archives through the new shared plugin installer and authenticated Desktop Web Host; retain the negative compatibility regression and conversation restart checks.
+- Keep managed source runtimes in versioned directories so preparing a newer runtime does not overwrite an older checkout.
+- Update installation and compatibility documentation. Local `.agents` notes remain excluded from Git and npm.
+
 ## 0.5.0 — 2026-10-15
 
 Published under the experimental `next` tag: `@zzzpyyy/dsh-bot@0.5.0`, `@zzzpyyy/dsh-bot-feishu@0.1.0`, and `@zzzpyyy/dsh-bot-infoflow@0.2.1`. Requires DSH `0.1.5-rc.2`; InfoFlow additionally requires authorized access to its enterprise SDK.

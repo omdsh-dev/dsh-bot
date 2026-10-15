@@ -7,6 +7,27 @@ import { root, runtime, pin, pluginPath, run, workspacePackages } from './common
 
 export const requireRuntime = createRequire(join(runtime, 'package.json'))
 export const desktopModule = name => import(pathToFileURL(join(runtime, 'apps/desktop/lib/types', `${name}.js`)).href)
+export const appBootModule = () => import(pathToFileURL(join(runtime, 'packages/boot/app-boot/lib/index.js')).href)
+
+/** Use the same profile admission check as the installed CLI and Desktop Host. */
+export async function profileValidator(profile, resources) {
+  const { loadProfileDirectory } = await appBootModule()
+  return () => {
+    const loaded = loadProfileDirectory('dsh', profile, join(resources, 'node_modules/@deepseek-ai/dsh/package.json'))
+    if (loaded.skippedBundles.length) throw new Error(loaded.skippedBundles.map(item => item.reason).join('\n'))
+    return loaded
+  }
+}
+
+/** Exchange the Host's startup token for its normal authenticated browser cookie. */
+export async function hostRequest(address) {
+  const url = new URL(address)
+  const login = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(5000) })
+  const cookie = login.headers.get('set-cookie')?.split(';')[0]
+  await login.text()
+  if (login.status !== 303 || !cookie) throw new Error(`Host authentication failed (${login.status}).`)
+  return path => fetch(new URL(path, url.origin), { headers: { cookie }, signal: AbortSignal.timeout(10000) })
+}
 
 /** Copy runtime files, retaining generated declarations and excluding build/source/test trees. */
 const includeRuntime = path => !['node_modules', 'src', 'tests', '.desktop-build', '.git', '.release'].includes(basename(path))
@@ -57,11 +78,14 @@ export async function materializePackage(home) {
     schemaVersion: 1, platform: process.platform, arch: process.arch, files: [], sharedPackages,
     release: { schemaVersion: 1, version: pin.version, hostProtocolVersion: DESKTOP_HOST_PROTOCOL_VERSION, nodeVersion: process.versions.node, pnpmVersion: pin.pnpm },
   }
+  // DSH 0.2 Desktop requires its Office skill assets and a standalone Node before announcing readiness.
+  cpSync(join(runtime, 'packages/skill/skill-office/assets'), join(home, 'runtime/office-skills'), { recursive: true })
+  const nodeBin = join(home, 'runtime/primary-runtime/dependencies/node/bin')
+  mkdirSync(nodeBin, { recursive: true })
+  symlinkSync(process.execPath, join(nodeBin, process.platform === 'win32' ? 'node.exe' : 'node'), 'file')
   const profile = join(home, 'profiles/desktop')
   const { createPluginProfile } = await desktopModule('project-manager')
-  const { linkDesktopHostPackages, validateDesktopPluginGraph } = await desktopModule('profile-packages')
   createPluginProfile(profile)
-  linkDesktopHostPackages(profile, resources, descriptor)
   const info = JSON.parse(readFileSync(join(root, 'dist/package-info.json'), 'utf8'))
   const plugin = join(profile, 'node_modules', info.name)
   mkdirSync(plugin, { recursive: true })
@@ -72,14 +96,15 @@ export async function materializePackage(home) {
   manifest.dependencies[info.name] = info.version
   manifest.dsh.profile.bundles.push(info.name)
   writeFileSync(join(profile, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
-  validateDesktopPluginGraph(profile, resources, descriptor, [info.name])
+  const validate = await profileValidator(profile, resources)
+  validate()
   const ts = requireRuntime('typescript')
   const driver = ts.transpileModule(readFileSync(join(runtime, pluginPath, 'tests/profile-fixture.ts'), 'utf8'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
   }).outputText
   writeFileSync(join(profile, 'driver.js'), driver)
   writeFileSync(join(profile, 'cordis.patch.yml'), '- id: agent-default-model\n  config:\n    provider: bot-fixture\n    model: fixture\n- insert:\n    - id: bot-test-driver\n      name: ./driver.js\n')
-  return { resources, profile, plugin, descriptor, info, validate: () => validateDesktopPluginGraph(profile, resources, descriptor, [info.name]) }
+  return { resources, profile, plugin, descriptor, info, validate, environment: { ...process.env, DSH_CLIENT_VERSION: pin.version } }
 }
 
 export async function readReport(file, milliseconds = 45000) {

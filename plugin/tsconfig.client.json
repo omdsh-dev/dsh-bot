@@ -41,7 +41,7 @@
       "path": "../../../packages/api/session-controller/tsconfig.client.json"
     },
     {
-      "path": "../../../packages/client/locale"
+      "path": "../../../packages/client/locale/tsconfig.client.json"
     },
     {
       "path": "../../../packages/client/store"

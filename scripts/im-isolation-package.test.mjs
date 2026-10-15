@@ -205,7 +205,7 @@ export async function apply(ctx) {
     for (const phase of ['first', 'resume']) {
       const result = join(home, phase + '.json')
       host = new DesktopHostProcess(process.execPath, fixture.resources, fixture.profile, undefined, {
-        ...process.env, DSH_HOME: home, ISOLATION_FEISHU_SDK: feishu, ISOLATION_INFOFLOW_SDK: infoflow,
+        ...fixture.environment, DSH_HOME: home, ISOLATION_FEISHU_SDK: feishu, ISOLATION_INFOFLOW_SDK: infoflow,
         ISOLATION_PHASE: phase, ISOLATION_RESULT: result,
       })
       await host.start()

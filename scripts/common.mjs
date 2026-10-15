@@ -5,8 +5,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const root = dirname(dirname(fileURLToPath(import.meta.url)))
-export const runtime = join(root, '.runtime', 'deepseek-harness')
 export const pin = JSON.parse(readFileSync(join(root, 'dsh-version.json'), 'utf8'))
+export const runtime = join(root, '.runtime', `deepseek-harness-${pin.version}`)
 export const pluginPath = 'packages/experimental/bot-mode'
 
 /** Return the pinned workspace package paths and versions, including non-hoisted peers. */

@@ -1,6 +1,6 @@
 # InfoFlow connector
 
-Bot Mode 0.5.0 and the optional `@zzzpyyy/dsh-bot-infoflow@0.2.1` companion run on DSH 0.1.5-rc.2. Every Bot can bind a distinct InfoFlow robot with separate credentials, allowlists and an enable switch. The base package does not depend on the enterprise SDK.
+Bot Mode 0.6.0 and the optional `@zzzpyyy/dsh-bot-infoflow@0.3.0` companion run on DSH 0.2.0-rc.2. Every Bot can bind a distinct InfoFlow robot with separate credentials, allowlists and an enable switch. The base package does not depend on the enterprise SDK.
 
 One DSH Bot can keep both InfoFlow and Feishu bindings enabled concurrently. Each platform has independent credentials, allowlists and connection controls; disabling one leaves the other running. Web, Feishu and InfoFlow private and group chats retain separate histories and model conversation context, with replies delivered only to the originating platform and chat. Identical group names do not merge chats across platforms. Bot instructions, models and tool configuration remain shared. Files, external services and memory explicitly written through tools follow deployment permissions rather than conversation isolation. See the [Feishu guide](feishu.zh.md) for the second binding.
 
@@ -8,7 +8,7 @@ One DSH Bot can keep both InfoFlow and Feishu bindings enabled concurrently. Eac
 
 The [guided setup](#guided-setup-and-messaging-test) supports credential import and connection testing. Saved secrets are write-only; blank credential fields preserve their current values. Stop any competing callback receiver before enabling the same robot here.
 
-The companion enables the manager by default (`managed: true`), with no active robot connections until configured. Configure access to its pinned `@baidu/infoflow-sdk-nodejs@2026.8.28` dependency through your authorized enterprise registry. In a compatible DSH Web profile, install `@zzzpyyy/dsh-bot@0.5.0` and then `@zzzpyyy/dsh-bot-infoflow@0.2.1` with `dsh plugin --profile web add <package>`. Desktop uses the same package specifications in its plugin manager and needs the same enterprise dependency access. The public companion contains no private SDK or credentials. For source builds, use `npm run build:plugin`, `npm run pack` and `npm run pack:infoflow`; the CLI also accepts the resulting archives.
+The companion enables the manager by default (`managed: true`), with no active robot connections until configured. Configure access to its pinned `@baidu/infoflow-sdk-nodejs@2026.8.28` dependency through your authorized enterprise registry. In a compatible DSH Web profile, install `@zzzpyyy/dsh-bot@0.6.0` and then `@zzzpyyy/dsh-bot-infoflow@0.3.0` with `dsh plugin --profile web add <package>`. Desktop uses the same package specifications in its plugin manager and needs the same enterprise dependency access. The public companion contains no private SDK or credentials. For source builds, use `npm run build:plugin`, `npm run pack` and `npm run pack:infoflow`; the CLI also accepts the resulting archives.
 
 Open **DSH Bots → IM connections → InfoFlow** to configure robots. The same panel contains Feishu settings; switching platform tabs preserves unsaved form inputs.
 

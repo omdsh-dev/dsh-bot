@@ -12,11 +12,11 @@ Bot Mode 是通过 DSH profile patch 在 Web 或 Desktop 中加载的 Host / Cli
 
 源码分发会准备固定版本的 DSH 工作区用于构建。`npm run pack` 把编译后的实现包装为公共 `@zzzpyyy/dsh-bot` bundle，通过外层 `dsh.bundle.patch` 启用嵌套入口。内部实现保留原 private 包身份，因为生成的 Typert 编解码和 Client 模块注册都引用该身份，不改写生成标识。外层 manifest 将 Host 提供的依赖转为精确版本的 peer dependency，普通依赖单独声明；发布包不包含源码、测试、构建辅助代码或 `workspace:` 范围。
 
-Desktop 与浏览器发现的是同一个 `dsh.client.platform: web` 入口，其 Host 和 Remote 调用使用原生管道及自定义协议，不启动 HTTP 监听。插件没有额外的桌面专用服务器或传输实现。Desktop 管理自己的 profile 和数据。源码 Web 启动器的 `.runtime/` 可以重新构建，`.data/` 保存用户数据，更新时应保留。工具和模型凭据继续由 DSH 管理。
+Desktop 与浏览器发现的是同一个 `dsh.client.platform: web` 入口，DSH 0.2.0 的 Desktop 启动原生 Web Host，通过认证 HTTP 地址连接。插件没有额外的桌面专用服务器或传输实现。Desktop 管理自己的 profile 和数据。源码 Web 启动器的 `.runtime/` 可以重新构建，`.data/` 保存用户数据，更新时应保留。工具和模型凭据继续由 DSH 管理。
 
 配置、模型可见影响和待实现功能见[插件参考](plugin-reference.zh.md)。Profile 测试会启动两次真实构建的 DSH，仅替换外部模型，检查身份隔离、群聊与私聊上下文、取消、消息订阅顺序和持久化。
 
-安装包测试会解压实际发布的压缩包，调用 Desktop 的真实依赖校验器，并在不启用开发链接豁免的情况下启动原生 Desktop Host，仅替换外部模型。测试通过 `dsh-app://` 请求已注册的 Bot Client 模块，重启 Host 后核对 Session ID，并让同一压缩包通过 Web 认证传输加载。测试资源树不是签名应用包，macOS 窗口交互另行验证；另行执行的 `npm run test:registry` 已通过：它使用 DesktopProjectManager 及其独立 pnpm 状态，将发布包安装到全新 profile，再以测试模型启动原生 Host。
+安装包测试会解压实际发布的压缩包，调用 DSH 的真实 profile 兼容性检查，并在不启用版本豁免的情况下启动原生 Desktop Host，仅替换外部模型。测试完成 Host 认证、请求 Bot Client 模块、重启并核对 Session ID，也通过 Web CLI 加载同一安装包。测试资源树不是签名应用包，macOS 窗口交互另行验证。`npm run test:install` 使用统一插件管理器将本地主包和飞书包安装到全新 profile，再启动 Desktop；`npm run test:registry` 则对 npm 已发布版本执行相同检查。
 
 安装包测试使用 Desktop 自己的依赖闭包选择器限定共享包集合，避免开发依赖掩盖缺失项。仅声明使用的 `dsh-client-ui-slots` 不列入发布包的运行时 peer；它仍在源码工作区中用于类型检查。
 
