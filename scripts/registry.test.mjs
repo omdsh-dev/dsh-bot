@@ -4,10 +4,10 @@ import assert from 'node:assert/strict'
 import { mkdtemp, readFile, writeFile, copyFile, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { runtime } from './common.mjs'
+import { root, runtime } from './common.mjs'
 import { desktopModule, materializePackage, readReport } from './package-fixture.mjs'
 
-test('the published package installs through Desktop and runs in a fresh profile', { timeout: 180000 }, async () => {
+test('published base and Feishu packages install through Desktop and run in a fresh profile', { timeout: 180000 }, async () => {
   const home = await mkdtemp(join(tmpdir(), 'dsh-bot-registry-'))
   let host
   try {
@@ -30,6 +30,15 @@ test('the published package installs through Desktop and runs in a fresh profile
       beforeChange: async () => {}, afterChange: async () => {},
     })
     assert.deepEqual(manager.listPlugins(), [{ name: fixture.info.name, version: fixture.info.version, enabled: true }])
+    manager.assertProfileRuntime(paths.profile)
+    const feishu = JSON.parse(await readFile(join(root, 'feishu/release.json'), 'utf8'))
+    await manager.mutate({ type: 'plugin-add', spec: `${feishu.name}@${feishu.version}` }, {
+      beforeChange: async () => {}, afterChange: async () => {},
+    })
+    assert.deepEqual(manager.listPlugins().sort((a, b) => a.name.localeCompare(b.name)), [
+      { name: fixture.info.name, version: fixture.info.version, enabled: true },
+      { name: feishu.name, version: feishu.version, enabled: true },
+    ].sort((a, b) => a.name.localeCompare(b.name)))
     manager.assertProfileRuntime(paths.profile)
     // Add only the external model substitute after the real registry installation has completed.
     for (const file of ['driver.js', 'cordis.patch.yml']) await copyFile(join(fixture.profile, file), join(paths.profile, file))

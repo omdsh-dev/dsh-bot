@@ -2,6 +2,7 @@
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { copyHostEntry } from './pack-host-entry.mjs'
+import { writePackageReadme } from './pack-readme.mjs'
 import { root, runtime, pin, pluginPath, run, requireNode, assertPinnedRuntime, workspacePackages } from './common.mjs'
 
 requireNode()
@@ -23,13 +24,16 @@ const peerDependencies = { [base.name]: base.version, ...Object.fromEntries(peer
 })) }
 const manifest = { ...release, type: 'module', license: 'MIT', description: 'Optional Feishu text connector for DSH Bot',
   engines: { node: '^22.19.0 || >=24.0.0' }, repository: { type: 'git', url: 'git+https://github.com/zzzpyyy/dsh-bot.git' },
+  homepage: 'https://github.com/zzzpyyy/dsh-bot/blob/main/docs/feishu.zh.md', bugs: 'https://github.com/zzzpyyy/dsh-bot/issues',
+  keywords: ['deepseek', 'dsh', 'bot', 'feishu', 'lark'], publishConfig: { access: 'public' },
   files: [...bundleFiles, 'cordis.patch.yml', 'cordis.patch.example.yml', 'README.md', 'LICENSE', 'compatibility.json'],
   dsh: { bundle: { patch: './cordis.patch.yml' } },
   dependencies: { '@larksuiteoapi/node-sdk': '1.75.0', qrcode: '1.5.4', zod: '4.4.3' }, peerDependencies }
 writeFileSync(join(destination, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 writeFileSync(join(destination, 'cordis.patch.yml'), '- insert:\n    - id: bot-feishu\n      name: ./feishu.js\n')
 writeFileSync(join(destination, 'compatibility.json'), `${JSON.stringify({ dsh: pin.version, commit: pin.commit, botMode: base, feishu: release }, null, 2)}\n`)
-for (const [from, to] of [['docs/feishu.zh.md', 'README.md'], ['feishu/cordis.patch.example.yml', 'cordis.patch.example.yml'], ['LICENSE', 'LICENSE']]) cpSync(join(root, from), join(destination, to))
+writePackageReadme('docs/feishu.zh.md', join(destination, 'README.md'))
+for (const [from, to] of [['feishu/cordis.patch.example.yml', 'cordis.patch.example.yml'], ['LICENSE', 'LICENSE']]) cpSync(join(root, from), join(destination, to))
 const packed = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', join(root, 'dist')], { cwd: destination, stdio: 'pipe' }))[0]
 writeFileSync(join(root, 'dist/feishu-package-info.json'), `${JSON.stringify({ ...release, file: packed.filename, integrity: packed.integrity, dsh: pin.version }, null, 2)}\n`)
 console.log(`Packed optional connector: dist/${packed.filename}; management page ready; robot connections require explicit enablement.`)

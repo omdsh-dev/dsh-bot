@@ -1,0 +1,5 @@
+# IM package documentation
+
+The base package's npm README comes from the maintained English repository README; companion READMEs come from their deployment guides. Packaging resolves repository-relative Markdown links to GitHub URLs so npm readers can open configuration examples and related guides without missing files. The packages retain exact base and DSH peer versions, and the experimental distribution uses the next tag.
+
+InfoFlow's public companion contains the connector implementation and an exact enterprise SDK dependency, never a bundled SDK, registry credential or user configuration. The installation guide distinguishes the public connector from the separate enterprise SDK prerequisite. Deterministic packaged Host tests validate connector behavior without contacting real messaging endpoints. The opt-in registry check installs the published base package, then its Feishu companion through Desktop's real installer, validates their shared dependency graph, and starts a fresh Host with unconfigured robot connections.

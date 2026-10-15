@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { root, runtime, pin, pluginPath, run, requireNode, assertPinnedRuntime, workspacePackages } from './common.mjs'
+import { writePackageReadme } from './pack-readme.mjs'
 
 requireNode()
 assertPinnedRuntime()
@@ -42,7 +43,7 @@ const manifest = {
   ...release, description: 'Native multi-Bot chats for DeepSeek Harness Web and Desktop', type: 'module', license: 'MIT',
   repository: { type: 'git', url: 'git+https://github.com/zzzpyyy/dsh-bot.git' },
   homepage: 'https://github.com/zzzpyyy/dsh-bot#readme', bugs: 'https://github.com/zzzpyyy/dsh-bot/issues',
-  keywords: ['deepseek', 'dsh', 'bot', 'multi-agent', 'desktop'],
+  keywords: ['deepseek', 'dsh', 'bot', 'multi-agent', 'desktop', 'feishu', 'infoflow'],
   engines: { node: '^22.19.0 || >=24.0.0' }, publishConfig: { access: 'public' },
   files: ['implementation/', 'cordis.patch.yml', 'LICENSE', 'NOTICE', 'README.md', 'compatibility.json'],
   dsh: { bundle: { patch: './cordis.patch.yml' } },
@@ -51,7 +52,7 @@ const manifest = {
 writeFileSync(join(destination, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 writeFileSync(join(destination, 'cordis.patch.yml'), '- insert:\n    - id: bot-mode\n      name: ./implementation/lib/index.js\n')
 writeFileSync(join(destination, 'compatibility.json'), `${JSON.stringify({ dsh: pin.version, commit: pin.commit, package: release }, null, 2)}\n`)
-writeFileSync(join(destination, 'README.md'), `# DSH Bot\n\nNative multi-Bot chats for DeepSeek Harness Web and Desktop.\n\nRequires DSH **${pin.version}**. In Desktop, open its plugin manager and install **${release.name}@${release.version}** after this version is published to npm. Enable it and open **DSH Bots** in the sidebar. Configure your own model in DSH.\n\nThis package contains compiled Host/Client code and a DSH bundle patch. It has no install scripts and reuses DSH's shared packages through exact peer dependencies. Do not enable it alongside another copy of Bot Mode.\n\nFor Web/source installation, configuration, compatibility, and known limits, see the [English guide](https://github.com/zzzpyyy/dsh-bot#readme) or [中文说明](https://github.com/zzzpyyy/dsh-bot/blob/main/README.zh.md).\n\nIndependent community plugin; not an official DeepSeek product. [MIT license](LICENSE).\n`)
+writePackageReadme('README.md', join(destination, 'README.md'))
 for (const file of ['LICENSE', 'NOTICE']) cpSync(join(root, file), join(destination, file))
 const packed = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', join(root, 'dist')], { cwd: destination, stdio: 'pipe' }))[0]
 const file = join(root, 'dist', packed.filename)

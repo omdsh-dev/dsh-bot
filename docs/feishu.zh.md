@@ -70,6 +70,15 @@ Bot 的身份和能力共用，聊天上下文按入口和聊天分别保存；W
 
 ## 安装与开发
 
+在兼容的 DSH `0.1.5-rc.2` Web profile 中，先安装主包，再安装飞书插件：
+
+```sh
+dsh plugin --profile web add @zzzpyyy/dsh-bot@0.5.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.1.0
+```
+
+Desktop 可在插件管理器中按相同顺序安装这两个精确版本。包使用 `next` 标签；使用与现有服务相同的 profile 和数据目录。升级前备份数据并停止 Host，升级后重启，再从「IM 接入 → 飞书」检查连接状态。
+
 构建后运行 `npm run pack:feishu`，得到独立伴随包。该包固定依赖公开的 `@larksuiteoapi/node-sdk@1.75.0` 和 `qrcode@1.5.4`。通过 DSH 原生插件包安装机制加载；Web 使用包内 `cordis.patch.yml`，与基础插件的 patch 一起放在命令行子命令之前。默认只启用管理页，不创建应用、不连接未启用的绑定。可调队列、重试与 HTTP 超时见 [示例配置](../feishu/cordis.patch.example.yml)。
 
 官方依据：[SDK 应用注册](https://github.com/larksuite/node-sdk#app-registration)、[飞书官方扫码创建指南](https://www.feishu.cn/content/article/7613711414611463386)、[实现调研](feishu-provisioning-research.zh.md)。

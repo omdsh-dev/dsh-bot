@@ -1,6 +1,8 @@
 # Release notes
 
-## 0.5.0 (unreleased)
+## 0.5.0 — 2026-10-15
+
+Published under the experimental `next` tag: `@zzzpyyy/dsh-bot@0.5.0`, `@zzzpyyy/dsh-bot-feishu@0.1.0`, and `@zzzpyyy/dsh-bot-infoflow@0.2.1`. Requires DSH `0.1.5-rc.2`; InfoFlow additionally requires authorized access to its enterprise SDK.
 
 - Unified IM configuration panel for Feishu and InfoFlow, with independent per-Bot bindings, credentials, access rules and connection controls. One Bot can use both platforms concurrently while keeping Web, Feishu and InfoFlow conversation histories separate.
 - Optional Feishu 0.1.0 companion supports official QR registration, binding existing applications, private chats, group mentions and one-click group creation. Registration requests messaging and group-creation permissions.
