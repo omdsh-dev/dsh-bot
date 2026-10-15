@@ -18,7 +18,7 @@ function bench(initial: Settings = { bindings: [], registrations: [], groups: []
   }))
   const runtime: ManagerRuntime = {
     createGroup: vi.fn(async () => 'oc_created'),
-    linkGroup: vi.fn(async group => ({ id: brandString<RoomId>('room_created'), title: group.title, kind: 'group', members: [], messages: [], defaultBot: group.creatorBot })),
+    linkGroup: vi.fn<ManagerRuntime['linkGroup']>(async group => ({ id: brandString<RoomId>('room_created'), title: group.title, kind: 'group', members: [], messages: [], defaultBot: group.creatorBot })),
     bots: () => [alpha, beta].map(id => ({ id, name: id, instructions: 'test', preset: 'standard' } satisfies Bot)),
     identity: vi.fn(async (appId, secret) => { if (secret === 'invalid') throw new Error('upstream secret invalid'); return { openId: `ou_${appId}`, name: appId } }),
     register, qrImage: async () => 'data:image/png;base64,fixture', resolve: async ref => secrets.get(ref),

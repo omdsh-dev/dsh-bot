@@ -3,12 +3,13 @@ import { expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { InfoFlowManager, type ManagerRuntime } from '../src/infoflow/manager.ts'
 import type { Settings } from '../src/infoflow/settings.ts'
+import type { RobotApi } from '../src/infoflow/sdk.ts'
 import type { BotId, Room, RoomId, SaveInfoFlowBindingRequest } from '../src/types.ts'
 const a = brandString<BotId>('alpha'), b = brandString<BotId>('beta')
 function bench(initial: Settings = { bindings: [], groups: [] }) {
   let state = structuredClone(initial)
   const secrets = new Map<string, string>()
-  const create = vi.fn(async (_options: Record<string, unknown>) => ({ groupId: '123456', failList: [], failRobotIds: [] }))
+  const create = vi.fn<RobotApi['createGroup']>(async (_options) => ({ groupId: '123456', failList: [], failRobotIds: [] }))
   const testMessage = vi.fn(async (_user: string) => {})
   const link = vi.fn(async group => ({ id: brandString<RoomId>(`room-${group.groupId}`), title: group.title, kind: 'group', defaultBot: group.defaultBot,
     members: [], messages: [], external: { provider: 'infoflow', accountId: `group:${group.groupId}`, kind: 'group', id: group.groupId } } satisfies Room))
