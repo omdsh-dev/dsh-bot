@@ -217,19 +217,24 @@ it('notifies native attention once and reports interruption without re-executing
 })
 
 it('keeps chunk order during retries and never repoints an old-account delivery', async () => {
-  const b = bench(); const bridge = b.create({ chunkSize: 5 })
-  b.send.mockRejectedValueOnce(new Error('first part failed'))
-  await bridge.receive(input('1')); await bridge.wake()
-  expect(b.sent).toEqual([])
-  await bridge.close()
-  const other = b.create({ accountId: 'other' }); await other.wake()
-  expect(b.sent).toEqual([])
-  await other.close()
-  await new Promise(resolve => setTimeout(resolve, 5))
-  const next = b.create({ chunkSize: 5 }); await next.wake()
-  expect(b.sent.map(item => item.text).join('')).toBe('已接收，按当前聊天的顺序处理。')
-  expect(b.submitted).toHaveLength(1)
-  await next.close()
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(1000)
+  try {
+    const b = bench(); const bridge = b.create({ chunkSize: 5 })
+    b.send.mockRejectedValueOnce(new Error('first part failed'))
+    await bridge.receive(input('1')); await bridge.wake()
+    expect(b.sent).toEqual([])
+    expect(b.state().outbox[0]?.nextAt).toBe(1001)
+    await bridge.close()
+    // A changed account must retain even deliveries whose retry deadline has passed.
+    clock.mockReturnValue(1001)
+    const other = b.create({ accountId: 'other' }); await other.wake()
+    expect(b.sent).toEqual([])
+    await other.close()
+    const next = b.create({ chunkSize: 5 }); await next.wake()
+    expect(b.sent.map(item => item.text).join('')).toBe('已接收，按当前聊天的顺序处理。')
+    expect(b.submitted).toHaveLength(1)
+    await next.close()
+  } finally { clock.mockRestore() }
 })
 
 it('persists new arrivals while a network send is stalled', async () => {
