@@ -22,4 +22,4 @@ Desktop 与浏览器发现的是同一个 `dsh.client.platform: web` 入口，�
 
 如流配套插件在同一 Host 中消费 BotMode 的内部入口，通过 BotMode 的管理接口提供页面操作。`bot_infoflow_settings` 保存绑定和建群记录，独立 `bot_if_*` 域分别拥有每个 Bot 或共享群的收发队列；旧模式保留 `bot_infoflow`。多个机器人收到同一群消息时共享去重凭据，每个 Bot 保有独立 Session。外部 Room 和消息来源保存在 bot_mode；去重凭据与 Bot 响应原子提交。网络回发不占用入站提交锁。详见[如流接入](infoflow.zh.md)。
 
-可选飞书管理器拥有每个 Bot 的应用凭据和独立 `bot_fs_*` 队列。建群请求持久化后创建飞书私有群、邀请所选应用并添加允许群；重试使用已保存群 ID 或有效期内的同一请求 UUID。同一飞书群按 Chat ID 共享一个外部 Room，每个 Bot 保留原生 Session；私聊仍按应用隔离。BotMode 原子去重群里的用户消息，并为每个被 @ Bot 只创建一次响应。旧版同群记录自动合并，旧 Room ID 作为别名供待发队列继续使用。详见[飞书接入](feishu.zh.md)、[建群决策](../.agents/notes/implemented/architecture/2026-10-15-feishu-groups.md)和[共享群决策](../.agents/notes/implemented/architecture/2026-10-15-feishu-shared-groups.md)。
+可选飞书管理器拥有每个 Bot 的应用凭据和独立 `bot_fs_*` 队列。建群请求持久化后创建飞书私有群、邀请所选应用并添加允许群；重试使用已保存群 ID 或有效期内的同一请求 UUID。同一飞书群按 Chat ID 共享一个外部 Room，每个 Bot 保留原生 Session；私聊仍按应用隔离。BotMode 原子去重群里的用户消息，并为每个被 @ Bot 只创建一次响应。旧版同群记录自动合并，旧 Room ID 作为别名供待发队列继续使用。详见[飞书接入](feishu.zh.md)。

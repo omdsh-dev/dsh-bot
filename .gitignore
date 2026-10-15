@@ -1,4 +1,5 @@
 .runtime/
+/.agents/
 .data/
 .env
 .env.*
