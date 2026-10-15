@@ -9,7 +9,22 @@
     "src/index.ts",
     "src/types.ts",
     "src/domain.ts",
-    "src/routing.ts"
+    "src/routing.ts",
+    "src/infoflow.ts",
+    "src/infoflow/bridge.ts",
+    "src/infoflow/domain.ts",
+    "src/infoflow/messages.ts",
+    "src/infoflow/sdk.ts",
+    "src/infoflow/control.ts",
+    "src/infoflow/settings.ts",
+    "src/infoflow/manager.ts",
+    "src/infoflow/managed.ts",
+    "src/feishu.ts",
+    "src/feishu/types.ts",
+    "src/feishu/settings.ts",
+    "src/feishu/manager.ts",
+    "src/feishu/sdk.ts",
+    "src/feishu/rooms.ts"
   ],
   "references": [
     {
@@ -41,6 +56,15 @@
     },
     {
       "path": "../../../packages/api/session-controller/tsconfig.host.json"
+    },
+    {
+      "path": "../../../packages/credentials/credentials"
+    },
+    {
+      "path": "../../../packages/interaction/user-approval"
+    },
+    {
+      "path": "../../../packages/interaction/user-questions"
     }
   ]
 }

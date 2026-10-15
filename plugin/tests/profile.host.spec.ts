@@ -17,7 +17,7 @@ it('composes the native plugin, isolates identities, stops work, and resumes per
       const result = join(temp, `${phase}.json`)
       const child = spawn(process.execPath, ['apps/cli/lib/bin.js', '--profile', 'web', '--patch',
         'packages/experimental/bot-mode/cordis.patch.yml', '--patch', patch, '--no-open', '--port', '0'], {
-        cwd: root, env: { ...process.env, DSH_HOME: join(temp, 'home'), BOT_TEST_RESULT: result, BOT_TEST_PHASE: phase },
+        cwd: root, env: { ...process.env, DSH_HOME: join(temp, 'home'), BOT_TEST_RESULT: result, BOT_TEST_PHASE: phase, BOT_TEST_INFOFLOW: '1' },
         stdio: ['ignore', 'pipe', 'pipe'],
       })
       let output = ''
@@ -42,7 +42,7 @@ it('composes the native plugin, isolates identities, stops work, and resumes per
         expect(report, output).toBeDefined()
         expect(report?.ok, `${report?.error}\n${output}`).toBe(true)
       } finally {
-        child.kill('SIGTERM')
+        child.kill(phase === 'first' ? 'SIGKILL' : 'SIGTERM')
         const kill = setTimeout(() => child.kill('SIGKILL'), 5000)
         await exited
         clearTimeout(kill)

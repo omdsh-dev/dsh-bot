@@ -7,6 +7,8 @@ kind: "package-reference"
 
 [English](plugin-reference.md) | 中文
 
+可选如流插件通过 Host 内部 `ensureExternalRoom` 和 `submitExternalMessage` 进入 BotMode，这两个方法不暴露为 Remote。外部消息 ID 与响应一起提交，发送者以 JSON 数据写入模型日志。详见[如流接入](infoflow.zh.md)。
+
 ## 概述
 
 Bot Mode 为现有 DSH Web 界面增加具名 Bot 和共享群聊。每个 Bot 有一个固定私聊，并在每个群中拥有独立的持续 Session。这个私有实验插件复用原生 Agent 运行时、存储后端、生成的 Remote API 和界面插槽。
@@ -86,7 +88,7 @@ Client 挂载自身生成的 Remote 贡献，接收首次基线和后续变更�
 <a id="known-limitations-and-deferred-work"></a>
 
 - 群内回复在完成后出现；逐 token 流式输出、工具和审批位于原生执行会话。
-- 模型继承 DSH 的选择。每 Bot 模型选择、身份编辑、自主交接、定时任务、IM 适配和跨聊天记忆留待后续。
+- 模型继承 DSH 的选择。每 Bot 模型选择、身份编辑、自主交接、定时任务、其他 IM 适配和跨聊天记忆留待后续。
 - `minimal` 等锁定完整提示词的预设无法容纳额外 Bot 身份，会在投递前被拒绝。请使用 `standard` 或可扩展的自定义预设。
 - 群消息和 Session 日志使用不同的持久存储。两次提交之间崩溃时，DSH Turn 可能已经完成，而公开回复仍标记为已中断；重试前应检查执行日志。不承诺外部工具恰好执行一次。
 - 移除成员会保留公开历史；重新加入时创建新的成员 Session。原有被移除的 Session 仍能从 DSH 访问。

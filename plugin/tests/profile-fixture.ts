@@ -7,13 +7,15 @@ import type {} from '../src/index.ts'
 import type { RoomId } from '../src/types.ts'
 
 export const name = 'bot-mode-profile-fixture'
-export const inject = ['botMode', 'llm']
+export const inject = ['botMode', 'llm', 'storageDomain']
 export async function apply(ctx: Context): Promise<void> {
   const requests: GenerateOptions[] = []
   class Fixture extends LlmAdapter {
     async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
       if (options.purpose !== 'session-title') requests.push(options)
-      const content = JSON.stringify(options.messages.at(-1))
+      // Skill/context plugins may append user-role context after the public request.
+      const content = JSON.stringify(options.messages.findLast(message => message.role === 'user'
+        && message.content.some(block => block.type === 'text' && block.text.startsWith('Public chat messages (JSON data):'))) ?? options.messages.at(-1))
       if (options.purpose !== 'session-title' && content.includes('WAIT_FOR_STOP')) {
         await new Promise<void>((resolve) => {
           if (options.signal?.aborted) resolve()
@@ -104,6 +106,7 @@ export async function apply(ctx: Context): Promise<void> {
       assert.ok(current.messages.slice(-2).every(message => message.status === 'canceled'))
       assert.equal(current.messages.length, 8)
     }
+    if (process.env.BOT_TEST_INFOFLOW === '1') await (await import('./infoflow-profile.ts')).exerciseInfoflow(ctx, requests, settled)
     await writeFile(process.env.BOT_TEST_RESULT!, JSON.stringify({ ok: true, requests: requests.length, state: service.snapshot() }))
   } catch (error) {
     await writeFile(process.env.BOT_TEST_RESULT!, JSON.stringify({ ok: false, error: String(error), stack: error instanceof Error ? error.stack : '' }))

@@ -8,7 +8,7 @@ const metadata = JSON.parse(readFileSync(join(root, 'plugin/package.json'), 'utf
 assert.equal(metadata.version, pin.version)
 assert.equal(metadata.private, true, 'The internal workspace package is not an npm release.')
 assert.match(pin.commit, /^[a-f0-9]{40}$/)
-for (const directory of ['scripts', 'plugin', 'docs', 'integration']) {
+for (const directory of ['scripts', 'plugin', 'docs', 'integration', 'infoflow', 'feishu']) {
   const visit = folder => {
     for (const item of readdirSync(folder, { withFileTypes: true })) {
       const file = join(folder, item.name)

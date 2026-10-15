@@ -7,6 +7,8 @@ kind: "package-reference"
 
 English | [中文](plugin-reference.zh.md)
 
+The optional connector uses Host-only `ensureExternalRoom` and `submitExternalMessage`; neither is a Remote method. External receipts and response attempts commit atomically. Human identity is logged as JSON user data. See the [InfoFlow guide](infoflow.md).
+
 ## Summary
 
 Bot Mode adds named Bots and shared group chats to the existing DSH Web UI. Each Bot has one canonical direct chat and a separate persistent Session in every group. This private experimental plugin uses the native Agent runtime, storage backend, generated Remote API, and UI slots.
@@ -86,7 +88,7 @@ The same member Session preserves the prior request prefix across turns. New pub
 <a id="known-limitations-and-deferred-work"></a>
 
 - Responses appear in the group after completion; token streaming, tools, and approvals are in the native execution Session.
-- Models inherit DSH selection. Per-Bot model selection, editing Bot identities, autonomous handoffs, scheduled routines, IM adapters, and cross-chat memory are deferred.
+- Models inherit DSH selection. Per-Bot model selection, editing Bot identities, autonomous handoffs, scheduled routines, other IM adapters, and cross-chat memory are deferred.
 - Fixed complete-prompt presets such as `minimal` cannot host the extra Bot identity and are rejected before delivery. Use `standard` or an extensible custom preset.
 - Group messages and Session logs use separate durable stores. A crash between commits can leave a completed DSH Turn marked interrupted publicly; inspect the execution log before retrying. No exactly-once external-tool guarantee is claimed.
 - Removing a member preserves public history; rejoining creates a new member Session. Existing removed Sessions remain accessible through DSH.

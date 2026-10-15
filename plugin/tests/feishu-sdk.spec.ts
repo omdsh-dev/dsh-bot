@@ -1,0 +1,78 @@
+/** Official registration contract and text-only authenticated event transport. */
+import { expect, it, vi } from 'vitest'
+import { createGroup, GroupCreateError, decodeMessage, FeishuTransport, identity, register, type Sdk } from '../src/feishu/sdk.ts'
+import type { Delivery } from '../src/infoflow/domain.ts'
+const incoming = (kind = 'p2p', target = 'ou_robot') => ({ sender: { sender_type: 'user', sender_id: { open_id: 'ou_alice' } }, message: {
+  message_id: 'om_one', chat_id: 'oc_chat', chat_type: kind, message_type: 'text', content: JSON.stringify({ text: '@_user_1 hello' }),
+  mentions: [{ key: '@_user_1', id: { open_id: target } }],
+} })
+function bench(receive = vi.fn(async (_input: unknown) => {})) {
+  const request = vi.fn(async (_options: Record<string, unknown>): Promise<unknown> => ({ code: 0, bot: { open_id: 'ou_robot', app_name: 'Alpha' } }))
+  const begin = vi.fn(async (_options: unknown) => {}), close = vi.fn(), registration = vi.fn(async (_options: Record<string, unknown>) => ({ client_id: 'cli_app', client_secret: 'secret' }))
+  let handlers: Record<string, (event: unknown) => Promise<void>> = {}
+  const sdk: Sdk = { Client: class { request = request }, WSClient: class { start = begin; close = close },
+    EventDispatcher: class { register(value: typeof handlers) { handlers = value; return this } }, registerApp: registration }
+  const transport = new FeishuTransport(sdk, { appId: 'cli_app', appSecret: 'secret', brand: 'feishu', botOpenId: 'ou_robot', timeoutMs: 100 }, receive, vi.fn(), vi.fn())
+  return { sdk, request, registration, transport, begin, close, receive, emit: (event: unknown) => handlers['im.message.receive_v1']!(event) }
+}
+it('uses the official create-only flow with explicit messaging permissions and cancellation', async () => {
+  const b = bench(), controller = new AbortController(), qr = vi.fn()
+  await register(b.sdk, { signal: controller.signal, name: 'Alpha', qr })
+  expect(b.registration).toHaveBeenCalledWith(expect.objectContaining({ createOnly: true, source: 'dsh-bot', signal: controller.signal, onQRCodeReady: qr,
+    appPreset: expect.objectContaining({ name: 'Alpha' }), addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:chat:create'] }, events: { items: { tenant: ['im.message.receive_v1'] } } } }))
+  expect(await identity(b.sdk, 'cli_app', 'secret', 'feishu', 100)).toEqual({ openId: 'ou_robot', name: 'Alpha' })
+  await b.transport.close()
+})
+it('rejects robot senders, malformed content and mentions of a different robot', () => {
+  expect(decodeMessage(incoming('group', 'ou_other'), 'cli_app', 'ou_robot')).toBeNull()
+  expect(decodeMessage({ ...incoming(), sender: { sender_type: 'app' } }, 'cli_app', 'ou_robot')).toBeNull()
+  expect(decodeMessage({ ...incoming(), message: { ...incoming().message, content: '{' } }, 'cli_app', 'ou_robot')).toBeNull()
+  expect(decodeMessage(incoming('group'), 'cli_app', 'ou_robot')).toMatchObject({ conversation: { provider: 'feishu', accountId: 'cli_app', id: 'oc_chat', kind: 'group' }, text: 'hello' })
+})
+it('accepts DM and group events carrying the official dispatcher symbol metadata', async () => {
+  const b = bench()
+  // EventDispatcher.parse adds an enumerable Symbol('event-type') to every callback payload.
+  for (const kind of ['p2p', 'group']) {
+    await b.emit({ ...incoming(kind), [Symbol('event-type')]: 'im.message.receive_v1' })
+  }
+  expect(b.receive).toHaveBeenCalledTimes(2)
+  expect(b.receive).toHaveBeenNthCalledWith(1, expect.objectContaining({ text: 'hello', conversation: expect.objectContaining({ kind: 'private' }) }))
+  expect(b.receive).toHaveBeenNthCalledWith(2, expect.objectContaining({ text: 'hello', conversation: expect.objectContaining({ kind: 'group' }) }))
+  await b.transport.close()
+})
+it('drains admitted handlers on close and makes persistence failures retryable to the dispatcher', async () => {
+  let release!: () => void
+  const waiting = new Promise<void>(resolve => { release = resolve })
+  const b = bench(vi.fn(async () => { await waiting; throw new Error('secret payload') }))
+  const emitted = expect(b.emit(incoming())).rejects.toThrow('DSH could not persist')
+  let closed = false; const closing = b.transport.close().then(() => { closed = true })
+  await Promise.resolve(); expect(closed).toBe(false)
+  release(); await emitted; await closing
+  await b.emit(incoming()); expect(b.receive).toHaveBeenCalledTimes(1)
+})
+it('uses chat IDs and stable delivery UUIDs, and rejects an unsuccessful API response', async () => {
+  const b = bench()
+  const delivery: Delivery = { id: 'delivery-one', conversation: { provider: 'feishu', accountId: 'cli_app', kind: 'private', id: 'oc_chat' }, user: 'ou_alice', text: 'hello', attempts: 0, nextAt: 0 }
+  await b.transport.send(delivery); await b.transport.send(delivery)
+  expect(b.request.mock.calls[0]).toEqual(b.request.mock.calls[1])
+  expect(b.request.mock.calls[0]?.[0]).toMatchObject({ params: { receive_id_type: 'chat_id' }, data: { receive_id: 'oc_chat', msg_type: 'text', content: '{"text":"hello"}', uuid: expect.any(String) } })
+  b.request.mockResolvedValueOnce({ code: 999, bot: { open_id: '', app_name: '' } })
+  await expect(b.transport.send(delivery)).rejects.toThrow('飞书接口未成功')
+  await b.transport.close(); await expect(b.transport.send(delivery)).rejects.toThrow('stopping')
+})
+
+it('creates a private group with stable uuid, app-scoped owner and invited app IDs', async () => {
+  const b = bench(); b.request.mockResolvedValue({ code: 0, data: { chat_id: 'oc_new' } })
+  const options = { requestId: 'stable-request', title: 'Team', owner: 'ou_owner', botAppIds: ['cli_beta'] }
+  expect(await createGroup(b.sdk, 'cli_alpha', 'secret', 'feishu', 100, options)).toBe('oc_new')
+  expect(b.request).toHaveBeenCalledWith({ method: 'POST', url: '/open-apis/im/v1/chats', timeout: 100,
+    params: { user_id_type: 'open_id', set_bot_manager: false, uuid: 'stable-request' },
+    data: { name: 'Team', owner_id: 'ou_owner', user_id_list: ['ou_owner'], bot_id_list: ['cli_beta'], chat_mode: 'group', chat_type: 'private' } })
+  b.request.mockRejectedValueOnce({ response: { data: { code: 99991672, msg: 'private-secret' } }, config: { appSecret: 'private-secret' } })
+  await expect(createGroup(b.sdk, 'cli_alpha', 'secret', 'feishu', 100, options)).rejects.toThrow('im:chat:create')
+  b.request.mockResolvedValueOnce({ code: 232043 })
+  await expect(createGroup(b.sdk, 'cli_alpha', 'secret', 'feishu', 100, options)).rejects.toBeInstanceOf(GroupCreateError)
+  b.request.mockRejectedValueOnce(new Error('private-secret'))
+  await expect(createGroup(b.sdk, 'cli_alpha', 'secret', 'feishu', 100, options)).rejects.toThrow('结果待确认')
+  await b.transport.close()
+})

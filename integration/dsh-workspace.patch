@@ -1,8 +1,8 @@
 diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
-index a2773904c8..5f7c213484 100644
+index a277390..ed563f2 100644
 --- a/pnpm-lock.yaml
 +++ b/pnpm-lock.yaml
-@@ -5479,6 +5479,103 @@ importers:
+@@ -5479,6 +5479,112 @@ importers:
          specifier: ^4.2.0
          version: 4.3.1
 
@@ -21,6 +21,15 @@ index a2773904c8..5f7c213484 100644
 +        specifier: ^4.4.3
 +        version: 4.4.3
 +    devDependencies:
++      "@deepseek-ai/dsh-credentials":
++        specifier: workspace:^
++        version: link:../../credentials/credentials
++      "@deepseek-ai/dsh-user-approval":
++        specifier: workspace:^
++        version: link:../../interaction/user-approval
++      "@deepseek-ai/dsh-user-questions":
++        specifier: workspace:^
++        version: link:../../interaction/user-questions
 +      "@deepseek-ai/dsh-client-test-runtime":
 +        specifier: workspace:^
 +        version: link:../../test-support/client-runtime
@@ -107,7 +116,7 @@ index a2773904c8..5f7c213484 100644
      dependencies:
        react:
 diff --git a/tsconfig.base.json b/tsconfig.base.json
-index 245d733e82..b6e9a8a219 100644
+index 245d733..b6e9a8a 100644
 --- a/tsconfig.base.json
 +++ b/tsconfig.base.json
 @@ -28,6 +28,9 @@
@@ -121,7 +130,7 @@ index 245d733e82..b6e9a8a219 100644
        "@deepseek-ai/cosmokit": ["./vendor/cosmokit/src"],
        "@deepseek-ai/schemastery": ["./vendor/schemastery/src"],
 diff --git a/tsconfig.client.json b/tsconfig.client.json
-index 494e4f762f..600f4772d2 100644
+index 494e4f7..600f477 100644
 --- a/tsconfig.client.json
 +++ b/tsconfig.client.json
 @@ -41,6 +41,7 @@
@@ -133,7 +142,7 @@ index 494e4f762f..600f4772d2 100644
      { "path": "./packages/code-runtime/code-runtime-worker-thread" },
      // Shared leaf: web e2e boots the real host webserver (fixture + real-host
 diff --git a/tsconfig.host.json b/tsconfig.host.json
-index c5a3f118b3..f2a738d29b 100644
+index c5a3f11..f2a738d 100644
 --- a/tsconfig.host.json
 +++ b/tsconfig.host.json
 @@ -133,6 +133,7 @@

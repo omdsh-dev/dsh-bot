@@ -138,7 +138,8 @@
 .infoIdentity small { margin-left: auto; font-size: 10px; color: var(--dsw-alias-label-tertiary); }
 .infoMembers p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 22px; color: var(--dsw-alias-label-secondary); margin: 12px 0 8px; }
 .infoMembers button { font-size: 11px; color: var(--dsw-alias-label-secondary); }
-.dialog { width: min(480px, calc(100vw - 32px)); }
+.dialog { width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); }
+.dialogContent { min-height: 0; overflow-y: auto; }
 .form { color: var(--dsw-alias-label-primary); font: 13px/20px var(--dsw-font-family); }
 .form label { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
 .form small { color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 18px; }
@@ -165,3 +166,43 @@
 @container bot-mode (max-width: 1000px) { .chats { width: 250px; padding: 24px 12px 14px; } .header { padding: 16px 24px; } .timeline { padding: 0 28px; } .composerWrap { padding: 8px 28px 14px; } .chatTitle time { display: none; } .sendTools > span { display: none; } }
 @container bot-mode (max-width: 760px) { .chats { width: 216px; padding: 22px 10px 12px; } .rosterHeader { padding: 0 6px 22px; } .rosterHeader h1 { font-size: 21px; } .chat { gap: 9px; padding: 13px 9px; } .chat > .portraits, .chat .avatar { width: 34px; height: 34px; } .chat .groupPortrait > .avatar { width: 26px; height: 26px; } .timeline { padding: 0 20px; } .composerWrap { padding: 8px 20px 12px; } .header { gap: 10px; padding: 14px 20px; } .header > .portraits, .kindBadge { display: none; } .recipientBar > span { display: none; } }
 @container bot-mode (max-width: 620px) { .chats { display: none; } .showChats .chats { display: flex; width: 100%; } .showChats .main { display: none; } .mobileChats { display: inline-flex; } .header { min-height: 72px; padding: 12px 16px; } .header h2 { font-size: 14px; } .header > .portraits { display: inline-flex; width: 34px; height: 34px; } .header > .portraits .avatar { width: 30px; height: 30px; } .timeline { padding: 0 18px; } .message { gap: 10px; padding-bottom: 18px; } .messageContent { max-width: calc(100% - 40px); } .ownMessage .messageContent { max-width: 88%; } .composerWrap { padding: 8px 16px 12px; } .history { margin: 18px 0 24px; } .welcome { padding: 30px 4px; } .suggestions { gap: 8px; } .suggestions button { padding: 13px; } }
+.integrationPage { flex: 1; min-width: 0; overflow: auto; padding: 32px clamp(20px, 4vw, 56px); color: var(--dsw-alias-label-primary); }
+.integrationHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 26px; border-bottom: 1px solid var(--bot-line); }
+.integrationHeader h2 { margin: 8px 0; font-size: 25px; font-weight: 600; }
+.integrationHeader > button, .integrationProviderHeader > button { flex-shrink: 0; }
+.integrationTabs { display: flex; gap: 8px; padding: 20px 0; }
+.integrationTabs button { min-width: 100px; padding: 10px 20px; border: 1px solid var(--bot-line); border-radius: 10px; color: var(--dsw-alias-label-secondary); background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
+.integrationTabs button[aria-selected='true'] { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-interactive-bg-hover); border-color: var(--dsw-alias-label-tertiary); font-weight: 600; }
+.integrationTabs button:focus-visible { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 3px; }
+.integrationProviderHeader { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px; padding-top: 4px; }
+.integrationProviderHeader > div { flex: 1; min-width: 180px; }
+.integrationProviderHeader h3 { margin: 0; font-size: 17px; font-weight: 600; }
+.integrationProviderHeader p { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.8; margin: 8px 0 0; }
+.integrationPage > [role='tabpanel'][hidden] { display: none; }
+.integrationHeader p, .integrationHint { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.8; }
+.integrationBody { display: grid; grid-template-columns: minmax(150px, 210px) minmax(240px, 1fr); gap: 30px; padding-top: 28px; }
+.integrationBots { display: flex; flex-direction: column; gap: 6px; }
+.integrationBots > button { display: flex; align-items: center; gap: 10px; text-align: left; padding: 12px; border: 0; background: transparent; color: inherit; border-radius: 12px; cursor: pointer; }
+.integrationBots > button[aria-current='page'], .integrationBots > button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.integrationBots button > span:nth-child(2) { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.integrationBots strong { font-size: 13px; }.integrationBots small { font-size: 11px; color: var(--dsw-alias-label-tertiary); overflow-wrap: anywhere; }
+.integrationEditor { max-width: 620px; min-width: 0; }
+.integrationIdentity { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }.integrationIdentity h3 { font-size: 19px; margin: 0 0 5px; }.integrationIdentity p { font-size: 12px; margin: 0; color: var(--dsw-alias-label-tertiary); }
+.integrationStatus { margin-left: auto; font-size: 11px; padding: 5px 9px; background: var(--dsw-alias-bg-layer-1); border-radius: 20px; white-space: nowrap; }.integrationStatus[data-status='error'] { color: var(--dsw-alias-state-error-primary); }
+.integrationNotice { padding: 14px 16px; margin: 14px 0 22px; border-radius: 12px; background: var(--dsw-alias-bg-layer-1); font-size: 13px; line-height: 1.7; }.integrationNotice p { font-size: 12px; margin: 4px 0 0; color: var(--dsw-alias-label-secondary); }
+.integrationActions { display: flex; flex-wrap: wrap; gap: 8px; }.integrationGroups { margin-top: 32px; border-top: 1px solid var(--bot-line); padding-top: 18px; }.integrationGroups h3 { font-size: 14px; }.integrationGroups article { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 14px 0; }.integrationGroups strong { font-size: 13px; }.integrationGroups p { font-size: 12px; color: var(--dsw-alias-label-secondary); margin: 5px 0; }
+.groupIntegration { border-top: 1px solid var(--bot-line); padding-top: 18px; }.form .groupIntegrationToggle { flex-direction: row; align-items: center; gap: 10px; }.groupIntegrationToggle input { accent-color: var(--dsw-alias-button-primary-fill); }
+.groupPermission { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: -6px 0 18px; font-size: 12px; line-height: 1.6; }.groupPermission p { margin: 0; color: var(--dsw-alias-label-secondary); }.groupPermission a { color: var(--dsw-alias-state-business-primary); }
+@container bot-mode (max-width: 900px) { .integrationBody { grid-template-columns: 1fr; gap: 20px; }.integrationBots { flex-direction: row; overflow-x: auto; }.integrationBots > button { min-width: 160px; }.integrationPage .formGrid { grid-template-columns: 1fr; gap: 0; } }
+
+.registration { display: flex; align-items: flex-start; flex-direction: column; gap: 10px; margin: 18px 0; padding: 18px; border: 1px solid var(--bot-line); border-radius: 12px; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.registrationQr { max-width: 100%; height: auto; background: white; border-radius: 12px; }.registration p { margin: 0; color: var(--dsw-alias-label-secondary); font-size: 12px; }.registration a { color: var(--dsw-alias-state-business-primary); }.integrationNotice .integrationActions { margin-top: 14px; }
+
+.infoflowGuide { border: 1px solid var(--bot-line); border-radius: 14px; padding: 16px 20px; margin: 16px 0 12px; font-size: 13px; line-height: 1.8; }
+.infoflowGuide h3 { font-size: 14px; margin: 0 0 8px; }.infoflowGuide ol { margin: 0; padding-left: 22px; }.infoflowGuide p { margin: 8px 0 0; color: var(--dsw-alias-label-secondary); font-size: 12px; }.infoflowGuide a { color: var(--dsw-alias-state-business-primary); }
+.infoflowFields { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.infoflowFields p { margin: 0; }.infoflowFields summary { cursor: pointer; font-size: 13px; margin-bottom: 12px; }.infoflowFields .infoflowCheck { display: flex; flex-direction: row; align-items: flex-start; gap: 8px; }.infoflowCheck input { margin: 3px 0 0; flex-shrink: 0; }
+.infoflowTest { border-top: 1px solid var(--bot-line); margin-top: 18px; padding-top: 16px; display: flex; flex-direction: column; gap: 12px; }.infoflowTest h4, .infoflowTest p { margin: 0; }.infoflowTest label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }.infoflowTest select { padding: 8px 12px; border: 1px solid var(--bot-line); border-radius: 8px; color: inherit; background: var(--dsw-alias-bg-layer-1); }.infoflowTest > button { align-self: flex-start; }
+.infoflowProvider { container: infoflow-config / inline-size; }
+@container infoflow-config (max-width: 720px) { .integrationBody { grid-template-columns: minmax(0, 1fr); gap: 20px; }.integrationBots { flex-direction: row; overflow-x: auto; }.integrationBots > button { min-width: 160px; }.integrationEditor { max-width: none; } }
+@container infoflow-config (max-width: 420px) { .formGrid { grid-template-columns: 1fr; gap: 0; }.integrationIdentity { gap: 8px; flex-wrap: wrap; } }

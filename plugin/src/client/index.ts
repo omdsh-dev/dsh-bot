@@ -50,6 +50,25 @@ function install(ctx: Context): void {
   control.start()
   ctx.effect(() => () => control.dispose(), 'bot-mode: state stream')
   const face: PanelFace = {
+    feishu: {
+      createGroup: request => value(ctx.remote.bots.createFeishuGroup(request)),
+      resumeGroup: requestId => value(ctx.remote.bots.resumeFeishuGroup(requestId)),
+      snapshot: () => value(ctx.remote.bots.feishuSnapshot()),
+      save: request => value(ctx.remote.bots.saveFeishuBinding(request)),
+      verify: botId => value(ctx.remote.bots.verifyFeishuBinding(botId)),
+      toggle: request => value(ctx.remote.bots.toggleFeishuBinding(request)),
+      register: botId => value(ctx.remote.bots.registerFeishuBot(botId)),
+      cancel: attemptId => value(ctx.remote.bots.cancelFeishuRegistration(attemptId)),
+    },
+    infoflow: {
+      snapshot: () => value(ctx.remote.bots.infoflowSnapshot()),
+      save: request => value(ctx.remote.bots.saveInfoflowBinding(request)),
+      verify: botId => value(ctx.remote.bots.verifyInfoflowBinding(botId)),
+      toggle: request => value(ctx.remote.bots.toggleInfoflowBinding(request)),
+      testMessage: request => value(ctx.remote.bots.testInfoflowMessage(request)),
+      createGroup: request => value(ctx.remote.bots.createInfoflowGroup(request)),
+      resumeGroup: requestId => value(ctx.remote.bots.resumeInfoflowGroup(requestId)),
+    },
     hooks: { bots: model }, toggleSidebar: () => { ctx.layout.toggleSidebar() },
     createBot: request => value(ctx.remote.bots.createBot(request)),
     createGroup: request => value(ctx.remote.bots.createGroup(request)), setMembers: request => value(ctx.remote.bots.setMembers(request)),

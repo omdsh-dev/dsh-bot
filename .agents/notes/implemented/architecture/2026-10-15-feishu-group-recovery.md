@@ -1,0 +1,7 @@
+# Recovering a rejected Feishu group form
+
+A saved group request is not necessarily in progress. When the platform explicitly rejects the first creation call and no chat ID exists, the dialog retains the user's draft but unlocks edits and assigns a fresh request ID. A changed creator also clears the previous app's owner Open ID. Failed entries in IM configuration can reopen the same draft for editing. The dialog links to the selected application's group permission page and offers a selected, enabled Bot with a recorded successful creation as an alternative; past success is not presented as a live permission check.
+
+Unknown results, interrupted submissions, local linking failures and failed status reads keep the original request ID and lock edits. The action is labeled Continue. The original submission error survives a failed status lookup. A retry rejected after an earlier uncertain call remains uncertain because that rejection does not establish the outcome of the original call. A known chat ID always resumes local linking rather than creating a replacement group.
+
+The regression reaches the real rendered dialog: a permission error previously left its creator select disabled. UI tests cover editing and retrying, restoring a saved failed draft, switching app-scoped ownership, permission links, and stable request IDs for uncertain, linking and unreadable outcomes. Manager tests cover explicit rejection and uncertainty across retries. Browser verification uses the installed DSH page and the user's saved rejected request.

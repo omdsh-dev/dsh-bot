@@ -1,5 +1,28 @@
 # Release notes
 
+## 0.5.0 (unreleased)
+
+- Unified IM configuration panel for Feishu and InfoFlow, with independent per-Bot bindings, credentials, access rules and connection controls. One Bot can use both platforms concurrently while keeping Web, Feishu and InfoFlow conversation histories separate.
+- Optional Feishu 0.1.0 companion supports official QR registration, binding existing applications, private chats, group mentions and one-click group creation. Registration requests messaging and group-creation permissions.
+- Each Feishu group has one shared DSH chat with a separate native Session per Bot. Shared-message deduplication, legacy-room migration and durable creation records preserve replies and avoid duplicate groups during recovery.
+- InfoFlow 0.2.1 adds guided setup, local credential import, save-and-connect, explicit group access and diagnostic messages. Group creation failures and uncertain outcomes retain recoverable state.
+- Managed IM replies use their platform robot's identity without an extra internal `@botId` line. Packaged Host regressions cover both platforms, shared groups, reply routing, duplicate events and isolation across restart.
+
+## 0.4.0 (unreleased)
+
+- InfoFlow 0.2.0 companion adds a configuration page: each Bot can bind a distinct robot, verify its identity, save credentials through DSH, and enable or disable its own connection.
+- Group creation can optionally create an InfoFlow group and invite the selected Bots' robots and human members. Durable creation records prevent blind retries after uncertain outcomes; known groups can recover their local association.
+- Multiple robots in the same managed group share message deduplication and public history, while retaining separate Bot Sessions and sending each result through its own robot.
+- Legacy configuration can seed one disabled binding. Native credentials remain write-only in the UI. Existing local chats keep their IDs and history.
+- Native package tests cover two robot identities, shared-group deduplication, separate replies, private chats, and restart continuity. No live group or message is created by tests.
+
+## 0.3.0 (unreleased)
+
+- Optional InfoFlow 0.1.0 companion: exact robot mentions, allowlists, isolated external DMs and shared groups, durable queues, deduplication, sender/admin stop, delivery retries, and native human-interaction notices.
+- Host-only idempotent external ingress, additive v1 storage compatibility, named human senders, and read-only external rooms in the UI.
+- Separate private SDK dependency, disabled-by-default companion bundle, and incremental build with refreshed Remote codecs.
+- Deterministic fault-injection and real-profile crash/restart coverage. Live enterprise SDK/gateway validation remains a deployment step.
+
 ## 0.2.1
 
 Published as `@zzzpyyy/dsh-bot@0.2.1` on npm under the experimental `next` tag. Compatible with DSH `0.1.5-rc.2`.

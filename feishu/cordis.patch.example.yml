@@ -1,0 +1,14 @@
+# Install the companion; no robot or authorization starts until requested in the page.
+- id: bot-feishu
+  disabled: false
+  config:
+    endpointTimeoutMs: 15000
+    pollMs: 1000
+    maxPending: 200
+    maxQueuePerRoom: 20
+    maxConcurrentRooms: 4
+    maxReceipts: 100000
+    maxOutbox: 10000
+    chunkSize: 3000
+    retryMs: 5000
+    maxRetryMs: 120000

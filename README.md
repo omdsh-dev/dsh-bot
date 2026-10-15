@@ -6,6 +6,10 @@ Persistent AI teammates and multi-Bot chats inside [DeepSeek Harness](https://gi
 
 This is an independent, experimental community plugin. It is not an official DeepSeek product and is not affiliated with Grok, Cue, or Muse.
 
+The current source version is **0.5.0 (unreleased)** and adds per-Bot [Feishu QR registration and binding](docs/feishu.zh.md). The [InfoFlow companion](docs/infoflow.md), its per-Bot configuration, and optional group creation remain available. The npm installation instructions below describe the published 0.2.1 release, which does not include these IM connectors.
+
+Open **DSH Bots → IM connections** to manage Feishu and InfoFlow in one panel. Select a platform and Bot to configure its robot, connection and group access; Feishu also supports one-click group creation.
+
 ## What you can do
 
 - Create Bots with a handle, display name, responsibilities, and DSH Agent preset.
@@ -84,7 +88,7 @@ npm start -- --patch /absolute/path/bot-settings.patch.yml
 ## Current limits
 
 - Group replies appear when complete; token streaming, tools, and approvals are in each member's execution Session.
-- Bots inherit DSH's selected model. Per-Bot models, identity editing, automatic handoffs, scheduling, and external messaging adapters are not implemented.
+- Bots inherit DSH's selected model. Per-Bot models, identity editing, automatic handoffs and scheduling are not implemented. Optional companions provide InfoFlow and Feishu text messaging.
 - Use the extensible `standard` preset. Complete-prompt presets such as `minimal` are rejected.
 - A restart marks unfinished public replies interrupted. It does not resend them; inspect the execution Session before retrying uncertain tool work.
 - There is no Bot/chat deletion or large-history pagination yet. Removing and rejoining a member creates a new Session and preserves the public history.

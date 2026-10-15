@@ -1,0 +1,6 @@
+# The manager exposes DSH Bots → InfoFlow. Robot connections start disabled.
+# Save each robot's credentials through that page; do not store secrets here.
+- id: bot-infoflow
+  disabled: false
+  config:
+    managed: true

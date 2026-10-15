@@ -6,10 +6,14 @@
 
 这是独立的实验性社区插件，不是 DeepSeek 官方产品，与 Grok、Cue、Muse 没有关联。
 
+当前源码版本为 **0.5.0（尚未发布）**，新增[飞书扫码创建并绑定机器人](docs/feishu.zh.md)，保留[如流配置、每 Bot 独立机器人和可选建群](docs/infoflow.zh.md)。下文 npm 安装说明对应已发布的 0.2.1；它不包含如流和飞书接入。
+
+在 **DSH Bots → IM 接入** 统一配置飞书与如流。切换平台后选择 Bot，即可管理机器人绑定、连接开关和群聊接入；飞书页签提供一键建群入口。
+
 ## 能做什么
 
 - 创建 Bot，设置 handle、显示名称、职责和 DSH Agent preset。
-- 每个 Bot 拥有唯一私聊，也可以明确选择成员创建群聊。
+- 每个 Bot 拥有唯一本地私聊，也可以明确选择成员创建群聊。
 - 用 `@handle`、`@all`、`@everyone` 指定接收者；点击成员头像即可插入 @。
 - 搜索与筛选聊天、引用回复、停止回答、重试失败回答。
 - 打开成员的原生执行 Session，查看流式输出、工具调用、问题与审批。
@@ -41,7 +45,7 @@ npm start
 
 打开 `dsh web` 输出的带认证参数的地址，然后点击侧栏中的 **DSH Bots**。在 DSH 原生设置中配置模型，再创建第一个 Bot；有多个 Bot 后即可创建群聊。仓库不附带模型密钥，`npm start` 不会加载模拟模型。
 
-安装脚本按 [dsh-version.json](dsh-version.json) 下载固定的 [DSH 提交](https://github.com/deepseek-ai/deepseek-harness/commit/c291e7961a515f6d7af9304e7fd1d257929aef26)，复制插件，补充 TypeScript 注册及插件锁文件条目，按冻结锁文件安装依赖，并构建原生 Web profile。修改插件源码后再次运行 setup。源码请改 `plugin/`，不要改 `.runtime/` 中的安装副本。安装脚本不会修改其他 DSH 安装。
+安装脚本按 [dsh-version.json](dsh-version.json) 下载固定的 [DSH 提交](https://github.com/deepseek-ai/deepseek-harness/commit/c291e7961a515f6d7af9304e7fd1d257929aef26)，复制插件，补充 TypeScript 注册及插件锁文件条目，按冻结锁文件安装依赖，并构建原生 Web profile。修改插件源码后可运行 `npm run build:plugin` 增量构建；首次安装仍使用 setup。源码请改 `plugin/`，不要改 `.runtime/` 中的安装副本。安装脚本不会修改其他 DSH 安装。
 
 源码插件保留内部工作区身份 `@deepseek-ai/dsh-experimental-bot-mode`，公共分发包以 `@zzzpyyy/dsh-bot` 包装其编译结果，不是 npm 上无 scope 的 `dsh-bot`。两种分发方式都要求固定的 DSH 版本。
 
@@ -84,7 +88,7 @@ npm start -- --patch /absolute/path/bot-settings.patch.yml
 ## 当前限制
 
 - 群聊在回答完成后显示回复；逐字输出、工具和审批位于对应成员的执行 Session。
-- 所有 Bot 继承 DSH 的模型选择，尚不支持每 Bot 单独选模型、编辑身份、自动交接、定时任务和外部 IM 接入。
+- 所有 Bot 继承 DSH 的模型选择，尚不支持每 Bot 单独选模型、编辑身份、自动交接、定时任务。如流和飞书文字接入由独立可选配套插件提供。
 - 使用可扩展的 `standard` preset；`minimal` 等完整提示词 preset 会被拒绝。
 - 重启会把尚未结束的公开回复标为中断，不自动重发。涉及工具执行时，重试前请查看原始 Session。
 - 暂不支持删除 Bot / 聊天和大历史分页。移除成员后重新加入会创建新的 Session，并保留公开历史。

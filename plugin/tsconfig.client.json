@@ -15,7 +15,14 @@
     "src/client/registration.ts",
     "src/client/view-store.ts",
     "src/client/Avatar.tsx",
-    "src/client/Composer.tsx"
+    "src/client/Composer.tsx",
+    "src/client/InfoFlowPage.tsx",
+    "src/client/infoflow-face.ts",
+    "src/client/infoflow-credentials.ts",
+    "src/feishu/types.ts",
+    "src/client/FeishuPage.tsx",
+    "src/client/feishu-face.ts",
+    "src/client/IMPanel.tsx"
   ],
   "references": [
     {

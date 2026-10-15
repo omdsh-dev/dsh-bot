@@ -2,7 +2,7 @@
 
 中文 | [English](architecture.md)
 
-Bot Mode 是通过 DSH profile patch 在 Web 或 Desktop 中加载的 Host / Client Cordis 插件。Host 在 DSH 的 `bot_mode` 存储域中管理身份、唯一私聊、成员、路由和公开历史；Client 通过原生主面板与侧栏插槽挂载，使用生成的 Remote 编解码。它不启动额外聊天服务器或 SDK 子进程。
+Bot Mode 是通过 DSH profile patch 在 Web 或 Desktop 中加载的 Host / Client Cordis 插件。Host 在 DSH 的 `bot_mode` 存储域中管理身份、唯一本地私聊、成员、路由和公开历史；Client 通过原生主面板与侧栏插槽挂载，使用生成的 Remote 编解码。它不启动额外聊天服务器或 SDK 子进程。
 
 每个 Bot 在每个聊天成员关系中拥有独立且持久的原生 Session，作用域系统提示词提供其身份。每次投递都会记录有上限的未读公开消息、可选引用和当前用户请求，不会把私聊记录复制到群聊上下文。明确 @ 优先于引用路由和默认接收者，只有用户发送和重试会触发模型。
 
@@ -19,3 +19,7 @@ Desktop 与浏览器发现的是同一个 `dsh.client.platform: web` 入口，�
 安装包测试会解压实际发布的压缩包，调用 Desktop 的真实依赖校验器，并在不启用开发链接豁免的情况下启动原生 Desktop Host，仅替换外部模型。测试通过 `dsh-app://` 请求已注册的 Bot Client 模块，重启 Host 后核对 Session ID，并让同一压缩包通过 Web 认证传输加载。测试资源树不是签名应用包，macOS 窗口交互另行验证；另行执行的 `npm run test:registry` 已通过：它使用 DesktopProjectManager 及其独立 pnpm 状态，将发布包安装到全新 profile，再以测试模型启动原生 Host。
 
 安装包测试使用 Desktop 自己的依赖闭包选择器限定共享包集合，避免开发依赖掩盖缺失项。仅声明使用的 `dsh-client-ui-slots` 不列入发布包的运行时 peer；它仍在源码工作区中用于类型检查。
+
+如流配套插件在同一 Host 中消费 BotMode 的内部入口，通过 BotMode 的管理接口提供页面操作。`bot_infoflow_settings` 保存绑定和建群记录，独立 `bot_if_*` 域分别拥有每个 Bot 或共享群的收发队列；旧模式保留 `bot_infoflow`。多个机器人收到同一群消息时共享去重凭据，每个 Bot 保有独立 Session。外部 Room 和消息来源保存在 bot_mode；去重凭据与 Bot 响应原子提交。网络回发不占用入站提交锁。详见[如流接入](infoflow.zh.md)。
+
+可选飞书管理器拥有每个 Bot 的应用凭据和独立 `bot_fs_*` 队列。建群请求持久化后创建飞书私有群、邀请所选应用并添加允许群；重试使用已保存群 ID 或有效期内的同一请求 UUID。同一飞书群按 Chat ID 共享一个外部 Room，每个 Bot 保留原生 Session；私聊仍按应用隔离。BotMode 原子去重群里的用户消息，并为每个被 @ Bot 只创建一次响应。旧版同群记录自动合并，旧 Room ID 作为别名供待发队列继续使用。详见[飞书接入](feishu.zh.md)、[建群决策](../.agents/notes/implemented/architecture/2026-10-15-feishu-groups.md)和[共享群决策](../.agents/notes/implemented/architecture/2026-10-15-feishu-shared-groups.md)。
