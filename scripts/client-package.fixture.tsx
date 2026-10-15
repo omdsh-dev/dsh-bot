@@ -37,10 +37,13 @@ it('mounts the archive UI, renders native controls, and sends through its Remote
     ctx.slots.installLocale(locale)
     ctx.provide('layout', { toggleSidebar() {} })
     ctx.provide('uiWorkspace', { openSession() {} })
-    ctx.provide('remote', { bots: { send, createBot }, $mount: mount, $stream: () => ({
+    const remote = { bots: { send, createBot }, $mount: mount, $stream: () => ({
       async *[Symbol.asyncIterator]() { yield { generation: 1, value: { type: 'baseline', value: state }, accept() {} } },
       async dispose() {}, restart() {},
-    }) })
+    }) }
+    // DSH 0.2's slot harness already owns a Remote double; 0.1 does not.
+    if (runtime.remote) Object.assign(runtime.remote, remote)
+    else ctx.provide('remote', remote)
     ctx.provide('remote.bots', { send, createBot })
     await client.apply(ctx)
   } })
