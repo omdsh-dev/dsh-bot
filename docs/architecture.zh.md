@@ -10,7 +10,7 @@ Bot Mode 是通过 DSH profile patch 在 Web 或 Desktop 中加载的 Host / Cli
 
 仓库只保存插件源码和小型集成补丁。补丁增加工作区 TypeScript 路径、编译引用和插件的 pnpm 锁文件条目，不改 Agent 循环、传输、认证或模型实现。安装使用固定的上游提交，保证生成接口与原生插槽有可复现的版本。本插件的按需运行不依赖上游生成的文档目录。
 
-源码分发会准备固定版本的 DSH 工作区用于构建。`npm run pack` 把编译后的实现包装为公共 `@zzzpyyy/dsh-bot` bundle，通过外层 `dsh.bundle.patch` 启用嵌套入口。内部实现保留原 private 包身份，因为生成的 Typert 编解码和 Client 模块注册都引用该身份，不改写生成标识。外层 manifest 将 Host 提供的依赖转为精确版本的 peer dependency，普通依赖单独声明；发布包不包含源码、测试、构建辅助代码或 `workspace:` 范围。
+源码分发会准备固定版本的 DSH 工作区用于构建。`npm run pack` 把编译后的实现包装为公共 `@zzzpyyy/dsh-bot` bundle，通过外层 `dsh.bundle.patch` 启用嵌套入口。内部实现保留原 private 包身份，因为生成的 Typert 编解码和 Client 模块注册都引用该身份，不改写生成标识。外层 manifest 将 Host 提供的依赖转为 `compatibility.json` 声明的 peer 范围，普通依赖单独声明；发布包不包含源码、测试、构建辅助代码或 `workspace:` 范围。
 
 Desktop 与浏览器发现的是同一个 `dsh.client.platform: web` 入口，DSH 0.2.0 的 Desktop 启动原生 Web Host，通过认证 HTTP 地址连接。插件没有额外的桌面专用服务器或传输实现。Desktop 管理自己的 profile 和数据。源码 Web 启动器的 `.runtime/` 可以重新构建，`.data/` 保存用户数据，更新时应保留。工具和模型凭据继续由 DSH 管理。
 
@@ -23,3 +23,5 @@ Desktop 与浏览器发现的是同一个 `dsh.client.platform: web` 入口，DS
 如流配套插件在同一 Host 中消费 BotMode 的内部入口，通过 BotMode 的管理接口提供页面操作。`bot_infoflow_settings` 保存绑定和建群记录，独立 `bot_if_*` 域分别拥有每个 Bot 或共享群的收发队列；旧模式保留 `bot_infoflow`。多个机器人收到同一群消息时共享去重凭据，每个 Bot 保有独立 Session。外部 Room 和消息来源保存在 bot_mode；去重凭据与 Bot 响应原子提交。网络回发不占用入站提交锁。详见[如流接入](infoflow.zh.md)。
 
 可选飞书管理器拥有每个 Bot 的应用凭据和独立 `bot_fs_*` 队列。建群请求持久化后创建飞书私有群、邀请所选应用并添加允许群；重试使用已保存群 ID 或有效期内的同一请求 UUID。同一飞书群按 Chat ID 共享一个外部 Room，每个 Bot 保留原生 Session；私聊仍按应用隔离。BotMode 原子去重群里的用户消息，并为每个被 @ Bot 只创建一次响应。旧版同群记录自动合并，旧 Room ID 作为别名供待发队列继续使用。详见[飞书接入](feishu.zh.md)。
+
+构建版本与运行兼容范围分开维护。图标由插件自带，Host、Agent、Client 和 IM 入口按所需方法检查能力。相同的三个安装包在多个 DSH 版本中验证，具体范围与限制见[兼容策略](compatibility.md)。

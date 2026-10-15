@@ -4,8 +4,9 @@ import { appendFile, mkdtemp, readFile, writeFile, copyFile, rm } from 'node:fs/
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
-import { root, runtime } from './common.mjs'
-import { desktopModule, hostRequest, materializePackage, profileValidator, readReport } from './package-fixture.mjs'
+import { root } from './common.mjs'
+import { runtime } from './test-runtime.mjs'
+import { desktopModule, desktopRequest, materializePackage, profileValidator, readReport } from './package-fixture.mjs'
 
 export async function verifyInstallation(registry = false) {
   const home = await mkdtemp(join(tmpdir(), 'dsh-bot-registry-'))
@@ -20,28 +21,34 @@ export async function verifyInstallation(registry = false) {
     const pnpmManifest = JSON.parse(await readFile(pnpmManifestFile, 'utf8'))
     const data = join(home, 'registry-home')
     const paths = resolveDesktopPaths(data)
-    const manager = new DesktopProjectManager(paths, { dsh: fixture.resources })
+    const manager = new DesktopProjectManager(paths, { dsh: fixture.resources, node: process.execPath, pnpm: join(dirname(pnpmManifestFile), pnpmManifest.bin.pnpm) })
     await manager.applyRelease()
     // Match the documented profile setting: protobufjs's optional version warning needs no install script.
-    await appendFile(join(paths.profile, 'pnpm-workspace.yaml'), '\nallowBuilds:\n  protobufjs: false\n')
-    const { runProfilePnpm } = await import(pathToFileURL(join(runtime, 'packages/boot/plugin-manager/lib/types/operations.js')).href)
-    const validate = await profileValidator(paths.profile, fixture.resources)
+    if (!manager.mutate) await appendFile(join(paths.profile, 'pnpm-workspace.yaml'), '\nallowBuilds:\n  protobufjs: false\n')
+    const runProfilePnpm = manager.mutate ? undefined : (await import(pathToFileURL(join(runtime, 'packages/boot/plugin-manager/lib/types/operations.js')).href)).runProfilePnpm
+    const validate = await profileValidator(paths.profile, fixture.resources, fixture.descriptor)
     const feishu = JSON.parse(await readFile(join(root, 'dist/feishu-package-info.json'), 'utf8'))
     for (const info of [fixture.info, feishu]) {
       const spec = registry ? `${info.name}@${info.version}` : join(root, 'dist', info.file)
       // This is an isolated profile with one writer, using the same admission and reconciliation as Desktop.
-      const installed = await runProfilePnpm({
-        profile: 'desktop', dir: paths.profile, home: data, cwd: root,
-        installAnchor: join(fixture.resources, 'node_modules/@deepseek-ai/dsh/package.json'),
-      }, ['add', spec, '--registry=https://registry.npmjs.org'], {
-        command: process.execPath, args: [join(dirname(pnpmManifestFile), pnpmManifest.bin.pnpm)],
-        execution: 'service', outputBytes: 65536, idleTimeoutMs: 60000,
-        env: { PATH: process.env.PATH },
-      })
-      assert.equal(installed.exitCode, 0, installed.output)
+      if (manager.mutate) {
+        await manager.mutate({ type: 'plugin-add', spec }, { beforeChange: async () => {}, afterChange: async () => {} })
+      } else {
+        const installed = await runProfilePnpm({
+          profile: 'desktop', dir: paths.profile, home: data, cwd: root,
+          installAnchor: join(fixture.resources, 'node_modules/@deepseek-ai/dsh/package.json'),
+        }, ['add', spec, '--registry=https://registry.npmjs.org'], {
+          command: process.execPath, args: [join(dirname(pnpmManifestFile), pnpmManifest.bin.pnpm)],
+          execution: 'service', outputBytes: 65536, idleTimeoutMs: 60000,
+          env: { PATH: process.env.PATH },
+        })
+        assert.equal(installed.exitCode, 0, installed.output)
+      }
       const installedManifest = JSON.parse(await readFile(join(paths.profile, 'node_modules', info.name, 'package.json'), 'utf8'))
       assert.equal(installedManifest.version, info.version)
-      assert.ok(validate().layers.some(layer => layer.packageName === info.name))
+      const loaded = validate()
+      if (loaded) assert.ok(loaded.layers.some(layer => layer.packageName === info.name))
+      else assert.ok(manager.listPlugins().some(item => item.name === info.name && item.enabled))
     }
     // Add the external model substitute only after the real package installation has completed.
     for (const file of ['driver.js', 'cordis.patch.yml']) await copyFile(join(fixture.profile, file), join(paths.profile, file))
@@ -61,7 +68,7 @@ export async function verifyInstallation(registry = false) {
     } finally { clearTimeout(timer) }
     const report = await readReport(result)
     assert.equal(report.ok, true, report.error)
-    const request = await hostRequest(ready.url)
+    const request = await desktopRequest(host, ready)
     const response = await request('index.html')
     assert.equal(response.status, 200)
     assert.ok((await response.text()).includes('@deepseek-ai/dsh-experimental-bot-mode'))

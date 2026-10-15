@@ -10,12 +10,12 @@ export const runtime = join(root, '.runtime', `deepseek-harness-${pin.version}`)
 export const pluginPath = 'packages/experimental/bot-mode'
 
 /** Return the pinned workspace package paths and versions, including non-hoisted peers. */
-export function workspacePackages() {
+export function workspacePackages(workspace = runtime) {
   const packages = new Map()
   for (const container of ['vendor', 'apps', 'packages']) {
-    for (const group of readdirSync(join(runtime, container), { withFileTypes: true })) {
+    for (const group of readdirSync(join(workspace, container), { withFileTypes: true })) {
       if (!group.isDirectory()) continue
-      const first = join(runtime, container, group.name)
+      const first = join(workspace, container, group.name)
       const candidates = container === 'packages'
         ? readdirSync(first, { withFileTypes: true }).filter(item => item.isDirectory()).map(item => join(first, item.name))
         : [first]

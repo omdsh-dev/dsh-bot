@@ -1,4 +1,5 @@
 /** Optional native InfoFlow plugin; credentials, storage and execution remain DSH-owned. */
+import { checkIM } from './compatibility.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { createHash } from 'node:crypto'
 import Schema from '@deepseek-ai/schemastery'
@@ -39,6 +40,7 @@ export const Config: Schema<Config> = Schema.object({
  * @param ctx - native Host scope. @param config - validated user deployment settings.
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
+  checkIM(ctx)
   if (config.baseUrl && !/^https:\/\//.test(config.baseUrl)) throw new Error('InfoFlow baseUrl must use HTTPS')
   for (const domain of [config.wsGateway, config.wsConnectDomain]) {
     if (domain && !/^[a-zA-Z0-9.-]+(?::\d+)?$/.test(domain)) throw new Error('InfoFlow WebSocket overrides must be domain names without a URL scheme or path')

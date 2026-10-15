@@ -22,6 +22,8 @@ jobs:
       - run: npm run pack
       - run: npm run pack:infoflow
       - run: npm run pack:feishu
+      - run: node --test scripts/compatibility.test.mjs
+      - run: npm run test:client-package
       - run: npm run test:install
       - run: npm run test:package
       - run: npm run test:infoflow-package
@@ -34,4 +36,29 @@ jobs:
           path: |
             dist/*.tgz
             dist/SHA256SUMS
+            dist/*-info.json
           if-no-files-found: error
+  older-runtime:
+    needs: build-and-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DSH_BOT_TEST_VERSION: 0.1.5-rc.2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install --global pnpm@11.7.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: dsh-bot-package
+          path: dist
+      - run: node scripts/setup-test-runtime.mjs "$DSH_BOT_TEST_VERSION"
+      - run: node --test scripts/compatibility.test.mjs
+      - run: npm run test:client-package
+      - run: npm run test:package
+      - run: npm run test:infoflow-package
+      - run: npm run test:infoflow-managed-package
+      - run: npm run test:feishu-package
+      - run: npm run test:im-isolation-package

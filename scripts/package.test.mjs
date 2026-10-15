@@ -5,8 +5,8 @@ import { spawn } from 'node:child_process'
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { pin } from './common.mjs'
-import { desktopModule, hostRequest, materializePackage, readReport } from './package-fixture.mjs'
+import { target } from './test-runtime.mjs'
+import { desktopModule, desktopRequest, hostRequest, materializePackage, readReport } from './package-fixture.mjs'
 
 async function within(promise, milliseconds) {
   let timer
@@ -36,7 +36,7 @@ test('the npm archive loads in Desktop, renders its bundle, and resumes separate
   try {
     const fixture = await materializePackage(home)
     const { DesktopHostProcess } = await desktopModule('host-process')
-    assert.equal(fixture.descriptor.release.version, pin.version)
+    assert.equal(fixture.descriptor.release.version, target.version)
     const manifestFile = join(fixture.plugin, 'package.json')
     const manifestText = await readFile(manifestFile, 'utf8')
     const manifest = JSON.parse(manifestText)
@@ -44,10 +44,10 @@ test('the npm archive loads in Desktop, renders its bundle, and resumes separate
     assert.ok(!manifest.scripts, 'Installation must not require lifecycle scripts.')
     assert.ok(!manifestText.includes('workspace:'))
     const incompatible = structuredClone(manifest)
-    incompatible.peerDependencies['@deepseek-ai/dsh'] = '0.1.5-rc.2'
+    incompatible.peerDependencies['@deepseek-ai/dsh'] = '>=999.0.0'
     try {
       await writeFile(manifestFile, JSON.stringify(incompatible))
-      assert.throws(fixture.validate, /incompatible.*peerDependencies.*0\.1\.5-rc\.2/)
+      assert.throws(fixture.validate, /(?:incompatible|requires).*999\.0\.0/)
     } finally { await writeFile(manifestFile, manifestText) }
     assert.doesNotThrow(fixture.validate)
     let first
@@ -60,7 +60,7 @@ test('the npm archive loads in Desktop, renders its bundle, and resumes separate
         const ready = await within(host.start(), 45000)
         const report = await readReport(result)
         assert.equal(report.ok, true, report.error)
-        await verifyBotAssets(await hostRequest(ready.url))
+        await verifyBotAssets(await desktopRequest(host, ready))
         const group = report.state.rooms.find(room => room.kind === 'group')
         if (phase === 'first') first = group
         else {

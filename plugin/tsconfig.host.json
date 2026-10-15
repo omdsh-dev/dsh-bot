@@ -24,7 +24,8 @@
     "src/feishu/settings.ts",
     "src/feishu/manager.ts",
     "src/feishu/sdk.ts",
-    "src/feishu/rooms.ts"
+    "src/feishu/rooms.ts",
+    "src/compatibility.ts"
   ],
   "references": [
     {

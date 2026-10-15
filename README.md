@@ -6,7 +6,7 @@ Persistent AI teammates and multi-Bot chats inside [DeepSeek Harness](https://gi
 
 This is an independent, experimental community plugin. It is not an official DeepSeek product and is not affiliated with Grok, Cue, or Muse.
 
-**Version 0.6.0** supports **DSH 0.2.0-rc.2**, with Web, Feishu and InfoFlow in one Bot workspace. Configure both IM platforms under **DSH Bots → IM connections**, bind each platform's robot to a Bot, and create platform groups from DSH.
+**Version 0.7.0** runs the same packages on **DSH 0.1.5-rc.2 and 0.2.0-rc.2**, with Web, Feishu and InfoFlow in one Bot workspace. Configure both IM platforms under **DSH Bots → IM connections**, bind each platform's robot to a Bot, and create platform groups from DSH.
 
 One Bot can use Feishu and InfoFlow at the same time. Bot instructions, models and tools are shared; conversation histories and reply destinations stay separate by platform and chat. Files and external memory accessed through tools still follow the deployment's permissions.
 
@@ -36,36 +36,36 @@ Each Feishu group appears once in DSH, with separate native Sessions for its Bot
 
 ## Install or update from npm
 
-Requires **DSH 0.2.0-rc.2**. These experimental packages use the `next` tag; install the exact compatible versions below. Shared DSH dependencies are pinned to the upstream revision in [dsh-version.json](dsh-version.json); other DSH releases are not yet verified.
+Requires **DSH 0.1.5-rc.2 or newer**. Installation no longer pins every DSH peer to one exact release. The plugin checks required interfaces at startup and when attaching an Agent. [compatibility.json](compatibility.json) separates accepted versions and tested revisions from the reproducible build pin in [dsh-version.json](dsh-version.json). These experimental packages use the `next` tag.
 
 | Package | Version | Purpose |
 | --- | --- | --- |
-| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.6.0` | Required base: Web chats and the IM configuration panel |
-| [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.2.0` | Optional Feishu connection and group creation |
-| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.3.0` | Optional InfoFlow connection; requires enterprise SDK access |
+| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.7.0` | Required base: Web chats and the IM configuration panel |
+| [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.3.0` | Optional Feishu connection and group creation |
+| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.4.0` | Optional InfoFlow connection; requires enterprise SDK access |
 
-For DSH **0.1.5-rc.2**, keep the previous package set: Bot **0.5.0**, Feishu **0.1.0**, InfoFlow **0.2.1**. The new set targets **0.2.0-rc.2**; update DSH before installing it. Do not bypass the compatibility gate.
+Use the same package set above on DSH **0.1.5-rc.2** and **0.2.0-rc.2**. Later DSH versions are admitted without a new plugin release, but acceptance is not a guarantee of compatibility with untested or changed interfaces. Feishu and InfoFlow accept Bot `>=0.7.0 <1.0.0`, so a Bot update no longer forces matching connector releases. See the [compatibility policy and matrix](docs/compatibility.md).
 
-In **Desktop → plugin manager**, install `@zzzpyyy/dsh-bot@0.6.0`, then add the optional companion packages you need to the same profile.
+In **Desktop → plugin manager**, install `@zzzpyyy/dsh-bot@0.7.0`, then add the optional companion packages you need to the same profile.
 
 If Feishu installation reports `ERR_PNPM_IGNORED_BUILDS` for `protobufjs`, explicitly disable that optional install script in the profile as described in the [Feishu guide](docs/feishu.zh.md#安装与开发), then retry.
 
 For an existing compatible **DSH CLI Web profile**, use:
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot@0.6.0
-dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.2.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot@0.7.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.3.0
 ```
 
 InfoFlow additionally requires `@baidu/infoflow-sdk-nodejs@2026.8.28` from your authorized enterprise registry. Configure `@baidu` registry access in the target profile's package-manager environment before installing its companion; the public package does not bundle the private SDK or credentials:
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.3.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.4.0
 ```
 
 Use the same `DSH_HOME` and profile as your running installation. For upgrades, back up that data directory, let active replies finish, stop the Host, update the base and installed companions to the versions in the table, then restart. Saved Bot identities, bindings and conversation history remain in the same data directory. Installing a companion exposes its configuration page; it does not create robots or enable unconfigured connections. See the [Feishu guide](docs/feishu.zh.md) and [InfoFlow guide](docs/infoflow.md) for permissions and setup.
 
-After installation, enable the plugin and open **DSH Bots**. Configure the model through DSH's native settings. Desktop uses the same Bot code as Web and connects to the authenticated Web Host provided by DSH 0.2.0. It keeps its own DSH data; existing Web chats are not imported automatically. Do not enable another copy of Bot Mode alongside this bundle.
+After installation, enable the plugin and open **DSH Bots**. Configure the model through DSH's native settings. Desktop uses the same Bot code as Web and uses the native transport provided by DSH (the 0.1 Desktop pipe or the 0.2 authenticated Web Host). It keeps its own DSH data; existing Web chats are not imported automatically. Do not enable another copy of Bot Mode alongside this bundle.
 
 Package tests exercise Desktop's Host, Web authentication and asset loading, plus both IM companions with deterministic model and transport fixtures. They cover private/group routing, duplicate messages, shared groups and isolation after restart. Published packages contain no test model or fixture. Windows Desktop is not yet verified.
 
@@ -85,7 +85,7 @@ Open the authenticated URL printed by `dsh web`, then select **DSH Bots** in the
 
 Setup downloads the exact [DSH commit](https://github.com/deepseek-ai/deepseek-harness/commit/639ed015397290b3745d163aafe02ffee4aa3f84) recorded in [dsh-version.json](dsh-version.json), copies the plugin into a separate `.runtime/deepseek-harness-<version>` workspace, applies TypeScript registration and a plugin-only lockfile addition, installs with a frozen lockfile, and builds the native Web profile. After editing plugin source, use `npm run build:plugin` for an incremental build; first-time installation still requires setup. Edit `plugin/`, not the managed copy under `.runtime/`. Setup never modifies a separate DSH installation.
 
-The source plugin retains its internal `@deepseek-ai/dsh-experimental-bot-mode` workspace identity. The public bundle wraps its compiled implementation as `@zzzpyyy/dsh-bot`; it is not the unscoped `dsh-bot` npm package. Both distribution paths require the pinned DSH version.
+The source plugin retains its internal `@deepseek-ai/dsh-experimental-bot-mode` workspace identity. The public bundle wraps its compiled implementation as `@zzzpyyy/dsh-bot`; it is not the unscoped `dsh-bot` npm package. Only source builds require the pinned DSH revision; npm archives use independent compatibility ranges.
 
 ## Port, data, and working directory
 

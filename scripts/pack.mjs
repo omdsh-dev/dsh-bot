@@ -2,7 +2,8 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import { root, runtime, pin, pluginPath, run, requireNode, assertPinnedRuntime, workspacePackages } from './common.mjs'
+import { root, runtime, pin, pluginPath, run, requireNode, assertPinnedRuntime } from './common.mjs'
+import { hostPeers, releaseCompatibility } from './compatibility.mjs'
 import { writePackageReadme } from './pack-readme.mjs'
 
 requireNode()
@@ -17,15 +18,10 @@ for (const entry of ['index.js', 'client.js', 'typert.host.js', 'typert.remote-c
   if (!existsSync(join(source, 'lib', entry))) throw new Error(`Missing ${entry}; run npm run setup first.`)
 }
 
-const packages = workspacePackages()
-// ui-slots is a declaration-only import; Desktop does not ship that development package.
+// ui-slots is declaration-only. Store/primitives are browser platform modules, not Host peers.
 const runtimePeers = Object.keys(internal.peerDependencies).filter(name => name !== '@deepseek-ai/dsh-client-ui-slots')
 const shared = new Set([...runtimePeers, ...Object.keys(internal.dependencies).filter(name => name.startsWith('@deepseek-ai/')), '@deepseek-ai/dsh'])
-const peerDependencies = Object.fromEntries([...shared].sort().map(name => {
-  const version = packages.get(name)?.version
-  if (!version) throw new Error(`Pinned DSH has no shared package ${name}`)
-  return [name, version]
-}))
+const peerDependencies = hostPeers([...shared])
 rmSync(destination, { recursive: true, force: true })
 mkdirSync(join(destination, 'implementation/lib'), { recursive: true })
 cpSync(join(source, 'lib'), join(destination, 'implementation/lib'), {
@@ -51,7 +47,7 @@ const manifest = {
 }
 writeFileSync(join(destination, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 writeFileSync(join(destination, 'cordis.patch.yml'), '- insert:\n    - id: bot-mode\n      name: ./implementation/lib/index.js\n')
-writeFileSync(join(destination, 'compatibility.json'), `${JSON.stringify({ dsh: pin.version, commit: pin.commit, package: release }, null, 2)}\n`)
+writeFileSync(join(destination, 'compatibility.json'), `${JSON.stringify(releaseCompatibility({ package: release }), null, 2)}\n`)
 writePackageReadme('README.md', join(destination, 'README.md'))
 for (const file of ['LICENSE', 'NOTICE']) cpSync(join(root, file), join(destination, file))
 const packed = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', join(root, 'dist')], { cwd: destination, stdio: 'pipe' }))[0]

@@ -1,4 +1,5 @@
 /** Browser plugin: generated Remote contribution, native feed, and slot occupants. */
+import { checkClient } from '../compatibility.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { RemoteSnapshotStream, RemoteStreamCarrierError } from '@deepseek-ai/dsh-api-gateway/client'
 import contribution from '@deepseek-ai/dsh-experimental-bot-mode/remote'
@@ -30,6 +31,7 @@ async function value<T>(request: Promise<RemoteResult<T>>): Promise<T> {
  * @param ctx - Client plugin scope.
  */
 export async function apply(ctx: Context): Promise<void> {
+  checkClient(ctx)
   const unmount = await ctx.remote.$mount(contribution)
   ctx.effect(() => unmount, 'bot-mode: Remote namespace')
   ctx.inject(['remote.bots'], install)

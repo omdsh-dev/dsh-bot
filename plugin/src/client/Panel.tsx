@@ -1,7 +1,7 @@
 /** Native main-panel occupant; business state arrives only through framework hooks. */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { Button, Input, MarkdownText, Modal, IconPanelLeftOutlineRegular, IconPlusOutlineRegular, IconSearchOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input, MarkdownText, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session'
@@ -10,6 +10,7 @@ import type { ModelSnapshot } from './model.ts'
 import type { createBotViewStore } from './view-store.ts'
 import { Avatar } from './Avatar.tsx'
 import { Composer } from './Composer.tsx'
+import { SidebarIcon, PlusIcon, SearchIcon } from './Icons.tsx'
 import css from './Panel.module.css'
 import { IMPanel } from './IMPanel.tsx'
 import type { FeishuFace } from './feishu-face.ts'
@@ -128,8 +129,8 @@ export function BotPanel(props: Props) {
   return <section className={clsx(css.root, showChats && css.showChats)}>
     <aside className={css.chats} aria-label={t('chats')}>
       <header className={css.rosterHeader}><div><span className={css.workspaceLabel}>{t('workspace')}</span><h1>{t('title')}<span>{bots.length}</span></h1></div>
-        <Button size="sm" aria-label={t('newBot')} title={t('newBot')} icon={<IconPlusOutlineRegular />} onClick={() => { openForm('bot') }} /></header>
-      <Input className={clsx(css.search)} icon={<IconSearchOutlineRegular />} aria-label={t('search')} placeholder={t('search')} value={search} onChange={(event) => { setSearch(event.target.value) }} />
+        <Button size="sm" aria-label={t('newBot')} title={t('newBot')} icon={<PlusIcon />} onClick={() => { openForm('bot') }} /></header>
+      <Input className={clsx(css.search)} icon={<SearchIcon />} aria-label={t('search')} placeholder={t('search')} value={search} onChange={(event) => { setSearch(event.target.value) }} />
       <div className={css.filters} role="group" aria-label={t('filterChats')}>
         {(['all', 'group', 'dm'] as const).map(kind => <button type="button" key={kind} aria-pressed={filter === kind} onClick={() => { setFilter(kind) }}>{t(kind === 'all' ? 'allChats' : kind === 'group' ? 'groups' : 'bots')}</button>)}
       </div>
@@ -137,7 +138,7 @@ export function BotPanel(props: Props) {
         {(['group', 'dm'] as const).filter(kind => filter === 'all' || kind === filter).map(kind => <section key={kind}>
           <div className={css.sectionLabel}><h2>{t(kind === 'dm' ? 'direct' : 'groups')}<span>{rooms.filter(item => item.kind === kind).length}</span></h2>
             <Button size="sm" disabled={kind === 'group' && !bots.length} aria-label={t(kind === 'dm' ? 'newBot' : 'newGroup')} title={t(kind === 'dm' ? 'newBot' : 'newGroup')}
-              icon={<IconPlusOutlineRegular />} onClick={() => { openForm(kind === 'dm' ? 'bot' : 'group') }} /></div>
+              icon={<PlusIcon />} onClick={() => { openForm(kind === 'dm' ? 'bot' : 'group') }} /></div>
           {visible.filter(item => item.kind === kind).map((item) => {
             const last = item.messages.at(-1)
             const preview = last ? last.status === 'running' ? t('running') : last.text || t(last.status)
@@ -153,10 +154,10 @@ export function BotPanel(props: Props) {
         {search && !visible.length && <p className={css.searchEmpty}>{t('noResults')}</p>}
         {!bots.length && snapshot.ready && <p className={css.searchEmpty}>{t('empty')}</p>}
       </div>
-      <Button className={css.newChat} variant="outline" disabled={!snapshot.ready || !bots.length} icon={<IconPlusOutlineRegular />} onClick={() => { openForm('group') }}>{t('startGroup')}</Button>
+      <Button className={css.newChat} variant="outline" disabled={!snapshot.ready || !bots.length} icon={<PlusIcon />} onClick={() => { openForm('group') }}>{t('startGroup')}</Button>
       <Button className={css.newChat} variant="outline" aria-pressed={integration} onClick={() => { setIntegration(true); setShowChats(false) }}>{t('imTitle')}</Button>
       <footer className={css.rosterFooter}><span className={css.connection} data-ready={snapshot.ready && !snapshot.error} /><span>{snapshot.error ? t('disconnected') : snapshot.ready ? t('connected') : t('loading')}</span>
-        <Button size="sm" title={t('toggleSidebar')} aria-label={t('toggleSidebar')} icon={<IconPanelLeftOutlineRegular />} onClick={props.toggleSidebar} /></footer>
+        <Button size="sm" title={t('toggleSidebar')} aria-label={t('toggleSidebar')} icon={<SidebarIcon />} onClick={props.toggleSidebar} /></footer>
     </aside>
     {integration ? <IMPanel bots={bots} feishu={props.feishu} infoflow={props.infoflow} t={t} back={() => { setIntegration(false) }} openRoom={choose} selectRoom={id => { const target = rooms.find(item => item.id === id || item.aliases?.includes(id)); if (target) choose(target) }} createFeishuGroup={(id, failed) => {
       if (failed && (failed.status !== 'failed' || failed.chatId)) return
@@ -166,7 +167,7 @@ export function BotPanel(props: Props) {
       {!form && (error || snapshot.error) && <div role="alert" className={css.error}>{error || snapshot.error}</div>}
       {room ? <>
         <header className={css.header}>
-          <Button className={css.mobileChats} size="sm" aria-label={t('chats')} icon={<IconPanelLeftOutlineRegular />} onClick={() => { setShowChats(!showChats) }} />
+          <Button className={css.mobileChats} size="sm" aria-label={t('chats')} icon={<SidebarIcon />} onClick={() => { setShowChats(!showChats) }} />
           <RoomPortrait room={room} /><div className={css.headerText}><h2>{room.title}<span className={css.kindBadge} aria-hidden="true">{t(room.external ? room.external.provider : room.kind === 'group' ? 'groups' : 'botLabel')}</span></h2><p>{room.kind === 'group' ? roomBots.map(bot => bot.name).join(' · ') : `@${room.defaultBot} · ${t('privateChat')}`}</p></div>
           <Button size="sm" className={css.infoButton} aria-label={t('chatInfo')} title={t('chatInfo')} onClick={() => { setDetails(true) }} icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1" strokeLinecap="round"/></svg>} />
           {room.kind === 'group' && !room.external && <Button size="sm" disabled={running} onClick={() => { openForm('members') }}>{t('settings')}</Button>}

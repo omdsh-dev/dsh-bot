@@ -22,7 +22,9 @@
     "src/feishu/types.ts",
     "src/client/FeishuPage.tsx",
     "src/client/feishu-face.ts",
-    "src/client/IMPanel.tsx"
+    "src/client/IMPanel.tsx",
+    "src/compatibility.ts",
+    "src/client/Icons.tsx"
   ],
   "references": [
     {

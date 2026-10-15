@@ -1,5 +1,14 @@
 # Release notes
 
+## 0.7.0 — 2026-10-15
+
+One artifact set for DSH `0.1.5-rc.2` and `0.2.0-rc.2`: Bot `0.7.0`, Feishu `0.3.0`, InfoFlow `0.4.0`.
+
+- Separate the build pin from runtime compatibility. DSH peers declare a minimum supported version, and companion peers accept Bot `>=0.7.0 <1.0.0` instead of one exact release.
+- Own the five UI icons to avoid upstream export renames. Check required Host, Agent, Client and credential operations before using them.
+- Test the same archives on both DSH revisions, including UI interactions, native Desktop/Web transports, both IM platforms, isolation, duplicate events and restart. CI builds once and reuses those artifacts on the older runtime.
+- Admission of future versions does not promise compatibility with future breaking interfaces. Older than DSH `0.1.5-rc.2`, other Cordis major versions and data downgrades are not supported.
+
 ## 0.6.0 — 2026-10-15
 
 Targets DSH `0.2.0-rc.2` with `@zzzpyyy/dsh-bot@0.6.0`, `@zzzpyyy/dsh-bot-feishu@0.2.0`, and `@zzzpyyy/dsh-bot-infoflow@0.3.0`. DSH `0.1.5-rc.2` users should keep the previous package set.

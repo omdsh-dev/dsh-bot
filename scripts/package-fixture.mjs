@@ -3,14 +3,22 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync,
 import { createRequire } from 'node:module'
 import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { root, runtime, pin, pluginPath, run, workspacePackages } from './common.mjs'
+import { root, pin, run, workspacePackages } from './common.mjs'
+import { runtime, target } from './test-runtime.mjs'
 
 export const requireRuntime = createRequire(join(runtime, 'package.json'))
 export const desktopModule = name => import(pathToFileURL(join(runtime, 'apps/desktop/lib/types', `${name}.js`)).href)
+const legacyProfilePackages = () => existsSync(join(runtime, 'apps/desktop/lib/types/profile-packages.js'))
+  ? desktopModule('profile-packages') : Promise.resolve({})
 export const appBootModule = () => import(pathToFileURL(join(runtime, 'packages/boot/app-boot/lib/index.js')).href)
 
 /** Use the same profile admission check as the installed CLI and Desktop Host. */
-export async function profileValidator(profile, resources) {
+export async function profileValidator(profile, resources, descriptor) {
+  const packages = await legacyProfilePackages()
+  if (packages.validateDesktopPluginGraph) return () => {
+    const manifest = JSON.parse(readFileSync(join(profile, 'package.json'), 'utf8'))
+    packages.validateDesktopPluginGraph(profile, resources, descriptor, manifest.dsh.profile.bundles.filter(name => name.startsWith('@zzzpyyy/')))
+  }
   const { loadProfileDirectory } = await appBootModule()
   return () => {
     const loaded = loadProfileDirectory('dsh', profile, join(resources, 'node_modules/@deepseek-ai/dsh/package.json'))
@@ -27,6 +35,12 @@ export async function hostRequest(address) {
   await login.text()
   if (login.status !== 303 || !cookie) throw new Error(`Host authentication failed (${login.status}).`)
   return path => fetch(new URL(path, url.origin), { headers: { cookie }, signal: AbortSignal.timeout(10000) })
+}
+
+/** Use the runtime's native Desktop transport (0.1 byte pipe or 0.2 HTTP). */
+export async function desktopRequest(host, ready) {
+  if (typeof host.fetch === 'function') return path => host.fetch(new Request(new URL(path, 'dsh-app://app/')))
+  return hostRequest(ready.url)
 }
 
 /** Copy runtime files, retaining generated declarations and excluding build/source/test trees. */
@@ -54,7 +68,7 @@ export async function materializePackage(home) {
   }
   entries.set('@deepseek-ai/dsh', join(runtime, 'apps/cli'))
   entries.set('@deepseek-ai/dsh-desktop-host', join(runtime, 'apps/desktop-host'))
-  for (const [name, item] of workspacePackages()) entries.set(name, item.path)
+  for (const [name, item] of workspacePackages(runtime)) entries.set(name, item.path)
   entries.delete('@deepseek-ai/dsh-experimental-bot-mode')
   // Use Desktop's own production closure selector so development-only packages cannot hide missing peers.
   const { selectDesktopPackageClosure } = await import(pathToFileURL(join(runtime, 'apps/desktop/scripts/prepare-package-set.ts')).href)
@@ -76,16 +90,19 @@ export async function materializePackage(home) {
   const { DESKTOP_HOST_PROTOCOL_VERSION } = await desktopModule('host-protocol')
   const descriptor = {
     schemaVersion: 1, platform: process.platform, arch: process.arch, files: [], sharedPackages,
-    release: { schemaVersion: 1, version: pin.version, hostProtocolVersion: DESKTOP_HOST_PROTOCOL_VERSION, nodeVersion: process.versions.node, pnpmVersion: pin.pnpm },
+    release: { schemaVersion: 1, version: target.version, hostProtocolVersion: DESKTOP_HOST_PROTOCOL_VERSION, nodeVersion: process.versions.node, pnpmVersion: pin.pnpm },
   }
   // DSH 0.2 Desktop requires its Office skill assets and a standalone Node before announcing readiness.
-  cpSync(join(runtime, 'packages/skill/skill-office/assets'), join(home, 'runtime/office-skills'), { recursive: true })
+  const office = join(runtime, 'packages/skill/skill-office/assets')
+  if (existsSync(office)) cpSync(office, join(home, 'runtime/office-skills'), { recursive: true })
   const nodeBin = join(home, 'runtime/primary-runtime/dependencies/node/bin')
   mkdirSync(nodeBin, { recursive: true })
   symlinkSync(process.execPath, join(nodeBin, process.platform === 'win32' ? 'node.exe' : 'node'), 'file')
   const profile = join(home, 'profiles/desktop')
   const { createPluginProfile } = await desktopModule('project-manager')
   createPluginProfile(profile)
+  const { linkDesktopHostPackages } = await legacyProfilePackages()
+  if (linkDesktopHostPackages) linkDesktopHostPackages(profile, resources, descriptor)
   const info = JSON.parse(readFileSync(join(root, 'dist/package-info.json'), 'utf8'))
   const plugin = join(profile, 'node_modules', info.name)
   mkdirSync(plugin, { recursive: true })
@@ -96,15 +113,15 @@ export async function materializePackage(home) {
   manifest.dependencies[info.name] = info.version
   manifest.dsh.profile.bundles.push(info.name)
   writeFileSync(join(profile, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
-  const validate = await profileValidator(profile, resources)
+  const validate = await profileValidator(profile, resources, descriptor)
   validate()
   const ts = requireRuntime('typescript')
-  const driver = ts.transpileModule(readFileSync(join(runtime, pluginPath, 'tests/profile-fixture.ts'), 'utf8'), {
+  const driver = ts.transpileModule(readFileSync(join(root, 'plugin/tests/profile-fixture.ts'), 'utf8'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
   }).outputText
   writeFileSync(join(profile, 'driver.js'), driver)
   writeFileSync(join(profile, 'cordis.patch.yml'), '- id: agent-default-model\n  config:\n    provider: bot-fixture\n    model: fixture\n- insert:\n    - id: bot-test-driver\n      name: ./driver.js\n')
-  return { resources, profile, plugin, descriptor, info, validate, environment: { ...process.env, DSH_CLIENT_VERSION: pin.version } }
+  return { resources, profile, plugin, descriptor, info, validate, environment: { ...process.env, DSH_CLIENT_VERSION: target.version } }
 }
 
 export async function readReport(file, milliseconds = 45000) {

@@ -1,6 +1,7 @@
 /** Optional Feishu companion, with one independently owned robot per DSH Bot. */
 import Schema from '@deepseek-ai/schemastery'
 import type { BridgeConfig } from './infoflow/bridge.ts'
+import { checkIM } from './compatibility.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { createHash } from 'node:crypto'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
@@ -23,6 +24,7 @@ export const Config: Schema<Config> = Schema.object({
   endpointTimeoutMs: Schema.natural().min(1000).default(15000), pollMs: Schema.natural().min(100).default(1000),
 })
 export async function apply(ctx: Context, config: Config): Promise<void> {
+  checkIM(ctx)
   const settings = await ctx.storageDomain.open(settingsDomain)
   const connections = new Map<BotId, { bridge: InfoFlowBridge; close(): Promise<void> }>()
   const stop = async (botId: BotId) => { const current = connections.get(botId); if (current) { connections.delete(botId); await current.close() } }
