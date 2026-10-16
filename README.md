@@ -6,6 +6,8 @@ Persistent AI teammates and multi-Bot chats inside [DeepSeek Harness](https://gi
 
 This is an independent, experimental community plugin. It is not an official DeepSeek product and is not affiliated with Grok, Cue, or Muse.
 
+**Unreleased:** New profiles hide InfoFlow configuration and group creation. Internal users can enable **IM connections → Advanced settings → Show InfoFlow integration (internal users)**. The preference persists in the DSH profile. Existing bindings or chats retain their entry on upgrade; hiding it preserves connections and history. The optional companion and enterprise SDK are still required.
+
 **Version 0.7.0** runs the same packages on **DSH 0.1.5-rc.2 and 0.2.0-rc.2**, with Web, Feishu and InfoFlow in one Bot workspace. Configure both IM platforms under **DSH Bots → IM connections**, bind each platform's robot to a Bot, and create platform groups from DSH.
 
 One Bot can use Feishu and InfoFlow at the same time. Bot instructions, models and tools are shared; conversation histories and reply destinations stay separate by platform and chat. Files and external memory accessed through tools still follow the deployment's permissions.

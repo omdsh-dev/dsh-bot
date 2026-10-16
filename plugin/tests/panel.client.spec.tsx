@@ -19,7 +19,7 @@ import type { FeishuState } from '../src/feishu/types.ts'
 const runtimes = new Set<SlotTestRuntime>()
 afterEach(async () => { for (const runtime of runtimes) await runtime.dispose(); runtimes.clear(); cleanup(); vi.restoreAllMocks() })
 
-async function bench(overrides: Partial<PanelFace> = {}) {
+async function bench(overrides: Partial<PanelFace> = {}, infoflowVisible = false) {
   const runtime = await SlotTestRuntime.create()
   runtimes.add(runtime)
   const bots: Bot[] = [{ id: 'sage' as BotId, name: 'Sage', instructions: 'Think through product ideas.', preset: 'standard' },
@@ -29,9 +29,10 @@ async function bench(overrides: Partial<PanelFace> = {}) {
     messages: [{ id: 'question' as ChatMessageId, botId: null, text: 'A shared idea', replyTo: null, status: 'complete', error: null, time: 1000 },
       { id: 'answer' as ChatMessageId, botId: bots[0]!.id, text: 'Start with **one clear question**.', replyTo: 'question' as ChatMessageId, status: 'complete', error: null, time: 2000 }] }
   const rooms: Room[] = [room, ...bots.map(bot => ({ id: `dm-${bot.id}` as RoomId, title: bot.name, kind: 'dm' as const, members: [members.find(member => member.botId === bot.id)!], defaultBot: bot.id, messages: [] }))]
-  const model = new BotModel(); model.replace({ bots, rooms })
+  const model = new BotModel(); model.replace({ bots, rooms, infoflowVisible })
   const unused = async (): Promise<never> => { throw new Error('unexpected command') }
   const face: PanelFace = { hooks: { bots: model }, createBot: unused, createGroup: unused, setMembers: vi.fn(async () => room),
+    setInfoflowVisible: vi.fn(async visible => { model.replace({ ...model.getSnapshot().value, infoflowVisible: visible }); return visible }),
     send: vi.fn(async () => {}), stop: unused, retry: unused, openSession: vi.fn(), toggleSidebar: vi.fn(), ...overrides }
   const locale = new LocaleRuntime(runtime.ctx); locale.setLocale('en')
   await runtime.mount({ inject: ['slots'], apply(ctx) {
@@ -192,13 +193,53 @@ it('labels external speakers and keeps InfoFlow rooms read-only while retaining 
 })
 
 
+it('hides InfoFlow and its group option by default, and remembers explicit visibility across panel navigation', async () => {
+  const infoflow = { snapshot: vi.fn(async () => ({ available: false, bindings: [], groups: [] })),
+    save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), testMessage: vi.fn(), createGroup: vi.fn(), resumeGroup: vi.fn() }
+  const { face } = await bench({ infoflow })
+  fireEvent.click(screen.getByRole('button', { name: en.newGroup }))
+  expect(screen.queryByLabelText(en.ifCreateGroup)).toBeNull()
+  fireEvent.click(within(screen.getByRole('dialog')).getByText(en.cancel, { exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
+  expect(screen.queryByRole('tab', { name: en.infoflow })).toBeNull()
+  expect(infoflow.snapshot).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByText(en.imAdvanced))
+  fireEvent.click(screen.getByLabelText(en.imShowInfoflow))
+  await waitFor(() => expect(screen.getByRole('tab', { name: en.infoflow })).toBeTruthy())
+  expect(face.setInfoflowVisible).toHaveBeenCalledWith(true)
+  fireEvent.click(screen.getByRole('tab', { name: en.infoflow }))
+  await screen.findByText(en.ifUnavailable)
+  fireEvent.click(screen.getByRole('button', { name: en.ifBack }))
+  fireEvent.click(screen.getByRole('button', { name: en.newGroup }))
+  expect((screen.getByLabelText(en.ifCreateGroup) as HTMLInputElement).checked).toBe(false)
+  fireEvent.click(within(screen.getByRole('dialog')).getByText(en.cancel, { exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
+  fireEvent.click(screen.getByRole('tab', { name: en.infoflow }))
+  fireEvent.click(screen.getByText(en.imAdvanced))
+  fireEvent.click(screen.getByLabelText(en.imShowInfoflow))
+  await waitFor(() => expect(screen.queryByRole('tab', { name: en.infoflow })).toBeNull())
+  expect(screen.getByRole('tabpanel', { name: en.feishu })).toBeTruthy()
+  expect(infoflow.toggle).not.toHaveBeenCalled()
+  expect(infoflow.createGroup).not.toHaveBeenCalled()
+})
+
+it('keeps InfoFlow visible when saving the visibility preference fails', async () => {
+  await bench({ setInfoflowVisible: vi.fn(async () => { throw new Error('Cannot save preference') }) }, true)
+  fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
+  fireEvent.click(screen.getByText(en.imAdvanced))
+  fireEvent.click(screen.getByLabelText(en.imShowInfoflow))
+  expect((await screen.findByRole('alert')).textContent).toContain('Cannot save preference')
+  expect((screen.getByLabelText(en.imShowInfoflow) as HTMLInputElement).checked).toBe(true)
+  expect(screen.getByRole('tab', { name: en.infoflow })).toBeTruthy()
+})
+
 it('configures each Bot through the InfoFlow page and never displays stored secrets', async () => {
   const saved = { botId: 'sage' as BotId, agentId: '11', robotId: '111', robotName: 'Sage robot', enabled: false,
     status: 'disabled' as const, error: null, credentialsConfigured: true, allowUsers: ['alice'], allowGroups: [], admins: ['alice'] }
   const infoflow = { snapshot: vi.fn(async () => ({ available: true, bindings: [saved], groups: [] })),
     save: vi.fn(async () => saved), verify: vi.fn(async () => saved), toggle: vi.fn(async () => saved), testMessage: vi.fn(),
     createGroup: vi.fn(), resumeGroup: vi.fn() }
-  await bench({ infoflow })
+  await bench({ infoflow }, true)
   fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
   fireEvent.click(screen.getByRole('tab', { name: en.infoflow }))
   await screen.findByRole('button', { name: 'Verify and save' })
@@ -214,7 +255,7 @@ it('configures each Bot through the InfoFlow page and never displays stored secr
 
 it('makes platform group creation optional and sends the owner and selected Bots only when selected', async () => {
   const infoflow = { snapshot: vi.fn(), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), testMessage: vi.fn(), createGroup: vi.fn(), resumeGroup: vi.fn() }
-  const f = await bench({ infoflow }); infoflow.createGroup.mockResolvedValue(f.room)
+  const f = await bench({ infoflow }, true); infoflow.createGroup.mockResolvedValue(f.room)
   fireEvent.click(screen.getByRole('button', { name: 'New group' }))
   const option = screen.getByLabelText('Also create an InfoFlow group')
   expect((option as HTMLInputElement).checked).toBe(false)
@@ -236,7 +277,7 @@ it('opens one IM panel with both platforms and creates a Feishu robot only for t
   fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
   await screen.findByRole('button', { name: en.fsCreate })
   expect(screen.getByRole('heading', { name: en.imTitle })).toBeTruthy()
-  expect(screen.getAllByRole('tab')).toHaveLength(2)
+  expect(screen.getAllByRole('tab')).toHaveLength(1)
   expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
   expect(feishu.register).not.toHaveBeenCalled()
   fireEvent.click(within(screen.getByRole('navigation', { name: en.fsChooseBot })).getByRole('button', { name: /Nova/ }))
@@ -254,7 +295,7 @@ it('binds an existing Feishu app with a write-only secret and explicit allowlist
   let saved = false
   const feishu = { createGroup: vi.fn(), resumeGroup: vi.fn(), snapshot: vi.fn(async () => ({ available: true, bindings: saved ? [binding] : [], registrations: [], groups: [] })),
     save: vi.fn(async () => { saved = true; return binding }), verify: vi.fn(), toggle: vi.fn(), cancel: vi.fn(), register: vi.fn() }
-  await bench({ feishu }); fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
+  await bench({ feishu }, true); fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
   fireEvent.click(await screen.findByRole('button', { name: en.fsManual }))
   fireEvent.change(screen.getByLabelText('App ID'), { target: { value: 'cli_sage' } })
   fireEvent.change(screen.getByLabelText('App Secret'), { target: { value: 'private-secret' } })
@@ -374,7 +415,7 @@ it('pastes InfoFlow credentials locally, saves and connects, and sends a test on
     status: 'connecting' as const, error: null, credentialsConfigured: true, allowUsers: ['alice'], allowGroups: [], allowAllGroups: true, admins: [] }
   const infoflow = { snapshot: vi.fn(async () => ({ available: true, bindings, groups: [] })),
     save: vi.fn(async () => { bindings = [saved]; return saved }), verify: vi.fn(), toggle: vi.fn(), testMessage: vi.fn(async () => {}), createGroup: vi.fn(), resumeGroup: vi.fn() }
-  await bench({ infoflow }); fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
+  await bench({ infoflow }, true); fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
   fireEvent.click(screen.getByRole('tab', { name: en.infoflow }))
   const paste = await screen.findByLabelText(en.ifPasteCredentials)
   expect(screen.getByRole('link', { name: en.ifPlatform }).getAttribute('href')).toBe('https://open-ruliu.baidu-int.com/web')

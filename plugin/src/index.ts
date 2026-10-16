@@ -135,13 +135,31 @@ export class BotMode extends TypertRemoteService {
    * Return a detached durable snapshot.
    * @returns all Bots and public chats.
    */
-  @Remote snapshot(): BotState { return structuredClone(this.state) }
+  @Remote snapshot(): BotState {
+    const state = structuredClone(this.state)
+    if (state.infoflowVisible === undefined) {
+      const configured = this.infoflow?.snapshot()
+      state.infoflowVisible = !!(configured?.bindings.length || configured?.groups.length
+        || state.rooms.some(room => room.external?.provider === 'infoflow'))
+    }
+    return state
+  }
+
+  /** Persist entry visibility without changing robot connections or chat history. */
+  @Remote setInfoflowVisible(visible: boolean): Promise<boolean> {
+    return this.change(state => { state.infoflowVisible = visible; return visible })
+  }
 
   /** Register the optional connector for the lifetime of its Host scope. */
   attachInfoFlow(control: InfoFlowControl): () => void {
     if (this.infoflow) throw new Error('InfoFlow manager is already installed')
     this.infoflow = control
-    return () => { if (this.infoflow === control) this.infoflow = undefined }
+    for (const wake of this.watchers) wake()
+    return () => {
+      if (this.infoflow !== control) return
+      this.infoflow = undefined
+      for (const wake of this.watchers) wake()
+    }
   }
   private connector(): InfoFlowControl {
     if (!this.infoflow) throw new Error('Enable the InfoFlow companion in managed mode first')

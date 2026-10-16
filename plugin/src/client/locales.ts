@@ -2,6 +2,9 @@
 export const zh = {
   imTitle: 'IM 接入', imConfiguration: '连接配置', imPlatforms: 'IM 平台',
   imSubtitle: '统一管理各平台的机器人绑定、连接状态和群聊接入。',
+  imAdvanced: '高级设置', imShowInfoflow: '显示如流接入（内部用户）',
+  imInfoflowVisibilityHint: '仅适用于有企业如流账号的用户。关闭后隐藏如流配置和建群入口，已有连接与聊天记录会保留。此设置在当前 DSH 环境中共享。',
+  imInfoflowHidden: '如流入口已关闭，请在 IM 接入的高级设置中开启后再创建如流群。',
   feishu: "飞书",
   fsTitle: "飞书接入",
   fsSubtitle: "同一个 Bot 支持 Web 和飞书的单聊、群聊 @。同一飞书群共用一份聊天记录，每位 Bot 保留独立会话。",
@@ -137,6 +140,9 @@ export type BotKey = keyof typeof zh
 export const en = {
   imTitle: 'IM connections', imConfiguration: 'Connection settings', imPlatforms: 'IM platforms',
   imSubtitle: 'Manage robot bindings, connections and group access across platforms.',
+  imAdvanced: 'Advanced settings', imShowInfoflow: 'Show InfoFlow integration (internal users)',
+  imInfoflowVisibilityHint: 'For users with an enterprise InfoFlow account. Hiding the configuration and group creation options keeps existing connections and chats. This preference is shared by this DSH profile.',
+  imInfoflowHidden: 'InfoFlow is hidden. Enable it in IM connections → Advanced settings before creating an InfoFlow group.',
   feishu: "Feishu",
   fsTitle: "Feishu connections",
   fsSubtitle: "Use the same Bot in Web and Feishu DMs and group mentions. Each Feishu group shares one history; each Bot retains its own session.",

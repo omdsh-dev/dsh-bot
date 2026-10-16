@@ -12,6 +12,7 @@ const externalConversation = z.object({ provider: z.enum(['infoflow', 'feishu'])
 const externalMessage = z.object({ id: z.string().min(1), sender: z.object({ id: z.string().min(1), name: z.string() }),
   sources: z.array(z.object({ accountId: z.string(), senderId: z.string() })).optional() })
 const schema: z.ZodType<BotState> = z.object({
+  infoflowVisible: z.boolean().optional(),
   bots: z.array(z.object({ id: botId, name: z.string(), instructions: z.string(), preset: z.string() })),
   rooms: z.array(z.object({
     id: z.string().transform(brandString<RoomId>), title: z.string(), kind: z.enum(['dm', 'group']),

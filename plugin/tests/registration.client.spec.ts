@@ -17,7 +17,7 @@ it('waits for slot owners, reinstalls after owner reload, and disposes both cont
   ctx.locale.register('botMode', { zh, en })
   const unused = async (): Promise<never> => { throw new Error('unused command') }
   const face: PanelFace = { hooks: { bots: new BotModel() }, createBot: unused, createGroup: unused,
-    setMembers: unused, send: unused, stop: unused, retry: unused, openSession: () => {}, toggleSidebar: () => {} }
+    setMembers: unused, send: unused, stop: unused, retry: unused, openSession: () => {}, toggleSidebar: () => {}, setInfoflowVisible: unused }
   const plugin = await ctx.plugin({ inject: ['slots', 'locale'], apply: (scope: Context) => { registerPanel(scope, face, createBotViewStore()) } })
   const Owner = (_props: PropsRuntime<'root'> & PropsRenderSlots<'main' | 'sidebar.panellist'>) => null
   const declare = () => ctx.slots.register({ name: 'root', children: {

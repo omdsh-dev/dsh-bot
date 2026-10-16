@@ -1,5 +1,10 @@
 # Release notes
 
+## Unreleased
+
+- Hide InfoFlow configuration and group creation for new profiles. Internal users can enable **IM connections → Advanced settings → Show InfoFlow integration**; hidden configuration does not poll the connector.
+- Persist visibility in the DSH profile and share it with connected clients. Existing InfoFlow bindings, groups or chat history keep the entry visible on upgrade until a user explicitly hides it. Hiding the entry retains connections, credentials and conversations.
+
 ## 0.7.0 — 2026-10-15
 
 One artifact set for DSH `0.1.5-rc.2` and `0.2.0-rc.2`: Bot `0.7.0`, Feishu `0.3.0`, InfoFlow `0.4.0`.

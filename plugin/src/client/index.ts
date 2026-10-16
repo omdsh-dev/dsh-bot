@@ -72,6 +72,7 @@ function install(ctx: Context): void {
       resumeGroup: requestId => value(ctx.remote.bots.resumeInfoflowGroup(requestId)),
     },
     hooks: { bots: model }, toggleSidebar: () => { ctx.layout.toggleSidebar() },
+    setInfoflowVisible: visible => value(ctx.remote.bots.setInfoflowVisible(visible)),
     createBot: request => value(ctx.remote.bots.createBot(request)),
     createGroup: request => value(ctx.remote.bots.createGroup(request)), setMembers: request => value(ctx.remote.bots.setMembers(request)),
     send: request => value(ctx.remote.bots.send(request)), stop: request => value(ctx.remote.bots.stop(request)),

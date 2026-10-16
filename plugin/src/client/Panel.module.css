@@ -170,6 +170,10 @@
 .integrationHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 26px; border-bottom: 1px solid var(--bot-line); }
 .integrationHeader h2 { margin: 8px 0; font-size: 25px; font-weight: 600; }
 .integrationHeader > button, .integrationProviderHeader > button { flex-shrink: 0; }
+.integrationPreferences { margin-top: 18px; font-size: 13px; }
+.integrationPreferences summary { width: fit-content; cursor: pointer; color: var(--dsw-alias-label-secondary); }
+.integrationPreferences label { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+.integrationPreferences input { margin: 0; flex-shrink: 0; }
 .integrationTabs { display: flex; gap: 8px; padding: 20px 0; }
 .integrationTabs button { min-width: 100px; padding: 10px 20px; border: 1px solid var(--bot-line); border-radius: 10px; color: var(--dsw-alias-label-secondary); background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
 .integrationTabs button[aria-selected='true'] { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-interactive-bg-hover); border-color: var(--dsw-alias-label-tertiary); font-weight: 600; }

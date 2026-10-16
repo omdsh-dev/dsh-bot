@@ -50,6 +50,8 @@ dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-infoflow-0.4.0.tgz
 
 ## 页面配置
 
+开发版（尚未发布到 npm）对新用户默认隐藏如流入口和建群选项。先在 **DSH Bots → IM 接入 → 高级设置** 打开 **显示如流接入（内部用户）**。设置保存在当前 DSH profile，刷新、重启及同一 profile 的其他客户端保持一致。已有如流绑定、建群记录或聊天记录时升级保留入口；显式关闭后不会因旧记录重新打开。关闭显示不停止已有连接、不删除凭据或聊天；要停用机器人，请操作该机器人的“停用连接”。这只是显示设置，不是内部身份认证或权限控制。
+
 配套包默认启用管理页面（`managed: true`），但不自动连接任何机器人。在 **DSH Bots → IM 接入 → 如流** 中：
 
 1. 在[如流开放平台](https://open-ruliu.baidu-int.com/web)新建应用，在「凭证与能力」复制 App ID、App Key、App Secret；在「可见范围」配置使用者和目标群。

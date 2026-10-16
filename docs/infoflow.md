@@ -1,5 +1,7 @@
 # InfoFlow connector
 
+**Unreleased UI preference:** New profiles hide the InfoFlow tab and group creation option. Internal users can reveal them in **DSH Bots → IM connections → Advanced settings → Show InfoFlow integration (internal users)**. The preference persists in the profile and updates connected clients. Existing bindings, group records or chats preserve visibility on upgrade unless explicitly hidden. Hiding the entry does not stop connections or delete credentials and history; use each robot's connection switch to stop it. Visibility is a display preference, not an identity or access check.
+
 Bot Mode 0.6.0 and the optional `@zzzpyyy/dsh-bot-infoflow@0.3.0` companion run on DSH 0.2.0-rc.2. Every Bot can bind a distinct InfoFlow robot with separate credentials, allowlists and an enable switch. The base package does not depend on the enterprise SDK.
 
 One DSH Bot can keep both InfoFlow and Feishu bindings enabled concurrently. Each platform has independent credentials, allowlists and connection controls; disabling one leaves the other running. Web, Feishu and InfoFlow private and group chats retain separate histories and model conversation context, with replies delivered only to the originating platform and chat. Identical group names do not merge chats across platforms. Bot instructions, models and tool configuration remain shared. Files, external services and memory explicitly written through tools follow deployment permissions rather than conversation isolation. See the [Feishu guide](feishu.zh.md) for the second binding.

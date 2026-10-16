@@ -47,7 +47,11 @@ export interface Room {
   aliases?: RoomId[] | undefined
 }
 /** Atomic persisted state; also the detached Client baseline. */
-export interface BotState { bots: Bot[]; rooms: Room[] }
+export interface BotState {
+  bots: Bot[]; rooms: Room[]
+  /** Profile-wide UI preference. Missing in older data; existing InfoFlow use keeps its entry visible. */
+  infoflowVisible?: boolean | undefined
+}
 /** Reconnecting feed replaces the complete small-domain snapshot. */
 export type BotFrame = { type: 'baseline'; value: BotState } | { type: 'changed'; value: BotState }
 /** Create one Bot and its canonical direct chat atomically. */

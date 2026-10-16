@@ -29,6 +29,7 @@ export interface PanelFace {
   retry: (request: AttemptRequest) => Promise<unknown>
   openSession: (id: SessionId) => void
   toggleSidebar: () => void
+  setInfoflowVisible: (visible: boolean) => Promise<boolean>
 }
 type Props = PropsRuntime<'main'> & InjectFace<PanelFace> & PropsLocale<'botMode'> & PropsStore<ReturnType<typeof createBotViewStore>>
 
@@ -42,6 +43,7 @@ export function BotPanel(props: Props) {
   const { t } = props
   const snapshot = props.useBots(value => value)
   const { bots, rooms } = snapshot.value
+  const infoflowVisible = snapshot.value.infoflowVisible === true
   const selected = props.useStore(value => value.roomId)
   const select = props.actions.select
   const [form, setForm] = useState<'bot' | 'group' | 'members' | null>(null)
@@ -159,7 +161,9 @@ export function BotPanel(props: Props) {
       <footer className={css.rosterFooter}><span className={css.connection} data-ready={snapshot.ready && !snapshot.error} /><span>{snapshot.error ? t('disconnected') : snapshot.ready ? t('connected') : t('loading')}</span>
         <Button size="sm" title={t('toggleSidebar')} aria-label={t('toggleSidebar')} icon={<SidebarIcon />} onClick={props.toggleSidebar} /></footer>
     </aside>
-    {integration ? <IMPanel bots={bots} feishu={props.feishu} infoflow={props.infoflow} t={t} back={() => { setIntegration(false) }} openRoom={choose} selectRoom={id => { const target = rooms.find(item => item.id === id || item.aliases?.includes(id)); if (target) choose(target) }} createFeishuGroup={(id, failed) => {
+    {integration ? <IMPanel bots={bots} feishu={props.feishu} infoflow={props.infoflow} infoflowVisible={infoflowVisible}
+      setInfoflowVisible={props.setInfoflowVisible} settingsDisabled={!snapshot.ready || !!snapshot.error}
+      t={t} back={() => { setIntegration(false) }} openRoom={choose} selectRoom={id => { const target = rooms.find(item => item.id === id || item.aliases?.includes(id)); if (target) choose(target) }} createFeishuGroup={(id, failed) => {
       if (failed && (failed.status !== 'failed' || failed.chatId)) return
       openForm('group'); setSyncGroup('feishu'); setMembers(failed?.botIds ?? [id]); setDefault(id); setName(failed?.title ?? `${botName(id)} · ${t('feishu')}`)
       if (failed) { setGroupOwner(failed.owner); setError(failed.error) }
@@ -243,6 +247,7 @@ export function BotPanel(props: Props) {
       <form id="bot-settings" className={css.form} onSubmit={(event) => { event.preventDefault(); void act(async () => {
         if (form === 'bot') { const created = await props.createBot({ id: handle, name, instructions, preset }); setPendingBot(created.id) }
         else if (defaultBot && (form === 'group' || room)) {
+          if (form === 'group' && syncGroup === 'infoflow' && !infoflowVisible) throw new Error(t('imInfoflowHidden'))
           const result = form === 'group' ? syncGroup === 'feishu' && props.feishu
             ? await createFeishuGroup()
             : syncGroup === 'infoflow' && props.infoflow
@@ -284,7 +289,7 @@ export function BotPanel(props: Props) {
               {groupSubmitted && <p role="status" className={css.integrationHint}>{t('fsGroupRetryHint')}</p>}
             </>}
           </section>}
-          {form === 'group' && props.infoflow && <section className={css.groupIntegration}>
+          {form === 'group' && infoflowVisible && props.infoflow && <section className={css.groupIntegration}>
             <label className={css.groupIntegrationToggle}><input type="checkbox" disabled={groupLocked} checked={syncGroup === 'infoflow'} onChange={event => { setSyncGroup(event.target.checked ? 'infoflow' : 'none'); setGroupOwner(''); setError(null) }}/><span>{t('ifCreateGroup')}</span></label>
             {syncGroup === 'infoflow' && <><p className={css.integrationHint}>{t('ifCreateGroupHint')}</p>
               <label>{t('ifGroupOwner')}<Input required disabled={groupLocked} value={groupOwner} onChange={event => { setGroupOwner(event.target.value) }}/></label>

@@ -54,6 +54,7 @@ export async function apply(ctx: Context): Promise<void> {
   try {
     const service = ctx.botMode
     if (process.env.BOT_TEST_PHASE === 'resume') {
+      assert.equal(service.snapshot().infoflowVisible, false, 'An explicit hidden preference survives restart, including existing InfoFlow chats')
       const before = service.snapshot().rooms.find(room => room.kind === 'group')!
       assert.equal(before.messages.length, 8)
       const ids = before.members.map(member => member.sessionId)
@@ -65,11 +66,28 @@ export async function apply(ctx: Context): Promise<void> {
       assert.ok(requests.every(request => JSON.stringify(request.messages).includes('first public question')))
       assert.ok(requests.every(request => !JSON.stringify(request.messages).includes('PRIVATE_SECRET')))
     } else {
+      assert.equal(service.snapshot().infoflowVisible, false, 'New profiles hide enterprise-only entry points')
+      const unused = async (): Promise<never> => { throw new Error('Visibility must not call the connector') }
+      const legacyControl = {
+        snapshot: () => ({ available: true, groups: [], bindings: [{ botId: 'legacy' as import('../src/types.ts').BotId,
+          agentId: 'fixture', robotId: 'fixture', robotName: 'Existing robot', enabled: false, status: 'disabled' as const,
+          error: null, allowUsers: [], allowGroups: [], admins: [], credentialsConfigured: true }] }),
+        save: unused, verify: unused, toggle: unused, testMessage: unused, createGroup: unused, resumeGroup: unused,
+      }
+      const detach = service.attachInfoFlow(legacyControl)
+      assert.equal(service.snapshot().infoflowVisible, true, 'Upgrades retain access to saved bindings')
+      await service.setInfoflowVisible(false)
+      assert.equal(service.snapshot().infoflowVisible, false, 'Explicit choice takes precedence over saved bindings')
+      detach()
       const feedAbort = new AbortController()
       const feed = service.follow(feedAbort.signal)[Symbol.asyncIterator]()
       const baseline = await feed.next()
       assert.equal(baseline.done, false)
       if (!baseline.done) assert.equal(baseline.value.type, 'baseline')
+      await service.setInfoflowVisible(true)
+      const preference = await feed.next()
+      assert.equal(preference.value?.value.infoflowVisible, true, 'Visibility reaches connected clients through the native feed')
+      await service.setInfoflowVisible(false)
       const architect = await service.createBot({ id: 'architect', name: 'Architect', instructions: 'PERSONA_ARCHITECT {{literal}}' })
       const changed = await feed.next()
       assert.equal(changed.done, false)
