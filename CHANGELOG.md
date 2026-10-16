@@ -1,6 +1,8 @@
 # Release notes
 
-## Unreleased
+## 0.8.0 — 2026-10-16
+
+Base package update only. Keep Feishu `0.3.0` and InfoFlow `0.4.0`; their existing Bot peer range accepts `0.8.0`.
 
 - Hide InfoFlow configuration and group creation for new profiles. Internal users can enable **IM connections → Advanced settings → Show InfoFlow integration**; hidden configuration does not poll the connector.
 - Persist visibility in the DSH profile and share it with connected clients. Existing InfoFlow bindings, groups or chat history keep the entry visible on upgrade until a user explicitly hides it. Hiding the entry retains connections, credentials and conversations.

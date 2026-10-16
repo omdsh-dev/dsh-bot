@@ -1,6 +1,6 @@
 # Compatibility policy / 兼容策略
 
-DSH Bot separates the revision used to **build** from the versions allowed to **run**. One set of Bot `0.7.0`, Feishu `0.3.0` and InfoFlow `0.4.0` archives is tested on DSH `0.1.5-rc.2` and `0.2.0-rc.2`. A routine DSH update does not require a new Bot release.
+DSH Bot separates the revision used to **build** from the versions allowed to **run**. One set of Bot `0.8.0`, Feishu `0.3.0` and InfoFlow `0.4.0` archives is tested on DSH `0.1.5-rc.2` and `0.2.0-rc.2`. A routine DSH update does not require a new Bot release.
 
 构建版本固定在 [dsh-version.json](../dsh-version.json)，用于复现编译结果；安装范围集中在 [compatibility.json](../compatibility.json)，不再由构建版本生成精确依赖。三个安装包使用同一份兼容策略。
 

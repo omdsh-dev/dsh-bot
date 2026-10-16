@@ -6,11 +6,11 @@
 
 这是独立的实验性社区插件，不是 DeepSeek 官方产品，与 Grok、Cue、Muse 没有关联。
 
-**0.7.0 版本**使用同一套安装包兼容 **DSH 0.1.5-rc.2 和 0.2.0-rc.2**，支持从 Web、飞书和如流调用同一个 Bot。在 **DSH Bots → IM 接入** 统一配置两个平台，为每个 Bot 绑定机器人，并从 DSH 创建平台群聊。
+**0.8.0 版本**使用同一套安装包兼容 **DSH 0.1.5-rc.2 和 0.2.0-rc.2**，支持从 Web、飞书和如流调用同一个 Bot。在 **DSH Bots → IM 接入** 统一配置两个平台，为每个 Bot 绑定机器人，并从 DSH 创建平台群聊。
 
 同一个 Bot 可以同时绑定飞书和如流。角色指令、模型和工具共用；聊天记录、模型对话上下文和回复目的地按平台及具体聊天隔离。工具访问的文件和外部记忆仍由部署权限决定。
 
-**开发版新增（尚未发布到 npm）：** 新用户默认隐藏如流配置和建群选项。内部用户可在 **IM 接入 → 高级设置 → 显示如流接入（内部用户）** 开启，设置保存在当前 DSH profile。已有如流绑定或聊天记录的用户升级后保留入口；关闭显示不会停用连接或删除记录。开启显示后仍需安装如流配套插件并配置企业 SDK。
+**如流入口默认隐藏：** 新用户默认隐藏如流配置和建群选项。内部用户可在 **IM 接入 → 高级设置 → 显示如流接入（内部用户）** 开启，设置保存在当前 DSH profile。已有如流绑定或聊天记录的用户升级后保留入口；关闭显示不会停用连接或删除记录。开启显示后仍需安装如流配套插件并配置企业 SDK。
 
 ## 能做什么
 
@@ -42,20 +42,20 @@
 
 | 包 | 版本 | 用途 |
 | --- | --- | --- |
-| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.7.0` | 必装主包，提供 Web 聊天和 IM 配置面板 |
+| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.8.0` | 必装主包，提供 Web 聊天和 IM 配置面板 |
 | [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.3.0` | 可选，提供飞书连接和建群能力 |
 | [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.4.0` | 可选，提供如流连接；需能获取企业 SDK |
 
 上面同一套包已覆盖 DSH **0.1.5-rc.2** 与 **0.2.0-rc.2**，无需为它们选择不同的插件版本。更高 DSH 版本不会仅因版本号变化被拒绝，但尚未验证的版本不等于保证可用；如果上游删除或改变核心接口，仍需适配。飞书和如流包接受主包 `>=0.7.0 <1.0.0`，无需随主包的每次更新同步升级。详见[兼容策略与测试](docs/compatibility.md)。
 
-在 **Desktop → 插件管理器** 安装 `@zzzpyyy/dsh-bot@0.7.0`，再按需向同一个 profile 添加配套插件。
+在 **Desktop → 插件管理器** 安装 `@zzzpyyy/dsh-bot@0.8.0`，再按需向同一个 profile 添加配套插件。
 
 飞书安装若报 `ERR_PNPM_IGNORED_BUILDS: protobufjs`，按[飞书安装说明](docs/feishu.zh.md#安装与开发)在目标 profile 中明确禁用该可选安装脚本，再重试。
 
 已有兼容版本的 **DSH CLI Web profile** 可执行：
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot@0.7.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot@0.8.0
 dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.3.0
 ```
 

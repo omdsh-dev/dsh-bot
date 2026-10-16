@@ -1,6 +1,6 @@
 # 如流文本接入
 
-本功能属于 DSH Bot 0.7.0，配套插件为 `@zzzpyyy/dsh-bot-infoflow@0.4.0`，最低要求 DSH `0.1.5-rc.2`，同一安装包已验证 `0.1.5-rc.2` 和 `0.2.0-rc.2`；后续版本按[兼容策略](compatibility.md)检查接口。如流插件作为同一 Host 的可选 Cordis 插件运行；基础 Bot 包不依赖如流 SDK。安装配套包不会自动连接机器人，必须先配置并启用。
+本功能属于 DSH Bot 0.8.0，配套插件为 `@zzzpyyy/dsh-bot-infoflow@0.4.0`，最低要求 DSH `0.1.5-rc.2`，同一安装包已验证 `0.1.5-rc.2` 和 `0.2.0-rc.2`；后续版本按[兼容策略](compatibility.md)检查接口。如流插件作为同一 Host 的可选 Cordis 插件运行；基础 Bot 包不依赖如流 SDK。安装配套包不会自动连接机器人，必须先配置并启用。
 
 ## 能力与会话
 
@@ -21,7 +21,7 @@
 已有匹配版本 DSH CLI 时，先配置组织授权的 `@baidu` registry，再将以下包安装到当前服务使用的 Web profile：
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot@0.7.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot@0.8.0
 dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.4.0
 ```
 
@@ -35,12 +35,12 @@ npm run pack
 npm run pack:infoflow
 ```
 
-首次安装源码仍使用 `npm run setup`。上述增量构建要求工作区及依赖已安装，会重新生成 Remote 编解码器。产物分别是 `dist/zzzpyyy-dsh-bot-0.7.0.tgz` 和 `dist/zzzpyyy-dsh-bot-infoflow-0.4.0.tgz`。
+首次安装源码仍使用 `npm run setup`。上述增量构建要求工作区及依赖已安装，会重新生成 Remote 编解码器。产物分别是 `dist/zzzpyyy-dsh-bot-0.8.0.tgz` 和 `dist/zzzpyyy-dsh-bot-infoflow-0.4.0.tgz`。
 
 对于已有匹配版本 DSH CLI 的 Web profile，可从本仓库目录执行以下命令；使用你实际的 `DSH_HOME`，并先配置好组织授权的 SDK registry：
 
 ```sh
-dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-0.7.0.tgz
+dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-0.8.0.tgz
 dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-infoflow-0.4.0.tgz
 ```
 
@@ -50,7 +50,7 @@ dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-infoflow-0.4.0.tgz
 
 ## 页面配置
 
-开发版（尚未发布到 npm）对新用户默认隐藏如流入口和建群选项。先在 **DSH Bots → IM 接入 → 高级设置** 打开 **显示如流接入（内部用户）**。设置保存在当前 DSH profile，刷新、重启及同一 profile 的其他客户端保持一致。已有如流绑定、建群记录或聊天记录时升级保留入口；显式关闭后不会因旧记录重新打开。关闭显示不停止已有连接、不删除凭据或聊天；要停用机器人，请操作该机器人的“停用连接”。这只是显示设置，不是内部身份认证或权限控制。
+从 0.8.0 起，对新用户默认隐藏如流入口和建群选项。先在 **DSH Bots → IM 接入 → 高级设置** 打开 **显示如流接入（内部用户）**。设置保存在当前 DSH profile，刷新、重启及同一 profile 的其他客户端保持一致。已有如流绑定、建群记录或聊天记录时升级保留入口；显式关闭后不会因旧记录重新打开。关闭显示不停止已有连接、不删除凭据或聊天；要停用机器人，请操作该机器人的“停用连接”。这只是显示设置，不是内部身份认证或权限控制。
 
 配套包默认启用管理页面（`managed: true`），但不自动连接任何机器人。在 **DSH Bots → IM 接入 → 如流** 中：
 
