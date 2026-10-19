@@ -26,7 +26,7 @@ export const Config: Schema<Config> = Schema.object({
 export async function apply(ctx: Context, config: Config): Promise<void> {
   checkIM(ctx)
   const settings = await ctx.storageDomain.open(settingsDomain)
-  const connections = new Map<BotId, { bridge: InfoFlowBridge; close(): Promise<void> }>()
+  const connections = new Map<BotId, { bridge: InfoFlowBridge; transport: FeishuTransport; close(): Promise<void> }>()
   const stop = async (botId: BotId) => { const current = connections.get(botId); if (current) { connections.delete(botId); await current.close() } }
   const report = () => { ctx.logger.warn('Feishu operation failed; check connection status and retained work') }
   const resolve = async (ref: string) => (await ctx.credentials.resolve(credentialRef(ref)))?.value
@@ -53,10 +53,17 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       try {
         transport = new FeishuTransport(loadSdk(config.endpointTimeoutMs), { ...binding, appSecret, timeoutMs: config.endpointTimeoutMs }, input => bridge!.receive({ ...input, targets: [binding.botId] }),
           status => { manager.connection(binding.botId, status, status === 'error' ? '长连接异常，请检查事件订阅、应用发布状态和网络后重新启用' : null) }, report)
-        bridge = new InfoFlowBridge(ctx.botMode, queue.global, transport, { ...config, provider: 'feishu', accountId: binding.appId,
-          botIds: [binding.botId], defaultBot: binding.botId, allowUsers: binding.allowUsers, allowGroups: binding.allowGroups, admins: binding.admins }, report)
+        bridge = new InfoFlowBridge(ctx.botMode, queue.global, { send: async delivery => {
+          const target = connections.get(delivery.botId ?? binding.botId)
+          if (!target) throw new Error('Replying robot is disabled; retain its outbox')
+          await target.transport.send(delivery)
+        } }, { ...config, allowDelegation: true, mentionId: botId => manager.snapshot().bindings.find(binding => binding.botId === botId)?.botOpenId,
+          groupBotIds: chatId => manager.snapshot().bindings.filter(peer => peer.enabled && peer.brand === binding.brand
+            && (peer.allowAllGroups === true || peer.allowGroups.includes(chatId))).map(peer => peer.botId),
+          provider: 'feishu', accountId: binding.appId,
+          botIds: [binding.botId], defaultBot: binding.botId, allowUsers: binding.allowUsers, allowGroups: binding.allowGroups, allowAllGroups: binding.allowAllGroups === true, admins: binding.admins }, report)
         const currentBridge = bridge, currentTransport = transport
-        connections.set(binding.botId, { bridge, close: async () => { await currentTransport.close(); await currentBridge.close(); await queue.close() } })
+        connections.set(binding.botId, { bridge, transport, close: async () => { await currentTransport.close(); await currentBridge.close(); await queue.close() } })
         transport.start()
       } catch (cause) { await transport?.close(); await bridge?.close(); await queue.close(); throw cause }
     },

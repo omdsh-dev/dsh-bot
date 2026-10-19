@@ -125,10 +125,16 @@ export class InfoFlowTransport {
    */
   async send(delivery: Delivery): Promise<void> {
     if (this.stopped) throw new Error('InfoFlow transport is stopping')
+    const agents = (delivery.mentions ?? []).map(mention => Number(mention.id))
+      .filter(id => Number.isSafeInteger(id) && id > 0 && String(id) !== this.config.accountId)
+    // InfoFlow's Markdown renderer hides AT tokens. Native text renders clickable robot mentions.
+    const groupType = agents.length ? 'TEXT' : 'MD'
     const sending = delivery.conversation.kind === 'private'
       ? this.client.im.message.sendToUser(delivery.conversation.id, delivery.text, 'md')
-      : this.client.im.message.sendToGroupWithOptions({ groupId: delivery.conversation.id, msgtype: 'MD',
-        body: [{ type: 'AT', atall: false, atuserids: [delivery.user] }, { type: 'MD', content: delivery.text }] })
+      : this.client.im.message.sendToGroupWithOptions({ groupId: delivery.conversation.id, msgtype: groupType,
+        // MD messages accept only one AT block; separate human/robot blocks fail with 40067.
+        body: [{ type: 'AT', atall: false, atuserids: [delivery.user], ...(agents.length ? { atagentids: agents } : {}) },
+          { type: groupType, content: delivery.text }] })
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
       await Promise.race([sending, new Promise<never>((_, reject) => {

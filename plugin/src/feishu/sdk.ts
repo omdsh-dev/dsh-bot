@@ -137,9 +137,14 @@ export class FeishuTransport {
   start(): void { if (!this.stopped && !this.connection) this.begin() }
   async send(delivery: Delivery): Promise<void> {
     if (this.stopped) throw new Error('Feishu is stopping')
+    const escape = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
+    const mentions = delivery.conversation.kind === 'group' ? (delivery.mentions ?? [])
+      .filter(mention => /^ou_[\w-]+$/.test(mention.id) && mention.id !== this.config.botOpenId)
+      .map(mention => `<at user_id="${mention.id}">${escape(mention.name)}</at>`).join(' ') : ''
+    const content = mentions ? `${mentions}\n${delivery.text}` : delivery.text
     // Feishu honors uuid deduplication for a bounded window; retries retain it.
     checked(await this.client.request({ method: 'POST', url: '/open-apis/im/v1/messages', params: { receive_id_type: 'chat_id' }, timeout: this.config.timeoutMs,
-      data: { receive_id: delivery.conversation.id, msg_type: 'text', content: JSON.stringify({ text: delivery.text }),
+      data: { receive_id: delivery.conversation.id, msg_type: 'text', content: JSON.stringify({ text: content }),
         uuid: createHash('sha256').update(delivery.id).digest('hex').slice(0, 48) } }))
   }
   async close(): Promise<void> { this.stopped = true; this.socket.close({ force: true }); await this.connection; await Promise.allSettled(this.handlers) }

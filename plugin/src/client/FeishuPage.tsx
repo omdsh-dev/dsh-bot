@@ -50,10 +50,11 @@ function Editor({ bot, binding, registration, api, t, changed }: { bot: Bot; bin
   const [appId, setAppId] = useState(binding?.appId ?? ''), [secret, setSecret] = useState('')
   const [brand, setBrand] = useState<Brand>(binding?.brand ?? 'feishu')
   const [users, setUsers] = useState(binding?.allowUsers.join(', ') ?? ''), [groups, setGroups] = useState(binding?.allowGroups.join(', ') ?? ''), [admins, setAdmins] = useState(binding?.admins.join(', ') ?? '')
+  const [allGroups, setAllGroups] = useState(binding?.allowAllGroups === true)
   const [dirty, setDirty] = useState(false), [busy, setBusy] = useState(false), [manual, setManual] = useState(false)
   const [error, setError] = useState<string | null>(null), [message, setMessage] = useState<string | null>(null)
   useEffect(() => {
-    if (!dirty) { setAppId(binding?.appId ?? ''); setBrand(binding?.brand ?? 'feishu'); setUsers(binding?.allowUsers.join(', ') ?? ''); setGroups(binding?.allowGroups.join(', ') ?? ''); setAdmins(binding?.admins.join(', ') ?? '') }
+    if (!dirty) { setAppId(binding?.appId ?? ''); setBrand(binding?.brand ?? 'feishu'); setUsers(binding?.allowUsers.join(', ') ?? ''); setGroups(binding?.allowGroups.join(', ') ?? ''); setAdmins(binding?.admins.join(', ') ?? ''); setAllGroups(binding?.allowAllGroups === true) }
   }, [binding, dirty])
   const run = async (action: () => Promise<unknown>, success?: BotKey) => {
     setBusy(true); setError(null); setMessage(null)
@@ -79,7 +80,7 @@ function Editor({ bot, binding, registration, api, t, changed }: { bot: Bot; bin
     {binding && <p className={css.integrationHint}>{t('fsGroupPermission')} <a href={`https://${binding.brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/app/${encodeURIComponent(binding.appId)}/auth?q=im%3Achat%3Acreate`} target="_blank" rel="noreferrer noopener">{t('fsGroupAuthorize')}</a></p>}
     {binding && <div className={css.integrationNotice}><strong>{binding.robotName}</strong><p>App ID: {binding.appId}</p><p>Bot Open ID: {binding.botOpenId || '—'}</p>{binding.error && <p role="alert">{binding.error}</p>}</div>}
     {(binding || manual) && <form className={css.form} onSubmit={event => { event.preventDefault(); void run(async () => {
-      await api.save({ botId: bot.id, appId, brand, ...(secret ? { appSecret: secret } : {}), allowUsers: list(users), allowGroups: list(groups), admins: list(admins) })
+      await api.save({ botId: bot.id, appId, brand, ...(secret ? { appSecret: secret } : {}), allowUsers: list(users), allowGroups: list(groups), allowAllGroups: allGroups, admins: list(admins) })
       setSecret(''); setDirty(false)
     }, 'ifSaved') }}>
       <label>{t('fsPlatform')}<select disabled={!!binding || active} value={brand} onChange={event => { setBrand(event.target.value === 'lark' ? 'lark' : 'feishu'); setDirty(true) }}><option value="feishu">{t('feishu')}</option><option value="lark">Lark</option></select></label>
@@ -87,7 +88,9 @@ function Editor({ bot, binding, registration, api, t, changed }: { bot: Bot; bin
       <label>App Secret<Input type="password" autoComplete="new-password" value={secret} disabled={active} placeholder={binding ? t('ifKeepSaved') : t('ifRequired')} onChange={event => { setSecret(event.target.value); setDirty(true) }}/></label>
       <p className={css.integrationHint}>{t('ifCredentialHint')}</p>
       <label>{t('fsAllowUsers')}<Input aria-label={t('fsAllowUsers')} value={users} disabled={active} placeholder="ou_…" onChange={event => { setUsers(event.target.value); setDirty(true) }}/><small>{t('fsAllowUsersHint')}</small></label>
-      <label>{t('fsAllowGroups')}<Input aria-label={t('fsAllowGroups')} value={groups} disabled={active} placeholder="oc_…" onChange={event => { setGroups(event.target.value); setDirty(true) }}/><small>{t('fsAllowGroupsHint')}</small></label>
+      <label className={css.infoflowCheck}><input type="checkbox" checked={allGroups} disabled={busy || active} onChange={event => { setAllGroups(event.target.checked); setDirty(true) }}/>{t('ifAllGroups')}</label>
+      <p className={css.integrationHint}>{t('ifAllGroupsHint')}</p>
+      {!allGroups && <label>{t('fsAllowGroups')}<Input aria-label={t('fsAllowGroups')} value={groups} disabled={active} placeholder="oc_…" onChange={event => { setGroups(event.target.value); setDirty(true) }}/><small>{t('fsAllowGroupsHint')}</small></label>}
       <label>{t('fsAdmins')}<Input aria-label={t('fsAdmins')} value={admins} disabled={active} placeholder="ou_…" onChange={event => { setAdmins(event.target.value); setDirty(true) }}/></label>
       <div className={css.integrationActions}><Button type="submit" variant="primary" disabled={busy || active}>{t('ifSaveVerify')}</Button>
         <Button disabled={busy || active || !binding || dirty} onClick={() => { void run(() => api.verify(bot.id), 'ifVerified') }}>{t('ifVerify')}</Button>

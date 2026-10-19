@@ -27,7 +27,8 @@ test(`all three archives accept DSH ${target.version} without exact host pins`, 
     }
     assert.ok(!satisfies('0.1.4', manifest.peerDependencies['@deepseek-ai/dsh'], { includePrerelease: true }))
     if (name !== 'package') {
-      assert.ok(satisfies('0.7.1', manifest.peerDependencies['@zzzpyyy/dsh-bot']))
+      assert.ok(satisfies('0.8.1', manifest.peerDependencies['@zzzpyyy/dsh-bot']))
+      assert.ok(!satisfies('0.7.1', manifest.peerDependencies['@zzzpyyy/dsh-bot']), 'Group handoffs require the 0.8 Host contract')
       assert.ok(!satisfies('1.0.0', manifest.peerDependencies['@zzzpyyy/dsh-bot']))
     }
   }

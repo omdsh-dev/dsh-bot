@@ -36,7 +36,8 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
         const target = connections.get(delivery.botId ?? group.defaultBot)
         if (!target) throw new Error('Replying robot is disabled; retain its outbox')
         await target.transport.send(delivery)
-      } }, { ...config, accountId, botIds: group.botIds, defaultBot: group.defaultBot,
+      } }, { ...config, allowDelegation: true, mentionId: botId => manager.snapshot().bindings.find(binding => binding.botId === botId)?.agentId,
+        accountId, botIds: group.botIds, defaultBot: group.defaultBot,
         allowUsers: [], allowGroups: [group.groupId], admins: [group.owner] }, report)
       shared.set(group.groupId, { bridge, room, close: async () => { await bridge.close(); await domain.close() } })
       return room
@@ -51,6 +52,10 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
     start: async binding => {
       const [appKey, appSecret] = await Promise.all([resolve(binding.appKeyRef), resolve(binding.appSecretRef)])
       if (!appKey || !appSecret) throw new Error('Missing robot credentials')
+      for (const groupId of binding.allowGroups) await ctx.botMode.ensureExternalRoom({
+        conversation: { provider: 'infoflow', accountId: binding.agentId, kind: 'group', id: groupId },
+        title: `如流 · ${groupId}`, botIds: [binding.botId], defaultBot: binding.botId,
+      })
       const domain = await ctx.storageDomain.open(bridgeDomain(queueName(`bot:${binding.botId}:${binding.agentId}`)))
       let bridge: InfoFlowBridge | undefined
       let transport: InfoFlowTransport | undefined
@@ -68,7 +73,14 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
           return bridge!.receive({ ...input, targets: [binding.botId] })
         }, report, status => { manager.connection(binding.botId, status, status === 'error' ? '长连接暂时不可用，正在重连' : null) })
         transport = connection
-        const owner = new InfoFlowBridge(ctx.botMode, domain.global, connection, { ...config, accountId: binding.agentId,
+        const owner = new InfoFlowBridge(ctx.botMode, domain.global, { send: async delivery => {
+          const target = connections.get(delivery.botId ?? binding.botId)
+          if (!target) throw new Error('Replying robot is disabled; retain its outbox')
+          await target.transport.send(delivery)
+        } }, { ...config, accountId: binding.agentId, allowDelegation: true,
+          mentionId: botId => manager.snapshot().bindings.find(item => item.botId === botId)?.agentId,
+          groupBotIds: groupId => manager.snapshot().bindings.filter(peer => peer.enabled
+            && (peer.allowAllGroups === true || peer.allowGroups.includes(groupId))).map(peer => peer.botId),
           botIds: [binding.botId], defaultBot: binding.botId, allowUsers: binding.allowUsers, allowGroups: binding.allowGroups, allowAllGroups: binding.allowAllGroups === true, admins: binding.admins }, report)
         bridge = owner
         connections.set(binding.botId, { transport: connection, bridge: owner, close: async () => { await connection.close(); await owner.close(); await domain.close() } })

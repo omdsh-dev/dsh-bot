@@ -1,6 +1,6 @@
 # Compatibility policy / 兼容策略
 
-DSH Bot separates the revision used to **build** from the versions allowed to **run**. One set of Bot `0.8.0`, Feishu `0.3.0` and InfoFlow `0.4.0` archives is tested on DSH `0.1.5-rc.2` and `0.2.0-rc.2`. A routine DSH update does not require a new Bot release.
+DSH Bot separates the revision used to **build** from the versions allowed to **run**. One set of Bot `0.8.0`, Feishu `0.4.0` and InfoFlow `0.5.0` archives is tested on DSH `0.1.5-rc.2` and `0.2.0-rc.2`. A routine DSH update does not require a new Bot release.
 
 构建版本固定在 [dsh-version.json](../dsh-version.json)，用于复现编译结果；安装范围集中在 [compatibility.json](../compatibility.json)，不再由构建版本生成精确依赖。三个安装包使用同一份兼容策略。
 
@@ -8,7 +8,7 @@ DSH Bot separates the revision used to **build** from the versions allowed to **
 | --- | --- |
 | DSH 及其共享模块 | `>=0.1.5-rc.2 \|\| >=0.2.0-0`；无上限，允许后续版本尝试加载 |
 | Cordis / Schemastery | 分别为 `^4.0.2` / `^3.18.2`，保持已验证的框架主版本 |
-| IM 插件依赖的 DSH Bot | `>=0.7.0 <1.0.0`；主包在该范围内保持连接器接口兼容 |
+| IM 插件依赖的 DSH Bot | `>=0.8.0 <1.0.0`；主包在该范围内保持连接器接口兼容 |
 | 已验证的 DSH | `0.1.5-rc.2`、`0.2.0-rc.2` 的固定提交 |
 
 第二个 DSH 范围显式允许 0.2.0 的预发布版本，以兼容普通 npm semver 校验；新版 DSH 的加载检查还会包含更高版本的预发布。允许安装与已验证兼容是不同含义。没有任何机制能够保证未来被删除的模块、改变语义的事件或协议继续兼容。

@@ -30,6 +30,7 @@ jobs:
       - run: npm run test:infoflow-managed-package
       - run: npm run test:feishu-package
       - run: npm run test:im-isolation-package
+      - run: npm run test:im-delegation-package
       - uses: actions/upload-artifact@v4
         with:
           name: dsh-bot-package
@@ -62,3 +63,4 @@ jobs:
       - run: npm run test:infoflow-managed-package
       - run: npm run test:feishu-package
       - run: npm run test:im-isolation-package
+      - run: npm run test:im-delegation-package

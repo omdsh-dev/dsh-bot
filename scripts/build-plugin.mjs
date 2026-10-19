@@ -11,12 +11,16 @@ runTool('tsc', ['-b', `${pluginPath}/tsconfig.host.json`])
 runTool('tsdown', ['--env.DSH_BUILD_FACE', 'host', '--filter', pluginPath, '--logLevel', 'warn'])
 const { WorkspaceTypertGenerator } = await import(pathToFileURL(join(runtime, 'packages/typert/generator/lib/types/index.js')).href)
 const generator = new WorkspaceTypertGenerator(runtime, { checkDiagnostics: false })
+// DSH 0.1 reads codec.schema; DSH 0.2 uses codec.create(). Share the generated,
+// memoized schema factory so both runtimes validate the same boundary values.
+const compatibleCodecs = code => code.replace(/^([\t ]*)create: ([\w$]+),$/gm,
+  '$1create: $2,\n$1get schema() { return $2() },')
 for (const artifact of generator.generate(['@deepseek-ai/dsh-experimental-bot-mode'], ['host'])) {
   const output = join(runtime, pluginPath, 'lib')
-  writeFileSync(join(output, `typert.${artifact.face}.js`), artifact.js)
+  writeFileSync(join(output, `typert.${artifact.face}.js`), compatibleCodecs(artifact.js))
   writeFileSync(join(output, `typert.${artifact.face}.d.ts`), artifact.dts)
   if (artifact.remote) {
-    writeFileSync(join(output, 'typert.remote-client.js'), artifact.remote.js)
+    writeFileSync(join(output, 'typert.remote-client.js'), compatibleCodecs(artifact.remote.js))
     writeFileSync(join(output, 'typert.remote-client.d.ts'), artifact.remote.dts)
     writeFileSync(join(output, 'typert.remote-client.d.ts.map'), artifact.remote.dtsMap)
   }

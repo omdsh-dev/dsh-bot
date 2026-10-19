@@ -1,6 +1,6 @@
 # 如流文本接入
 
-本功能属于 DSH Bot 0.8.0，配套插件为 `@zzzpyyy/dsh-bot-infoflow@0.4.0`，最低要求 DSH `0.1.5-rc.2`，同一安装包已验证 `0.1.5-rc.2` 和 `0.2.0-rc.2`；后续版本按[兼容策略](compatibility.md)检查接口。如流插件作为同一 Host 的可选 Cordis 插件运行；基础 Bot 包不依赖如流 SDK。安装配套包不会自动连接机器人，必须先配置并启用。
+本功能属于 DSH Bot 0.8.0，配套插件为 `@zzzpyyy/dsh-bot-infoflow@0.5.0`，最低要求 DSH `0.1.5-rc.2`，同一安装包已验证 `0.1.5-rc.2` 和 `0.2.0-rc.2`；后续版本按[兼容策略](compatibility.md)检查接口。如流插件作为同一 Host 的可选 Cordis 插件运行；基础 Bot 包不依赖如流 SDK。安装配套包不会自动连接机器人，必须先配置并启用。
 
 ## 能力与会话
 
@@ -22,7 +22,7 @@
 
 ```sh
 dsh plugin --profile web add @zzzpyyy/dsh-bot@0.8.0
-dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.4.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.5.0
 ```
 
 Desktop 可在插件管理器中按相同顺序安装这两个精确版本，同样需要能解析企业 SDK 依赖。包使用 `next` 标签；安装时建议指定版本。
@@ -35,13 +35,13 @@ npm run pack
 npm run pack:infoflow
 ```
 
-首次安装源码仍使用 `npm run setup`。上述增量构建要求工作区及依赖已安装，会重新生成 Remote 编解码器。产物分别是 `dist/zzzpyyy-dsh-bot-0.8.0.tgz` 和 `dist/zzzpyyy-dsh-bot-infoflow-0.4.0.tgz`。
+首次安装源码仍使用 `npm run setup`。上述增量构建要求工作区及依赖已安装，会重新生成 Remote 编解码器。产物分别是 `dist/zzzpyyy-dsh-bot-0.8.0.tgz` 和 `dist/zzzpyyy-dsh-bot-infoflow-0.5.0.tgz`。
 
 对于已有匹配版本 DSH CLI 的 Web profile，可从本仓库目录执行以下命令；使用你实际的 `DSH_HOME`，并先配置好组织授权的 SDK registry：
 
 ```sh
 dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-0.8.0.tgz
-dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-infoflow-0.4.0.tgz
+dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-infoflow-0.5.0.tgz
 ```
 
 配套包依赖企业 SDK `@baidu/infoflow-sdk-nodejs@2026.8.28`。在目标 profile 的包管理环境中配置组织授权的 `@baidu` registry；仓库和公共配套包不携带私有 registry、令牌或 SDK。CLI 的 `dsh plugin add` 支持 tarball，安装到同一 profile 时先安装基础包，再安装配套包。请使用与目标 profile 相同的 `DSH_HOME`。Desktop 插件管理器只接受 registry 包，不能直接安装本地 tarball。
@@ -62,7 +62,7 @@ dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-infoflow-0.4.0.tgz
 
 凭据写入 DSH 原生凭据提供方，普通设置只存引用名；页面不读回或显示已保存的密钥。编辑时密钥留空表示保留原值。一个机器人如果仍由其他进程接收回调，先停用旧接收服务，再启用此连接；SDK 的长连接注册可能改变机器人回调方式。
 
-`allowUsers` 控制私聊；`allowGroups` 控制手工添加的已有群，允许群内的成员可 @机器人执行任务。`allowAllGroups` 默认关闭；显式打开后，机器人所在且平台允许的群中所有成员均可 @ 它调用对应 Bot，私聊名单不变。升级保留原来的准入范围。`admins` 赋予已允许会话中的停止权限，不自动放开准入。已有群由每个 Bot 单独接入；多 Bot 共用一个历史的模式由下述建群流程建立。
+`allowUsers` 控制私聊；`allowGroups` 控制手工添加的已有群，允许群内的成员可 @机器人执行任务。`allowAllGroups` 默认关闭；显式打开后，机器人所在且平台允许的群中所有成员均可 @ 它调用对应 Bot，私聊名单不变。升级保留原来的准入范围。`admins` 赋予已允许会话中的停止权限，不自动放开准入。已有群将同一群号加入各 Bot 的允许群列表后，共享一份群历史并支持内部派活；也可通过下述流程新建共享群。
 
 遇到 `40070`，请检查接收者是否在应用可见范围内、是否已关注机器人。平台可见范围和 DSH 准入名单同时生效；只改其中一处可能仍无法使用。测试错误不会回传 SDK 原始响应或密钥。
 
@@ -136,3 +136,15 @@ dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-infoflow-0.4.0.tgz
 ## 验证范围
 
 仓库测试使用确定性模型和模拟如流传输，覆盖页面表单、独立机器人绑定、可选建群、建群超时恢复、共享群双机器人回复、消息解析、私聊隔离、群内多 Bot、去重、排队、停止权限、写盘失败、发送失败、SDK 调用格式、连接重试、发送超时、原生 DSH 强制退出后的恢复，以及 Web/Desktop 基础包加载。它们不要求真实机器人凭据，也不向如流发送消息。企业 SDK 安装、真实账号的接收事件、网关可达性和实际发送权限需要部署时联调。
+
+## 群内 Bot 派活
+
+已接入的如流群中，可以先用平台的 @ 功能对 DSH Bot 说：“请把实现任务交给工程 Bot，再让审阅 Bot 检查。”Bot 会使用单独的 `@engineer 具体任务` 行派活；目标须已在同一个 DSH 群里，且对应平台绑定已启用、连接正常。支持 Bot handle 或唯一的显示名，推荐使用 handle。目标 Bot 在自己的 Session 中执行，并由自己的机器人回到原群，双方共享当前群的公开上下文。
+
+成功创建子任务后，派活消息会使用 `AT.atagentids` 真正 @ 目标机器人。这类消息使用原生文本格式，因为如流 Markdown 不显示机器人提及；用户和机器人合并到同一个 AT 块，避免平台以 40067 拒绝消息并阻塞后续回复。任务执行期间，目标机器人会立即回复“已接单”；很快完成的任务直接返回结果。机器人 @ 每条最多十个，超出时分条发送。接单提示和平台身份随发件箱持久化；重启不会重新创建提示。如流未确认发送成功时仍会重试，极端情况下可能出现平台消息重复，但不会重复执行任务。
+
+群聊 Markdown 每段最多 2048 字符，拆分时保留完整 Unicode 字符。旧版本中因超长（错误码 `40068`）滞留的结果会自动拆分后继续发送，避免堵住后续群回复。
+
+支持加粗、列表、表格及同一行分号分隔的派活，也支持审阅后回派修复和汇总。同一条用户请求中，每个 Bot 最多执行三次、最多派发十二个子任务；同一任务不重复派发，不能跨群或跨平台派活。目标未接入、正在执行或达到上限时，回复会显示未派发原因。引用、代码、普通提及和 `@all` 不触发 Bot 派活。停止与审批仍归属于原始用户请求；需要停止整条派活链时，请 @ 最初接收任务的机器人发送 `/stop`。
+
+这项能力由 DSH 调度，不依赖平台把机器人消息作为新的用户消息推送。需要同时升级主包至 `0.8.0`，以及飞书配套包至 `0.4.0`／如流配套包至 `0.5.0`。已有如流群同样支持派活：将同一个群号加入各 Bot 的允许群列表即可共享群历史，无需重新建群。开启「所有群」后，首次收到群消息时会加载同平台中已启用、允许该群的 Bot，无需先逐个 @ 一遍。参与派活的机器人仍须实际加入该平台群；该设置不会自动邀请机器人入群。

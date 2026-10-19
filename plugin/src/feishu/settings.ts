@@ -10,7 +10,7 @@ export interface Settings { bindings: Binding[]; registrations: RegistrationReco
 const botId = z.string().transform(brandString<BotId>)
 const schema: z.ZodType<Settings> = z.object({
   bindings: z.array(z.object({ botId, appId: z.string(), botOpenId: z.string(), robotName: z.string(), brand: z.enum(['feishu', 'lark']), enabled: z.boolean(),
-    secretRef: z.string(), allowUsers: z.array(z.string()), allowGroups: z.array(z.string()), admins: z.array(z.string()) })),
+    secretRef: z.string(), allowUsers: z.array(z.string()), allowGroups: z.array(z.string()), allowAllGroups: z.boolean().optional(), admins: z.array(z.string()) })),
   groups: z.array(z.object({ requestId: z.string(), title: z.string(), botIds: z.array(botId), creatorBot: botId, owner: z.string(), createdAt: z.number(),
     chatId: z.string().nullable(), roomId: z.string().transform(brandString<RoomId>).nullable(),
     status: z.enum(['creating', 'uncertain', 'failed', 'linking', 'ready']), error: z.string().nullable() })).default([]),

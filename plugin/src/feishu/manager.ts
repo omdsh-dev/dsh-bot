@@ -42,7 +42,7 @@ export class FeishuManager implements FeishuControl {
   private get(botId: BotId): Binding { const item = this.state.bindings.find(value => value.botId === botId); if (!item) throw new Error('请先绑定这个 Bot 的飞书机器人'); return item }
   private view(binding: Binding): FeishuBindingView {
     const { secretRef, ...rest } = binding
-    return { ...rest, allowUsers: [...binding.allowUsers], allowGroups: [...binding.allowGroups], admins: [...binding.admins], credentialsConfigured: !!secretRef,
+    return { ...rest, allowUsers: [...binding.allowUsers], allowGroups: [...binding.allowGroups], allowAllGroups: binding.allowAllGroups === true, admins: [...binding.admins], credentialsConfigured: !!secretRef,
       ...(this.statuses.get(binding.botId) ?? { status: binding.enabled ? 'connecting' : 'disabled', error: null }) }
   }
   private registration(record: RegistrationRecord): FeishuRegistration {
@@ -158,7 +158,8 @@ export class FeishuManager implements FeishuControl {
     const secret = request.appSecret?.trim() || (previous ? await this.secret(previous) : '')
     if (!secret) throw new Error('首次绑定需要 App Secret')
     const base: Binding = { botId: request.botId, appId: id, brand: request.brand, botOpenId: '', robotName: id, enabled: previous?.enabled ?? false,
-      secretRef: `DSH_FEISHU_${randomUUID().replaceAll('-', '').toUpperCase()}_SECRET`, allowUsers: ids(request.allowUsers, 'ou_'), allowGroups: ids(request.allowGroups, 'oc_'), admins: ids(request.admins, 'ou_') }
+      secretRef: `DSH_FEISHU_${randomUUID().replaceAll('-', '').toUpperCase()}_SECRET`, allowUsers: ids(request.allowUsers, 'ou_'), allowGroups: ids(request.allowGroups, 'oc_'),
+      allowAllGroups: request.allowAllGroups ?? previous?.allowAllGroups ?? false, admins: ids(request.admins, 'ou_') }
     const binding = await this.checked(base, secret)
     await this.runtime.set(binding.secretRef, secret)
     await this.change(state => { state.bindings = [...state.bindings.filter(item => item.botId !== request.botId), binding] })

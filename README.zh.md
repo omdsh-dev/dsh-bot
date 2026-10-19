@@ -23,7 +23,7 @@
 - 飞书支持官方扫码创建并绑定、绑定已有应用、私聊、群聊 @ 和一键创建包含所选 Bot 的群。
 - 如流支持凭据导入、私聊与群聊准入配置、测试消息，以及可选创建如流群。
 
-只有用户发送消息或点击重试才会调度 Bot，Bot 的回复不会自动触发其他 Bot。
+已接入的飞书群和如流群支持 Bot 派活：Bot 在回复中单独写一行 `@handle 具体任务`，目标 Bot 就会在自己的群聊 Session 中执行，并由自己的机器人回群。支持加粗、表格和同一行多个派活，也允许回派修复；同一条用户请求中每个 Bot 最多执行三次、最多十二次派活，同一任务不重复派发；引用、代码、普通提及和 Bot 回复中的 `@all` 不触发派活。私聊和 Web 聊天仍由用户消息驱动。
 
 | 调用入口 | 触发方式 | 回复位置 |
 | --- | --- | --- |
@@ -43,10 +43,10 @@
 | 包 | 版本 | 用途 |
 | --- | --- | --- |
 | [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.8.0` | 必装主包，提供 Web 聊天和 IM 配置面板 |
-| [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.3.0` | 可选，提供飞书连接和建群能力 |
-| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.4.0` | 可选，提供如流连接；需能获取企业 SDK |
+| [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.4.0` | 可选，提供飞书连接和建群能力 |
+| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.5.0` | 可选，提供如流连接；需能获取企业 SDK |
 
-上面同一套包已覆盖 DSH **0.1.5-rc.2** 与 **0.2.0-rc.2**，无需为它们选择不同的插件版本。更高 DSH 版本不会仅因版本号变化被拒绝，但尚未验证的版本不等于保证可用；如果上游删除或改变核心接口，仍需适配。飞书和如流包接受主包 `>=0.7.0 <1.0.0`，无需随主包的每次更新同步升级。详见[兼容策略与测试](docs/compatibility.md)。
+上面同一套包已覆盖 DSH **0.1.5-rc.2** 与 **0.2.0-rc.2**，无需为它们选择不同的插件版本。更高 DSH 版本不会仅因版本号变化被拒绝，但尚未验证的版本不等于保证可用；如果上游删除或改变核心接口，仍需适配。飞书和如流包接受主包 `>=0.8.0 <1.0.0`，无需随主包的每次更新同步升级。详见[兼容策略与测试](docs/compatibility.md)。
 
 在 **Desktop → 插件管理器** 安装 `@zzzpyyy/dsh-bot@0.8.0`，再按需向同一个 profile 添加配套插件。
 
@@ -56,13 +56,13 @@
 
 ```sh
 dsh plugin --profile web add @zzzpyyy/dsh-bot@0.8.0
-dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.3.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.4.0
 ```
 
 如流额外依赖企业 SDK `@baidu/infoflow-sdk-nodejs@2026.8.28`。先在目标 profile 的包管理环境中配置组织授权的 `@baidu` registry，再安装如流配套包；公共包不附带私有 SDK 或凭据：
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.4.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.5.0
 ```
 
 使用与当前服务相同的 `DSH_HOME` 和 profile。升级时先备份数据目录，等待正在执行的回复完成，停止 Host，将主包和已安装的配套包更新到上表版本，再重启。Bot 身份、绑定和历史继续保存在同一数据目录。安装配套包只提供配置入口，不自动创建机器人或启用尚未配置的连接。权限及配置步骤见[飞书接入](docs/feishu.zh.md)和[如流接入](docs/infoflow.zh.md)。

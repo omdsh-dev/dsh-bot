@@ -2,7 +2,7 @@
 import { expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { FeishuManager, type ManagerRuntime } from '../src/feishu/manager.ts'
-import type { Settings } from '../src/feishu/settings.ts'
+import { settingsDomain, type Settings } from '../src/feishu/settings.ts'
 import { GroupCreateError, type RegistrationOptions, type RegistrationResult } from '../src/feishu/sdk.ts'
 import type { Bot, BotId, RoomId } from '../src/types.ts'
 const alpha = brandString<BotId>('alpha'), beta = brandString<BotId>('beta')
@@ -30,6 +30,21 @@ function bench(initial: Settings = { bindings: [], registrations: [], groups: []
     reject: () => reject(new Error('error with secret payload')) }
 }
 const manual = (botId: BotId, appId = `cli_${botId}`) => ({ botId, appId, appSecret: 'private-manual-secret', brand: 'feishu' as const, allowUsers: ['ou_owner'], allowGroups: [], admins: ['ou_owner'] })
+it('persists explicit all-group access through restart and preserves it when older clients omit the option', async () => {
+  const f = bench()
+  expect(await f.manager.save(manual(alpha))).toMatchObject({ allowAllGroups: false })
+  await f.manager.save({ ...manual(alpha), allowAllGroups: true })
+  await f.manager.toggle({ botId: alpha, enabled: true })
+  expect(f.runtime.start).toHaveBeenLastCalledWith(expect.objectContaining({ allowAllGroups: true }))
+  const restored = bench(settingsDomain.global.schema.parse(f.state()))
+  await restored.manager.init()
+  expect(restored.manager.snapshot().bindings[0]).toMatchObject({ allowAllGroups: true })
+  expect(restored.runtime.start).toHaveBeenCalledWith(expect.objectContaining({ allowAllGroups: true }))
+  expect(await f.manager.save(manual(alpha))).toMatchObject({ allowAllGroups: true })
+  expect(await f.manager.save({ ...manual(alpha), allowAllGroups: false })).toMatchObject({ allowAllGroups: false })
+  expect(f.runtime.start).toHaveBeenLastCalledWith(expect.objectContaining({ allowAllGroups: false }))
+  await restored.manager.close(); await f.manager.close()
+})
 it('registers once per selected Bot, writes credentials privately and leaves a new binding disabled', async () => {
   const f = bench(); await f.manager.init()
   const [first, again] = await Promise.all([f.manager.register(alpha), f.manager.register(alpha)])

@@ -1,14 +1,14 @@
-/** Merge legacy per-app Feishu group histories without replacing native Bot Sessions. */
-import type { BotState, ChatMessage, ChatMessageId, Room } from '../types.ts'
+/** Merge legacy per-account external group histories without replacing native Bot Sessions. */
+import type { BotState, ChatMessage, ChatMessageId, Room } from './types.ts'
 
 /** Shared group identity; private chats remain scoped to the receiving app. */
-export function isFeishuGroup(room: Room): boolean { return room.external?.provider === 'feishu' && room.external.kind === 'group' }
+export function isExternalGroup(room: Room): boolean { return room.external?.kind === 'group' }
 
 /** Merge all legacy entries for one chat in a single BotMode storage transaction.
  * Retired room IDs remain aliases for pending connector work; response IDs and Sessions survive.
  */
-export function mergeFeishuRooms(state: BotState, chatId: string): Room | undefined {
-  const rooms = state.rooms.filter(room => isFeishuGroup(room) && room.external!.id === chatId)
+export function mergeExternalRooms(state: BotState, chatId: string, provider: 'feishu' | 'infoflow' = 'feishu'): Room | undefined {
+  const rooms = state.rooms.filter(room => isExternalGroup(room) && room.external!.provider === provider && room.external!.id === chatId)
   const accountId = `group:${chatId}`
   const target = rooms.find(room => room.external!.accountId === accountId) ?? rooms[0]
   if (!target) return
@@ -19,7 +19,7 @@ export function mergeFeishuRooms(state: BotState, chatId: string): Room | undefi
   for (const room of rooms) {
     for (const member of room.members) {
       const prior = members.get(member.botId)
-      if (prior && prior.sessionId !== member.sessionId) throw new Error('Conflicting Bot Sessions in the same Feishu group; preserve both before merging')
+      if (prior && prior.sessionId !== member.sessionId) throw new Error('Conflicting Bot Sessions in the same external group; preserve both before merging')
       if (!prior) members.set(member.botId, { ...member, cursor: 0 })
     }
     for (const original of room.messages) {
@@ -41,10 +41,13 @@ export function mergeFeishuRooms(state: BotState, chatId: string): Room | undefi
       messages.push(message)
     }
   }
-  for (const message of messages) if (message.replyTo) message.replyTo = aliases.get(message.replyTo) ?? message.replyTo
+  for (const message of messages) {
+    if (message.replyTo) message.replyTo = aliases.get(message.replyTo) ?? message.replyTo
+    if (message.delegation) message.delegation.rootId = aliases.get(message.delegation.rootId) ?? message.delegation.rootId
+  }
   messages.sort((left, right) => left.time - right.time)
   target.aliases = [...new Set(rooms.flatMap(room => [...(room.aliases ?? []), ...(room.id !== target.id ? [room.id] : [])]))]
-  target.external = { provider: 'feishu', accountId, kind: 'group', id: chatId }
+  target.external = { provider, accountId, kind: 'group', id: chatId }
   target.members = [...members.values()]; target.messages = messages
   state.rooms = state.rooms.filter(room => !rooms.includes(room) || room === target)
   return target

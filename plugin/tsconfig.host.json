@@ -10,6 +10,7 @@
     "src/types.ts",
     "src/domain.ts",
     "src/routing.ts",
+    "src/delegation.ts",
     "src/infoflow.ts",
     "src/infoflow/bridge.ts",
     "src/infoflow/domain.ts",
@@ -24,7 +25,7 @@
     "src/feishu/settings.ts",
     "src/feishu/manager.ts",
     "src/feishu/sdk.ts",
-    "src/feishu/rooms.ts",
+    "src/external-rooms.ts",
     "src/compatibility.ts"
   ],
   "references": [

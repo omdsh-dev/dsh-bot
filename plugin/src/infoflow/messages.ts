@@ -64,12 +64,17 @@ export function conversationKey(conversation: ExternalConversation): string {
 /** Split at Unicode code points, retaining exact content for retry.
  * @param content - outbound text.
  * @param limit - configured platform payload limit in code points.
+ * @param maxUnits - optional conservative UTF-16 length cap for platforms with character limits.
  * @returns ordered nonempty parts.
  */
-export function splitMessage(content: string, limit: number): string[] {
-  const points = Array.from(content)
+export function splitMessage(content: string, limit: number, maxUnits = Infinity): string[] {
   const chunks: string[] = []
-  for (let i = 0; i < points.length; i += limit) chunks.push(points.slice(i, i + limit).join(''))
+  let part = '', count = 0
+  for (const point of content) {
+    if (part && (count >= limit || part.length + point.length > maxUnits)) { chunks.push(part); part = ''; count = 0 }
+    part += point; count++
+  }
+  if (part) chunks.push(part)
   return chunks
 }
 

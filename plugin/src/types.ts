@@ -15,7 +15,7 @@ export interface ExternalMessage { id: string; sender: { id: string; name: strin
 /** Create or resolve a dedicated external room without reusing a local DM. */
 export interface ExternalRoomRequest { conversation: ExternalConversation; title: string; botIds: BotId[]; defaultBot: BotId }
 /** Idempotent Host-only ingress. A busy result leaves the request uncommitted. */
-export interface ExternalSendRequest extends SendRequest { external: ExternalMessage; sourceAccountId?: string }
+export interface ExternalSendRequest extends SendRequest { external: ExternalMessage; sourceAccountId?: string; allowDelegation?: boolean }
 /** Accepted receipts return this delivery's target response IDs, including on redelivery. */
 export type ExternalSendResult = { status: 'busy' } | { status: 'rejected'; reason: 'room-full' | 'invalid-input' }
   | { status: 'accepted'; messageId: ChatMessageId; attemptIds: ChatMessageId[] }
@@ -33,6 +33,10 @@ export interface ChatMessage {
   error: string | null
   time: number
   external?: ExternalMessage | undefined
+  /** Set only by connectors that can deliver every delegated Bot's reply. */
+  allowDelegation?: boolean | undefined
+  /** Child reply belongs to its Bot parent and retains the original human authority. */
+  delegation?: { rootId: ChatMessageId; task: string } | undefined
 }
 /** Canonical DM or explicitly composed group. */
 export interface Room {
@@ -64,6 +68,8 @@ export interface MembersRequest { roomId: RoomId; botIds: BotId[]; defaultBot: B
 export interface SendRequest { roomId: RoomId; text: string; targets?: BotId[]; replyTo?: ChatMessageId }
 /** A stop/retry command addresses one response attempt. */
 export interface AttemptRequest { roomId: RoomId; messageId: ChatMessageId }
+/** External /stop cancels the original request's complete delegation tree. */
+export interface StopRequest extends AttemptRequest { cascade?: boolean }
 
 /** Public connector state never contains credential values. */
 export interface InfoFlowBindingView {

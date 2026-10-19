@@ -3,7 +3,7 @@ import { expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { InfoFlowBridge, type BridgeConfig } from '../src/infoflow/bridge.ts'
 import { decodeMessage, conversationKey, splitMessage, type Incoming } from '../src/infoflow/messages.ts'
-import type { BridgeState, Delivery } from '../src/infoflow/domain.ts'
+import { bridgeSchema, type BridgeState, type Delivery } from '../src/infoflow/domain.ts'
 import type { BotMode } from '../src/index.ts'
 import type { BotId, Room, RoomId, ChatMessageId, ExternalSendRequest, BotState, AttemptRequest } from '../src/types.ts'
 import { SessionId } from '@deepseek-ai/dsh-session'
@@ -60,6 +60,36 @@ function bench(initial?: BridgeState) {
   return { bridge, create, bots, state: () => state, durable, submitted, sent, save, send, stop, complete }
 }
 
+it('delivers a parent promptly, retains its delegated child through restart, and stops it for the original human', async () => {
+  const b = bench(), other = brandString<BotId>('worker')
+  await b.bridge.receive(input('delegation', 'delegate', 'alice', true)); await b.bridge.wake()
+  const room = b.durable.rooms[0]!, parent = room.messages.find(message => message.botId === bot)!, root = room.messages[0]!
+  room.members.push({ botId: other, sessionId: SessionId('worker-session'), cursor: 0 })
+  parent.status = 'complete'; parent.text = '@worker task'
+  room.messages.push({ ...parent, id: brandString<ChatMessageId>('child'), botId: other, replyTo: parent.id, text: '', status: 'running',
+    delegation: { rootId: root.id, task: 'task' } })
+  await b.bridge.wake()
+  expect(b.sent.filter(item => item.text === '@worker task')).toHaveLength(1)
+  expect(b.sent.filter(item => item.botId === other && item.text.includes('已接单'))).toHaveLength(1)
+  expect(b.sent.findIndex(item => item.text === '@worker task')).toBeLessThan(b.sent.findIndex(item => item.text.includes('已接单')))
+  expect(b.state().pending).toHaveLength(1)
+  await b.bridge.close()
+  const resumed = b.create({ allowDelegation: true })
+  await resumed.wake()
+  expect(b.sent.filter(item => item.text === '@worker task')).toHaveLength(1)
+  expect(b.sent.filter(item => item.botId === other && item.text.includes('已接单'))).toHaveLength(1)
+  await resumed.attention(SessionId('worker-session'), 'child-approval'); await resumed.wake()
+  expect(b.sent.some(item => item.text.includes('请求了人工处理'))).toBe(true)
+  expect(b.sent.find(item => item.text.includes('请求了人工处理'))?.botId).toBe(other)
+  await resumed.receive(input('stop-stranger', '/stop', 'bob', true)); await resumed.wake()
+  expect(b.stop).not.toHaveBeenCalled()
+  await resumed.receive(input('stop-owner', '/stop', 'alice', true)); await resumed.wake(); await resumed.wake()
+  expect(b.stop).toHaveBeenCalledWith({ roomId: room.id, messageId: 'child', cascade: true })
+  expect(b.sent.filter(item => item.botId === other && item.text === '执行已停止。')).toHaveLength(1)
+  expect(b.state().pending).toHaveLength(0)
+  await resumed.close()
+})
+
 it('requires the exact robot AT and lossless IDs, and ignores forwarded group traffic', () => {
   const envelope = (robotid: unknown, eventtype = 'MESSAGE_RECEIVE', receipt: unknown = '9223372036854775807') => ({ data: { raw: {
     groupid: 'group', eventtype, message: { header: { fromuserid: 'alice', messageid: receipt }, body: [{ type: 'AT', robotid }, { type: 'TEXT', content: '@all question' }, { type: 'QUOTE', content: '@other hidden' }] },
@@ -68,7 +98,92 @@ it('requires the exact robot AT and lossless IDs, and ignores forwarded group tr
   expect(decodeMessage('group.text', envelope('other'), 'app', 'robot')).toBeNull()
   expect(decodeMessage('group.text', envelope('robot', 'ALL_MESSAGE_FORWARD'), 'app', 'robot')).toBeNull()
   expect(decodeMessage('group.text', envelope('robot', 'MESSAGE_RECEIVE', 9223372036854775807), 'app', 'robot')).toBeNull()
+  const echo = envelope('robot'); Object.assign(echo.data.raw.message.header, { role: 'robot' })
+  expect(decodeMessage('group.text', echo, 'app', 'robot')).toBeNull()
   expect(splitMessage('你好😀世界', 3)).toEqual(['你好😀', '世界'])
+})
+
+it('persists native handoff mentions and acknowledgements together, retrying through restart only once', async () => {
+  const b = bench(), other = brandString<BotId>('worker')
+  await b.bridge.close()
+  const bridge = b.create({ allowDelegation: true, mentionId: () => '22', chunkSize: 12 })
+  await bridge.receive(input('handoff', 'delegate', 'alice', true)); await bridge.wake()
+  const room = b.durable.rooms[0]!, parent = room.messages[1]!, root = room.messages[0]!
+  parent.status = 'complete'; parent.text = '@worker implement a long task'
+  room.messages.push({ ...parent, id: brandString<ChatMessageId>('child'), botId: other, replyTo: parent.id, text: '', status: 'running',
+    delegation: { rootId: root.id, task: 'implement a long task' } })
+  b.send.mockRejectedValueOnce(new Error('network unavailable'))
+  await bridge.wake(); await bridge.close()
+  const retained = bridgeSchema.parse(b.state())
+  expect(retained.outbox.filter(item => item.mentions?.length)).toHaveLength(1)
+  expect(retained.outbox[0]?.mentions).toEqual([{ id: '22', name: 'worker' }])
+  expect(retained.pending[0]?.announced).toEqual(['child'])
+  const resumed = b.create({ allowDelegation: true, mentionId: () => 'changed-after-restart' })
+  await new Promise(resolve => setTimeout(resolve, 5)); await resumed.wake(); await resumed.wake()
+  expect(b.sent.filter(item => item.mentions?.length).map(item => item.mentions)).toEqual([[{ id: '22', name: 'worker' }]])
+  expect(b.sent.filter(item => item.botId === other && item.text.includes('已接单'))).toHaveLength(1)
+  expect(b.state().outbox).toHaveLength(0)
+  await resumed.close()
+})
+
+it('keeps all recipients when a handoff exceeds the platform limit of ten robot mentions', async () => {
+  const b = bench(); await b.bridge.close()
+  const bridge = b.create({ allowDelegation: true, mentionId: botId => botId })
+  await bridge.receive(input('many', 'delegate', 'alice', true)); await bridge.wake()
+  const room = b.durable.rooms[0]!, parent = room.messages[1]!, root = room.messages[0]!
+  parent.status = 'complete'; parent.text = 'dispatch'
+  for (let i = 1; i <= 11; i++) room.messages.push({ ...parent, id: brandString<ChatMessageId>(`child-${i}`), botId: brandString<BotId>(String(i)),
+    replyTo: parent.id, text: 'done', delegation: { rootId: root.id, task: 'task' } })
+  await bridge.wake()
+  const handoffs = b.sent.filter(item => item.mentions?.length)
+  expect(handoffs.map(item => item.mentions!.length)).toEqual([10, 1])
+  expect(handoffs.flatMap(item => item.mentions!.map(mention => mention.id))).toEqual(Array.from({ length: 11 }, (_, index) => String(index + 1)))
+  expect(b.state().pending).toHaveLength(0)
+  await bridge.close()
+})
+
+it.each([false, true])('delivers long InfoFlow Markdown without blocking the room (retained outbox: %s)', async retained => {
+  const content = '审'.repeat(2047) + '😀' + '阅'.repeat(460)
+  const outbound: Delivery = { id: 'long-report', conversation: input('report', '', 'alice', true).conversation,
+    user: 'alice', botId: bot, text: content, attempts: 8, nextAt: Date.now() + 120000, mentions: [{ id: '22', name: 'Worker' }] }
+  const b = bench(retained ? { pending: [], receipts: [], notices: [], outbox: [outbound] } : undefined)
+  b.send.mockImplementation(async delivery => {
+    if (delivery.text.length > 2048) throw new Error('InfoFlow API Error: markdown内容长度超过2048个字符 (errcode: 40068)')
+    b.sent.push(delivery)
+  })
+  if (!retained) {
+    await b.bridge.receive(input('report', 'review', 'alice', true)); await b.bridge.wake()
+    const response = b.durable.rooms[0]!.messages[1]!
+    response.status = 'complete'; response.text = content
+    b.sent.length = 0
+  }
+  await b.bridge.wake()
+  expect(b.sent.map(item => item.text).join('')).toBe(content)
+  expect(b.sent.every(item => item.text.length <= 2048 && !item.text.includes('\uFFFD'))).toBe(true)
+  expect(b.sent.every(item => item.botId === bot)).toBe(true)
+  if (retained) expect(b.sent.filter(item => item.mentions?.length)).toHaveLength(1)
+  expect(b.state().outbox).toHaveLength(0)
+  await b.bridge.close()
+})
+
+it('resumes an oversized reply after a later chunk fails without replaying its first chunk', async () => {
+  const content = '前'.repeat(2048) + '后'.repeat(500)
+  const b = bench({ pending: [], receipts: [], notices: [], outbox: [{ id: 'old-reply',
+    conversation: input('old', '', 'alice', true).conversation, user: 'alice', botId: bot, text: content, attempts: 8, nextAt: 0 }] })
+  let fail = true
+  b.send.mockImplementation(async item => {
+    if (item.text.startsWith('后') && fail) { fail = false; throw new Error('temporary network failure') }
+    b.sent.push(item)
+  })
+  await b.bridge.wake(); await b.bridge.close()
+  expect(b.sent.map(item => item.text).join('')).toBe('前'.repeat(2048))
+  expect(b.state().outbox).toHaveLength(1)
+  const resumed = b.create()
+  await new Promise(resolve => setTimeout(resolve, 5)); await resumed.wake()
+  expect(b.sent.map(item => item.text).join('')).toBe(content)
+  expect(new Set(b.sent.map(item => item.id)).size).toBe(2)
+  expect(b.state().outbox).toHaveLength(0)
+  await resumed.close()
 })
 
 it('admits duplicate delivery once, serializes one room, and runs other rooms independently', async () => {
@@ -280,14 +395,19 @@ it('reads v1 local records without changing Bot, Room, message or Session identi
   await b.bridge.close()
 })
 
-it('opens unlisted InfoFlow groups only after an explicit all-groups selection, without opening private chats', async () => {
+it.each(['infoflow', 'feishu'] as const)('opens unlisted %s groups only after an explicit all-groups selection, without opening private chats', async provider => {
   const b = bench(), group = input('allowed-group', '/help', 'outside', true)
   group.conversation.id = 'unlisted'
-  expect(await b.bridge.receive(group)).toBe('ignored')
-  const enabled = b.create({ allowAllGroups: true })
+  group.conversation.provider = provider
+  const restricted = b.create({ provider })
+  expect(await restricted.receive(group)).toBe('ignored')
+  const enabled = b.create({ provider, allowAllGroups: true })
   expect(await enabled.receive(group)).toBe('accepted')
-  expect(await enabled.receive(input('outside-dm', 'hello', 'outside'))).toBe('ignored')
-  const feishu = b.create({ provider: 'feishu', allowAllGroups: true })
-  expect(await feishu.receive({ ...group, conversation: { ...group.conversation, provider: 'feishu' } })).toBe('ignored')
-  await enabled.close(); await feishu.close(); await b.bridge.close()
+  const dm = input('outside-dm', 'hello', 'outside')
+  dm.conversation.provider = provider
+  expect(await enabled.receive(dm)).toBe('ignored')
+  await enabled.close()
+  const revoked = b.create({ provider, allowAllGroups: false })
+  expect(await revoked.receive({ ...group, message: { ...group.message, id: 'after-revoke' } })).toBe('ignored')
+  await restricted.close(); await revoked.close(); await b.bridge.close()
 })

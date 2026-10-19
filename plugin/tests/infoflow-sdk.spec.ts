@@ -34,6 +34,23 @@ it('uses distinct private/group Markdown formats and preserves recipient IDs', a
   await b.transport.close()
 })
 
+it('uses agent IDs for real robot mentions while retaining the original human mention', async () => {
+  const b = bench()
+  // The live API rejects separate human/robot AT blocks in an MD message (40067).
+  b.group.mockImplementation(async (...args: unknown[]) => {
+    const message = args[0] as { body: { type: string }[] }
+    if (message.body.length > 2) throw new Error('msg body wrong, markdown count exceed limit (errcode: 40067)')
+    return {}
+  })
+  await b.transport.send({ ...delivery('group'), mentions: [{ id: '22', name: '工程 Bot' }] })
+  expect(b.group).toHaveBeenCalledWith(expect.objectContaining({ msgtype: 'TEXT', body: [
+    { type: 'AT', atall: false, atuserids: ['alice'], atagentids: [22] }, { type: 'TEXT', content: 'hello' },
+  ] }))
+  await b.transport.send({ ...delivery('private'), mentions: [{ id: '22', name: '工程 Bot' }] })
+  expect(b.user).toHaveBeenCalledWith('9223372036854775807', 'hello', 'md')
+  await b.transport.close()
+})
+
 it('retries initial connection failure and stops retries when disposed', async () => {
   vi.useFakeTimers()
   const b = bench(); b.connect.mockRejectedValueOnce(new Error('endpoint unavailable'))

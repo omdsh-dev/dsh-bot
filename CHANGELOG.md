@@ -1,9 +1,17 @@
 # Release notes
 
-## 0.8.0 — 2026-10-16
+## 0.8.0 — 2026-10-18
 
-Base package update only. Keep Feishu `0.3.0` and InfoFlow `0.4.0`; their existing Bot peer range accepts `0.8.0`.
+Bot `0.8.0`, Feishu `0.4.0`, and InfoFlow `0.5.0`. Upgrade the relevant companion with the base package to enable group handoffs; new companions require Bot `>=0.8.0 <1.0.0`.
 
+- Fix group delegation: standalone `@handle task` lines can dispatch another connected Bot in the same Feishu or InfoFlow group, including configured existing groups. Previously they were delivered as text without executing the target. Concrete review fixes may revisit earlier participants; each Bot runs at most three times, with twelve total handoffs and no duplicate tasks, with no cross-platform or private-chat dispatch.
+- Return each delegated result through its own robot, preserve the original sender for stop/approval handling, and persist delivery progress across restart. Robot-originated IM events remain excluded.
+- Include native robot mentions in committed handoffs (InfoFlow agent IDs and Feishu Open IDs), and send an immediate acknowledgement from running targets. Keep mention identities and acknowledgement progress in the durable outbox so retries cannot create another task.
+- Send InfoFlow robot mentions as native text with one combined human/robot AT block. Markdown hid the robot mention, and separate AT blocks caused the live API to reject the message with error 40067 and stall the outbox.
+- Resolve permitted peer Bots on the first message in an all-groups-enabled chat, so delegation does not require each Bot to have received an earlier message. Keep the latest human request and its restrictions explicit in delegated context.
+- Respect InfoFlow's 2048-character group Markdown limit, including retained oversized replies from older versions, so a long result cannot permanently block later replies in that group.
+- Add Feishu's per-Bot option to allow mentions in all groups containing the robot, matching InfoFlow. It defaults off, survives restart, preserves existing group lists, and does not widen private-chat access.
+- Keep generated Remote codecs compatible with both DSH 0.1's schema property and DSH 0.2's schema factory. Validate shipped Client contributions with each runtime's real registry to catch startup failures.
 - Hide InfoFlow configuration and group creation for new profiles. Internal users can enable **IM connections → Advanced settings → Show InfoFlow integration**; hidden configuration does not poll the connector.
 - Persist visibility in the DSH profile and share it with connected clients. Existing InfoFlow bindings, groups or chat history keep the entry visible on upgrade until a user explicitly hides it. Hiding the entry retains connections, credentials and conversations.
 

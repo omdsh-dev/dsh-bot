@@ -4,7 +4,7 @@ export type Brand = 'feishu' | 'lark'
 export interface FeishuBindingView {
   botId: BotId; appId: string; botOpenId: string; robotName: string; brand: Brand; enabled: boolean
   status: 'disabled' | 'connecting' | 'connected' | 'error'; error: string | null
-  allowUsers: string[]; allowGroups: string[]; admins: string[]; credentialsConfigured: boolean
+  allowUsers: string[]; allowGroups: string[]; allowAllGroups?: boolean | undefined; admins: string[]; credentialsConfigured: boolean
 }
 export interface FeishuRegistration {
   botId: BotId; attemptId: string; status: 'starting' | 'waiting' | 'saving' | 'complete' | 'canceled' | 'expired' | 'error' | 'interrupted'
@@ -18,7 +18,7 @@ export interface FeishuGroupView {
   status: 'creating' | 'uncertain' | 'failed' | 'linking' | 'ready'; error: string | null
 }
 export interface FeishuState { available: boolean; bindings: FeishuBindingView[]; registrations: FeishuRegistration[]; groups: FeishuGroupView[] }
-export interface SaveFeishuBindingRequest { botId: BotId; appId: string; appSecret?: string; brand: Brand; allowUsers: string[]; allowGroups: string[]; admins: string[] }
+export interface SaveFeishuBindingRequest { botId: BotId; appId: string; appSecret?: string; brand: Brand; allowUsers: string[]; allowGroups: string[]; allowAllGroups?: boolean | undefined; admins: string[] }
 export interface FeishuControl {
   createGroup(request: CreateFeishuGroupRequest): Promise<Room>
   resumeGroup(requestId: string): Promise<Room>

@@ -61,6 +61,18 @@ it('uses chat IDs and stable delivery UUIDs, and rejects an unsuccessful API res
   await b.transport.close(); await expect(b.transport.send(delivery)).rejects.toThrow('stopping')
 })
 
+it('sends committed group handoffs as native robot mentions, without adding mentions in private chat', async () => {
+  const b = bench()
+  const delivery: Delivery = { id: 'handoff', conversation: { provider: 'feishu', accountId: 'cli_app', kind: 'group', id: 'oc_chat' },
+    user: 'ou_alice', text: '@engineer 任务', attempts: 0, nextAt: 0,
+    mentions: [{ id: 'ou_engineer', name: '工程 <Bot>' }, { id: 'ou_robot', name: 'self' }, { id: 'all', name: 'everyone' }] }
+  await b.transport.send(delivery)
+  expect(b.request.mock.calls[0]?.[0]).toMatchObject({ data: { content: JSON.stringify({ text: '<at user_id="ou_engineer">工程 &lt;Bot&gt;</at>\n@engineer 任务' }) } })
+  await b.transport.send({ ...delivery, conversation: { ...delivery.conversation, kind: 'private' } })
+  expect(b.request.mock.calls[1]?.[0]).toMatchObject({ data: { content: JSON.stringify({ text: '@engineer 任务' }) } })
+  await b.transport.close()
+})
+
 it('creates a private group with stable uuid, app-scoped owner and invited app IDs', async () => {
   const b = bench(); b.request.mockResolvedValue({ code: 0, data: { chat_id: 'oc_new' } })
   const options = { requestId: 'stable-request', title: 'Team', owner: 'ou_owner', botAppIds: ['cli_beta'] }

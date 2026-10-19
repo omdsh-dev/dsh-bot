@@ -23,7 +23,7 @@ One Bot can use Feishu and InfoFlow at the same time. Bot instructions, models a
 - Bind a Feishu robot by official QR authorization or existing app credentials; receive private messages and group @mentions, and create a Feishu group with selected Bots.
 - Bind an InfoFlow robot through guided credential setup, control private/group access, test messaging, and optionally create an InfoFlow group.
 
-Bots respond only to a human send or retry. Their messages do not automatically trigger each other.
+In a connected Feishu group or connected InfoFlow group, a Bot can hand off part of a human request by writing a separate `@handle concrete task` line. The target runs in its own group Session and replies through its own robot. Markdown task lists and semicolon-separated recipients are supported. Concrete fixes can return to an earlier participant, with at most three runs per Bot and twelve handoffs per human request; duplicate tasks are not repeated. Quoted text, code, ordinary mentions and `@all` in Bot replies do not dispatch work; private chats and Web chats retain human-only routing.
 
 | Entry point | How to call the Bot | Where the reply appears |
 | --- | --- | --- |
@@ -43,10 +43,10 @@ Requires **DSH 0.1.5-rc.2 or newer**. Installation no longer pins every DSH peer
 | Package | Version | Purpose |
 | --- | --- | --- |
 | [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.8.0` | Required base: Web chats and the IM configuration panel |
-| [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.3.0` | Optional Feishu connection and group creation |
-| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.4.0` | Optional InfoFlow connection; requires enterprise SDK access |
+| [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.4.0` | Optional Feishu connection and group creation |
+| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.5.0` | Optional InfoFlow connection; requires enterprise SDK access |
 
-Use the same package set above on DSH **0.1.5-rc.2** and **0.2.0-rc.2**. Later DSH versions are admitted without a new plugin release, but acceptance is not a guarantee of compatibility with untested or changed interfaces. Feishu and InfoFlow accept Bot `>=0.7.0 <1.0.0`, so a Bot update no longer forces matching connector releases. See the [compatibility policy and matrix](docs/compatibility.md).
+Use the same package set above on DSH **0.1.5-rc.2** and **0.2.0-rc.2**. Later DSH versions are admitted without a new plugin release, but acceptance is not a guarantee of compatibility with untested or changed interfaces. Feishu and InfoFlow accept Bot `>=0.8.0 <1.0.0`, so a Bot update no longer forces matching connector releases. See the [compatibility policy and matrix](docs/compatibility.md).
 
 In **Desktop → plugin manager**, install `@zzzpyyy/dsh-bot@0.8.0`, then add the optional companion packages you need to the same profile.
 
@@ -56,13 +56,13 @@ For an existing compatible **DSH CLI Web profile**, use:
 
 ```sh
 dsh plugin --profile web add @zzzpyyy/dsh-bot@0.8.0
-dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.3.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.4.0
 ```
 
 InfoFlow additionally requires `@baidu/infoflow-sdk-nodejs@2026.8.28` from your authorized enterprise registry. Configure `@baidu` registry access in the target profile's package-manager environment before installing its companion; the public package does not bundle the private SDK or credentials:
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.4.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.5.0
 ```
 
 Use the same `DSH_HOME` and profile as your running installation. For upgrades, back up that data directory, let active replies finish, stop the Host, update the base and installed companions to the versions in the table, then restart. Saved Bot identities, bindings and conversation history remain in the same data directory. Installing a companion exposes its configuration page; it does not create robots or enable unconfigured connections. See the [Feishu guide](docs/feishu.zh.md) and [InfoFlow guide](docs/infoflow.md) for permissions and setup.

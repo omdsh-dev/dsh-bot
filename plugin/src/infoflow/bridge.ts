@@ -3,13 +3,20 @@ import type { BotMode } from '../index.ts'
 import type { BotId, Room } from '../types.ts'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { conversationKey, splitMessage, type Incoming } from './messages.ts'
-import type { BridgeState, Delivery, Pending } from './domain.ts'
+import type { BridgeState, Delivery, Pending, RobotMention } from './domain.ts'
+import { humanRequest, responseTree } from '../delegation.ts'
 
 /** All deployment-varying queue and routing limits. */
 export interface BridgeConfig {
   provider?: 'infoflow' | 'feishu'; accountId: string; botIds: BotId[]; defaultBot: BotId; allowUsers: string[]; allowGroups: string[]; allowAllGroups?: boolean; admins: string[]
   /** Legacy connectors sharing one platform robot across multiple Bots need textual attribution. */
   labelReplies?: boolean
+  /** Only runtimes able to send through the target robot opt into Host handoffs. */
+  allowDelegation?: boolean
+  /** Resolve a committed handoff to this platform's robot identity, captured durably before sending. */
+  mentionId?: (botId: BotId) => string | undefined
+  /** Configured peers allowed in this group, including groups first seen after startup. */
+  groupBotIds?: (groupId: string) => BotId[]
   maxPending: number; maxQueuePerRoom: number; maxConcurrentRooms: number; maxReceipts: number; maxOutbox: number
   chunkSize: number; retryMs: number; maxRetryMs: number
 }
@@ -53,13 +60,19 @@ export class InfoFlowBridge {
 
   private room(input: Incoming): Room | undefined {
     return this.bots.snapshot().rooms.find(room => room.external && (conversationKey(room.external) === conversationKey(input.conversation)
-      || (room.external.provider === 'feishu' && input.conversation.provider === 'feishu' && room.external.kind === 'group' && input.conversation.kind === 'group' && room.external.id === input.conversation.id)))
+      || (room.external.provider === input.conversation.provider && room.external.kind === 'group' && input.conversation.kind === 'group' && room.external.id === input.conversation.id)))
   }
-  private enqueue(state: BridgeState, key: string, input: Incoming, content: string, botId: BotId = input.targets?.[0] ?? this.config.defaultBot): void {
-    const parts = splitMessage(content, this.config.chunkSize)
-    if (state.outbox.length + parts.length > this.config.maxOutbox) throw new Error('External chat outbox is full; delivery must recover before accepting more results')
-    for (const [index, text] of parts.entries()) state.outbox.push({ id: `${key}:${index}`, conversation: input.conversation,
-      user: input.message.sender.id, botId, text, attempts: 0, nextAt: 0 })
+  private enqueue(state: BridgeState, key: string, input: Incoming, content: string, botId: BotId = input.targets?.[0] ?? this.config.defaultBot, mentions: RobotMention[] = []): void {
+    const parts = splitMessage(content, this.config.chunkSize, input.conversation.provider === 'infoflow' && input.conversation.kind === 'group' ? 2048 : Infinity)
+    // InfoFlow accepts at most ten robot mentions per message. Never repeat them on text continuation chunks.
+    const count = Math.max(parts.length, Math.ceil(mentions.length / 10))
+    if (state.outbox.length + count > this.config.maxOutbox) throw new Error('External chat outbox is full; delivery must recover before accepting more results')
+    for (let index = 0; index < count; index++) {
+      const targets = mentions.slice(index * 10, index * 10 + 10)
+      state.outbox.push({ id: `${key}:${index}`, conversation: input.conversation,
+        user: input.message.sender.id, botId, text: parts[index] ?? '派活给以上 Bot。', attempts: 0, nextAt: 0,
+        ...(targets.length ? { mentions: targets } : {}) })
+    }
   }
 
   /** Persist authorization-approved input and its receipt in the same write.
@@ -74,7 +87,7 @@ export class InfoFlowBridge {
     if (this.closed) throw new Error('External chat is stopping')
     const { conversation, message, text } = input
     if (conversation.provider !== (this.config.provider ?? 'infoflow') || conversation.accountId !== this.config.accountId) return 'ignored'
-    if (conversation.kind === 'private' ? !this.config.allowUsers.includes(message.sender.id) : !(conversation.provider === 'infoflow' && this.config.allowAllGroups === true) && !this.config.allowGroups.includes(conversation.id)) return 'ignored'
+    if (conversation.kind === 'private' ? !this.config.allowUsers.includes(message.sender.id) : this.config.allowAllGroups !== true && !this.config.allowGroups.includes(conversation.id)) return 'ignored'
     const key = JSON.stringify([conversationKey(conversation), message.id])
     const outcome = await this.change((state) => {
       if (state.receipts.includes(key)) return 'duplicate' as const
@@ -98,11 +111,12 @@ export class InfoFlowBridge {
             && !room?.messages.some(message => message.external?.id === item.input.message.id))
           for (const item of canceled) this.enqueue(state, `${item.key}:canceled`, item.input, '请求已在开始执行前取消。')
           state.pending = state.pending.filter(item => !canceled.includes(item))
-          const shared = conversation.provider === 'feishu' && conversation.kind === 'group'
+          const shared = conversation.kind === 'group'
+          const owned = room ? state.pending.flatMap(item => item.submitted ? responseTree(room, item.submitted.attemptIds).map(message => message.id) : []) : []
           const attemptIds = room?.messages.filter(item => {
-            if (item.status !== 'running' || !item.replyTo || shared && (!item.botId || !this.config.botIds.includes(item.botId))) return false
-            const external = room.messages.find(parent => parent.id === item.replyTo)?.external
-            const sender = shared ? external?.sources?.find(source => source.accountId === this.config.accountId)?.senderId : external?.sender.id
+            if (item.status !== 'running' || !item.replyTo || shared && !owned.includes(item.id) && (!item.botId || !this.config.botIds.includes(item.botId))) return false
+            const external = humanRequest(room, item)?.external
+            const sender = shared && conversation.provider === 'feishu' ? external?.sources?.find(source => source.accountId === this.config.accountId)?.senderId : external?.sender.id
             return mayStop(sender ?? '')
           }).map(item => item.id) ?? []
           if (room && attemptIds.length) state.pending.push({ key, input, binding: this.binding(input), stop: { roomId: room.id, attemptIds } })
@@ -122,7 +136,7 @@ export class InfoFlowBridge {
   private binding(input: Incoming): Pending['binding'] {
     const privateChat = input.conversation.kind === 'private'
     return { conversation: input.conversation, title: `${input.conversation.provider === 'feishu' ? '飞书' : '如流'} · ${privateChat ? input.message.sender.name : input.conversation.id}`,
-      botIds: privateChat ? [this.config.defaultBot] : this.config.botIds, defaultBot: this.config.defaultBot }
+      botIds: privateChat ? [this.config.defaultBot] : [...new Set([...this.config.botIds, ...this.config.groupBotIds?.(input.conversation.id) ?? []])], defaultBot: this.config.defaultBot }
   }
 
   /** Coalesce feed, timer, and inbound callbacks into one worker.
@@ -154,7 +168,8 @@ export class InfoFlowBridge {
     for (const item of [...this.state.pending].filter(item => item.stop)) {
       if (this.closed) return
       if (item.input.conversation.accountId !== this.config.accountId) continue
-      for (const messageId of item.stop!.attemptIds) await this.bots.stop({ roomId: item.stop!.roomId, messageId })
+      for (const messageId of item.stop!.attemptIds) await this.bots.stop({ roomId: item.stop!.roomId, messageId,
+        ...(this.config.allowDelegation ? { cascade: true } : {}) })
       await this.finish(item, '已处理停止请求，请在 DSH 中查看执行记录。')
     }
     const blocked = new Set<string>()
@@ -162,21 +177,40 @@ export class InfoFlowBridge {
       if (this.closed) return
       if (item.input.conversation.accountId !== this.config.accountId) continue
       if (item.submitted) {
-        const room = this.bots.snapshot().rooms.find(room => room.id === item.submitted!.roomId || room.aliases?.includes(item.submitted!.roomId))
+        const snapshot = this.bots.snapshot()
+        const room = snapshot.rooms.find(room => room.id === item.submitted!.roomId || room.aliases?.includes(item.submitted!.roomId))
         if (!room) throw new Error('Submitted external room is missing')
-        const responses = item.submitted.attemptIds.map(id => room.messages.find(message => message.id === id))
-        if (responses.some(message => !message)) throw new Error('Submitted external response is missing')
-        if (responses.every(message => message!.status !== 'running')) {
+        if (item.submitted.attemptIds.some(id => !room.messages.some(message => message.id === id))) throw new Error('Submitted external response is missing')
+        const responses = responseTree(room, item.submitted.attemptIds)
+        const ready = responses.filter(message => message.status !== 'running' && !item.delivered?.includes(message.id))
+        const announcements = responses.filter(message => message.delegation && message.status === 'running' && !item.announced?.includes(message.id))
+        const finished = responses.every(message => message.status !== 'running')
+        if (ready.length || announcements.length || finished) {
           await this.change(state => {
-            for (const message of responses) {
-              const response = message!
+            const current = state.pending.find(pending => pending.key === item.key)
+            if (!current) return
+            for (const response of responses) {
+              if (announcements.includes(response)) {
+                const parent = room.messages.find(message => message.id === response.replyTo)
+                const name = snapshot.bots.find(bot => bot.id === parent?.botId)?.name ?? parent?.botId ?? '其他 Bot'
+                this.enqueue(state, `${item.key}:accepted:${response.id}`, item.input, `已接单，收到 ${name} 派来的任务，正在处理。`, response.botId ?? this.config.defaultBot)
+              }
+              if (!ready.includes(response)) continue
               const content = response.status === 'complete' ? response.text || '本次执行完成，没有文字回复。'
                 : response.status === 'interrupted' ? '执行已中断，未自动重跑。请部署者在 DSH 中检查执行记录。'
                   : response.status === 'canceled' ? '执行已停止。' : '执行失败，请部署者在 DSH 中检查执行记录。'
               const text = this.config.labelReplies ? `@${response.botId}\n${content}` : content
-              this.enqueue(state, `${item.key}:result:${response.id}`, item.input, text, response.botId ?? this.config.defaultBot)
+              // Only actual child reservations produce a platform mention; prose and blocked handoffs do not.
+              const mentions = item.input.conversation.kind === 'group' ? responses.flatMap(child => {
+                if (!child.delegation || child.replyTo !== response.id || !child.botId) return []
+                const id = this.config.mentionId?.(child.botId)
+                return id ? [{ id, name: snapshot.bots.find(bot => bot.id === child.botId)?.name ?? child.botId }] : []
+              }) : []
+              this.enqueue(state, `${item.key}:result:${response.id}`, item.input, text, response.botId ?? this.config.defaultBot, mentions)
             }
-            state.pending = state.pending.filter(current => current.key !== item.key)
+            current.delivered = [...(current.delivered ?? []), ...ready.map(message => message.id)]
+            current.announced = [...(current.announced ?? []), ...announcements.map(message => message.id)]
+            if (finished) state.pending = state.pending.filter(current => current.key !== item.key)
           })
         }
         continue
@@ -191,7 +225,8 @@ export class InfoFlowBridge {
       if (item.binding.botIds.some(id => !known.includes(id))) { await this.finish(item, '配置的 Bot 不存在，请部署者检查机器人配置。'); continue }
       try {
         const room = await this.bots.ensureExternalRoom(item.binding)
-        const accepted = await this.bots.submitExternalMessage({ roomId: room.id, text: item.input.text, external: item.input.message, sourceAccountId: item.input.conversation.accountId, ...(item.input.targets ? { targets: item.input.targets } : {}) })
+        const accepted = await this.bots.submitExternalMessage({ roomId: room.id, text: item.input.text, external: item.input.message, sourceAccountId: item.input.conversation.accountId,
+          ...(this.config.allowDelegation ? { allowDelegation: true } : {}), ...(item.input.targets ? { targets: item.input.targets } : {}) })
         if (accepted.status === 'rejected') { await this.finish(item, accepted.reason === 'room-full' ? '该聊天的历史容量已满，请部署者调整 DSH Bot 的 maxMessages 配置。' : '消息无法提交，请检查文字和 @Bot 是否属于当前聊天。'); continue }
         if (accepted.status === 'accepted') await this.change((state) => {
           const current = state.pending.find(current => current.key === item.key)
@@ -210,6 +245,17 @@ export class InfoFlowBridge {
   }
 
   private async deliver(): Promise<void> {
+    // Older versions persisted up to 3000 characters. InfoFlow rejects group Markdown
+    // over 2048 (40068), so retrying it unchanged would block every later room reply.
+    const oversized = (delivery: Delivery) => delivery.conversation.accountId === this.config.accountId
+      && delivery.conversation.provider === 'infoflow' && delivery.conversation.kind === 'group' && delivery.text.length > 2048
+    if (this.state.outbox.some(oversized)) await this.change(state => {
+      // Rechunk already-committed content even when the admission capacity is full.
+      // Each replacement is durable before sending, so partial success never replays earlier chunks.
+      state.outbox = state.outbox.flatMap(delivery => !oversized(delivery) ? [delivery]
+        : splitMessage(delivery.text, this.config.chunkSize, 2048).map((text, index) => ({ ...delivery,
+          id: `${delivery.id}:split:${index}`, text, attempts: 0, nextAt: 0, mentions: index === 0 ? delivery.mentions : undefined })))
+    })
     const blockedRecipients = new Set<string>()
     for (const delivery of [...this.state.outbox]) {
       if (this.closed) return
@@ -239,22 +285,23 @@ export class InfoFlowBridge {
     if (this.closed) return
     const room = this.bots.snapshot().rooms.find(room => room.members.some(member => member.sessionId === sessionId))
     if (!room?.external || room.external.provider !== (this.config.provider ?? 'infoflow')) return
-    const shared = room.external.provider === 'feishu' && room.external.kind === 'group'
+    const shared = room.external.kind === 'group'
     if (!shared && room.external.accountId !== this.config.accountId) return
     const member = room.members.find(member => member.sessionId === sessionId)!
-    if (shared && !this.config.botIds.includes(member.botId)) return
     const attempt = room.messages.find(message => message.botId === member.botId && message.status === 'running')
     if (!attempt) return
-    const parent = room.messages.find(message => message.id === attempt.replyTo)
+    const pending = this.state.pending.find(item => item.submitted && responseTree(room, item.submitted.attemptIds).some(message => message.id === attempt.id))
+    if (shared && !pending && !this.config.botIds.includes(member.botId)) return
+    const parent = humanRequest(room, attempt)
     const senderId = parent?.external?.sources?.find(source => source.accountId === this.config.accountId)?.senderId ?? parent?.external?.sender.id
-    const input = this.state.pending.find(item => item.submitted?.attemptIds.includes(attempt.id))?.input
-      ?? (parent?.external && senderId ? { conversation: { ...room.external, accountId: this.config.accountId },
+    const input = pending?.input
+      ?? (!attempt.delegation && parent?.external && senderId ? { conversation: { ...room.external, accountId: this.config.accountId },
         message: { ...parent.external, sender: { ...parent.external.sender, id: senderId } }, text: parent.text, targets: [member.botId] } : undefined)
     if (!input) return
     const key = `${sessionId}:${attempt.id}:${noticeId}`
     await this.change((state) => {
       if (state.notices.includes(key)) return
-      this.enqueue(state, `attention:${key}`, input, `@${member.botId} 请求了人工处理。请部署者在 DSH 对应外部聊天中打开执行会话。`)
+      this.enqueue(state, `attention:${key}`, input, `@${member.botId} 请求了人工处理。请部署者在 DSH 对应外部聊天中打开执行会话。`, member.botId)
       state.notices.push(key)
     })
     void this.wake()

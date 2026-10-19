@@ -22,7 +22,8 @@ const schema: z.ZodType<BotState> = z.object({
     members: z.array(z.object({ botId, sessionId: z.string().transform(SessionId), cursor: z.number().int().nonnegative() })),
     messages: z.array(z.object({ id: messageId, botId: botId.nullable(), text: z.string(),
       replyTo: messageId.nullable(), status: z.enum(['complete', 'running', 'failed', 'canceled', 'interrupted']),
-      error: z.string().nullable(), time: z.number(), external: externalMessage.optional() })),
+      error: z.string().nullable(), time: z.number(), external: externalMessage.optional(), allowDelegation: z.boolean().optional(),
+      delegation: z.object({ rootId: messageId, task: z.string() }).optional() })),
   })),
 })
 /** Additive v1 upgrade: missing external fields mean local data; existing IDs are retained. */
