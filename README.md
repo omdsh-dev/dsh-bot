@@ -22,6 +22,7 @@ One Bot can use Feishu and InfoFlow at the same time. Bot instructions, models a
 - Resume chats after restarting DSH. Chinese and English UI, light and dark themes, and narrow layouts are supported.
 - Bind a Feishu robot by official QR authorization or existing app credentials; receive private messages and group @mentions, and create a Feishu group with selected Bots.
 - Bind an InfoFlow robot through guided credential setup, control private/group access, test messaging, and optionally create an InfoFlow group.
+- For either IM platform, allow specific groups or enable **Allow mentions in all groups containing this robot** per Bot. This option defaults off and does not change private-chat access.
 
 In a connected Feishu group or connected InfoFlow group, a Bot can hand off part of a human request by writing a separate `@handle concrete task` line. The target runs in its own group Session and replies through its own robot. Markdown task lists and semicolon-separated recipients are supported. Concrete fixes can return to an earlier participant, with at most three runs per Bot and twelve handoffs per human request; duplicate tasks are not repeated. Quoted text, code, ordinary mentions and `@all` in Bot replies do not dispatch work; private chats and Web chats retain human-only routing.
 
@@ -38,13 +39,17 @@ Each Feishu group appears once in DSH, with separate native Sessions for its Bot
 
 ## Install or update from npm
 
-Requires **DSH 0.1.5-rc.2 or newer**. Installation no longer pins every DSH peer to one exact release. The plugin checks required interfaces at startup and when attaching an Agent. [compatibility.json](compatibility.json) separates accepted versions and tested revisions from the reproducible build pin in [dsh-version.json](dsh-version.json). These experimental packages use the `next` tag.
+Requires **DSH 0.1.5-rc.2 or newer**. Installation no longer pins every DSH peer to one exact release. The plugin checks required interfaces at startup and when attaching an Agent. [compatibility.json](compatibility.json) separates accepted versions and tested revisions from the reproducible build pin in [dsh-version.json](dsh-version.json).
 
-| Package | Version | Purpose |
+The following versions are published on npm under the experimental `next` tag, verified on **2026-10-19**.
+
+| Package | Published version | Purpose |
 | --- | --- | --- |
 | [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.8.0` | Required base: Web chats and the IM configuration panel |
 | [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.4.0` | Optional Feishu connection and group creation |
 | [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.5.0` | Optional InfoFlow connection; requires enterprise SDK access |
+
+**Specify a version or `@next` when installing.** The examples below pin this release. To install the version currently tagged `next`, use `@zzzpyyy/dsh-bot@next`, `@zzzpyyy/dsh-bot-feishu@next`, or `@zzzpyyy/dsh-bot-infoflow@next`. Installing a bare package name uses `latest`, which still points to older releases as of the verification date above.
 
 Use the same package set above on DSH **0.1.5-rc.2** and **0.2.0-rc.2**. Later DSH versions are admitted without a new plugin release, but acceptance is not a guarantee of compatibility with untested or changed interfaces. Feishu and InfoFlow accept Bot `>=0.8.0 <1.0.0`, so a Bot update no longer forces matching connector releases. See the [compatibility policy and matrix](docs/compatibility.md).
 
@@ -56,6 +61,7 @@ For an existing compatible **DSH CLI Web profile**, use:
 
 ```sh
 dsh plugin --profile web add @zzzpyyy/dsh-bot@0.8.0
+# Optional: Feishu integration
 dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.4.0
 ```
 
@@ -69,7 +75,9 @@ Use the same `DSH_HOME` and profile as your running installation. For upgrades, 
 
 After installation, enable the plugin and open **DSH Bots**. Configure the model through DSH's native settings. Desktop uses the same Bot code as Web and uses the native transport provided by DSH (the 0.1 Desktop pipe or the 0.2 authenticated Web Host). It keeps its own DSH data; existing Web chats are not imported automatically. Do not enable another copy of Bot Mode alongside this bundle.
 
-Package tests exercise Desktop's Host, Web authentication and asset loading, plus both IM companions with deterministic model and transport fixtures. They cover private/group routing, duplicate messages, shared groups and isolation after restart. Published packages contain no test model or fixture. Windows Desktop is not yet verified.
+The published base and Feishu packages passed npm installation and Desktop Host startup checks on both **DSH 0.1.5-rc.2 and 0.2.0-rc.2** on **2026-10-19**. All three registry archives match the local release archives by SHA-512.
+
+Package tests exercise Desktop's Host, Web authentication and asset loading, plus both IM companions with deterministic model and transport fixtures. They cover private/group routing, group handoffs, duplicate messages, shared groups and isolation after restart. Published packages contain no test model or fixture. Windows Desktop is not yet verified.
 
 ## Web quick start (source)
 
@@ -128,7 +136,7 @@ npm start -- --patch /absolute/path/bot-settings.patch.yml
 ## Current limits
 
 - Group replies appear when complete; token streaming, tools, and approvals are in each member's execution Session.
-- Bots inherit DSH's selected model. Per-Bot models, identity editing, automatic handoffs and scheduling are not implemented. Optional companions provide InfoFlow and Feishu text messaging.
+- Bots inherit DSH's selected model. Per-Bot models, identity editing and scheduling are not implemented. Bot-to-Bot handoffs are supported only within connected Feishu or InfoFlow groups; private chats and Web chats require human messages to dispatch work.
 - Use the extensible `standard` preset. Complete-prompt presets such as `minimal` are rejected.
 - A restart marks unfinished public replies interrupted. It does not resend them; inspect the execution Session before retrying uncertain tool work.
 - There is no Bot/chat deletion or large-history pagination yet. Removing and rejoining a member creates a new Session and preserves the public history.
@@ -148,6 +156,7 @@ npm run test:package
 npm run test:feishu-package
 npm run test:infoflow-managed-package
 npm run test:im-isolation-package
+npm run test:im-delegation-package
 ```
 
 Tests run inside the prepared DSH workspace and cover routing, native slots and UI interactions, persistence, stop, and process restart. `pack` creates the compiled archive and checksums in `dist/`; `test:package` unpacks that archive into isolated profiles and checks DSH's compatibility gate, Desktop/Web Host authentication, asset loading and restart continuity. The Desktop Host test does not require Electron or a display. Only tests substitute a deterministic model; no API key is needed. GitHub Actions performs a clean setup/build and the same tests, then retains the archive as a CI artifact. It does not publish to npm. `npm run test:install` verifies both local base and Feishu archives through DSH's shared plugin manager. After publication, `npm run test:registry` checks installation from npm; it requires public registry access and is not part of CI.

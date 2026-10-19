@@ -22,6 +22,7 @@
 - 重启后继续聊天，支持中英文、明暗主题和窄屏布局。
 - 飞书支持官方扫码创建并绑定、绑定已有应用、私聊、群聊 @ 和一键创建包含所选 Bot 的群。
 - 如流支持凭据导入、私聊与群聊准入配置、测试消息，以及可选创建如流群。
+- 两个平台均可按 Bot 配置允许接入的群，或开启「允许机器人所在的所有群 @ 调用」。该开关默认关闭，不改变私聊准入范围。
 
 已接入的飞书群和如流群支持 Bot 派活：Bot 在回复中单独写一行 `@handle 具体任务`，目标 Bot 就会在自己的群聊 Session 中执行，并由自己的机器人回群。支持加粗、表格和同一行多个派活，也允许回派修复；同一条用户请求中每个 Bot 最多执行三次、最多十二次派活，同一任务不重复派发；引用、代码、普通提及和 Bot 回复中的 `@all` 不触发派活。私聊和 Web 聊天仍由用户消息驱动。
 
@@ -38,13 +39,17 @@
 
 ## 从 npm 安装或更新
 
-最低要求 **DSH 0.1.5-rc.2**，不再按每个 DSH 版本精确锁定。正常升级 DSH 后可继续使用同一套插件；启动及创建会话时检查所需接口。已验证版本、允许安装的范围和构建版本分别记录在 [compatibility.json](compatibility.json) 与 [dsh-version.json](dsh-version.json)。实验性包继续使用 `next` 标签。
+最低要求 **DSH 0.1.5-rc.2**，不再按每个 DSH 版本精确锁定。正常升级 DSH 后可继续使用同一套插件；启动及创建会话时检查所需接口。已验证版本、允许安装的范围和构建版本分别记录在 [compatibility.json](compatibility.json) 与 [dsh-version.json](dsh-version.json)。
 
-| 包 | 版本 | 用途 |
+以下版本均已发布到 npm 的实验性 `next` 标签，已于 **2026-10-19** 核验。
+
+| 包 | 已发布版本 | 用途 |
 | --- | --- | --- |
 | [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.8.0` | 必装主包，提供 Web 聊天和 IM 配置面板 |
 | [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.4.0` | 可选，提供飞书连接和建群能力 |
 | [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.5.0` | 可选，提供如流连接；需能获取企业 SDK |
+
+**安装时请指定版本号或 `@next`。** 下方命令固定安装本次版本；要安装当前 `next` 标签对应的版本，可使用 `@zzzpyyy/dsh-bot@next`、`@zzzpyyy/dsh-bot-feishu@next` 或 `@zzzpyyy/dsh-bot-infoflow@next`。只填写包名会使用 `latest`，截至上述核验日期，该标签仍指向旧版。
 
 上面同一套包已覆盖 DSH **0.1.5-rc.2** 与 **0.2.0-rc.2**，无需为它们选择不同的插件版本。更高 DSH 版本不会仅因版本号变化被拒绝，但尚未验证的版本不等于保证可用；如果上游删除或改变核心接口，仍需适配。飞书和如流包接受主包 `>=0.8.0 <1.0.0`，无需随主包的每次更新同步升级。详见[兼容策略与测试](docs/compatibility.md)。
 
@@ -56,6 +61,7 @@
 
 ```sh
 dsh plugin --profile web add @zzzpyyy/dsh-bot@0.8.0
+# 可选：接入飞书
 dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.4.0
 ```
 
@@ -69,7 +75,9 @@ dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.5.0
 
 安装并启用后打开 **DSH Bots**，通过 DSH 原生设置配置模型。桌面端与 Web 复用同一份 Bot 代码，由所在版本的 DSH 提供原生连接（0.1 使用桌面管道，0.2 使用认证 Web Host）。桌面端使用自己的 DSH 数据，现有 Web 聊天不会自动导入。请勿同时启用另一份 Bot Mode。
 
-安装包测试覆盖 Desktop Host、Web 认证和资源加载，以及两个 IM 配套插件的私聊/群聊路由、重复消息、共享群和重启后的会话隔离。测试使用确定性模型和传输夹具，发布包不包含这些测试实现。Windows 桌面端尚未验证。
+已于 **2026-10-19** 验证线上主包和飞书包在 **DSH 0.1.5-rc.2 与 0.2.0-rc.2** 上通过 npm 安装并启动 Desktop Host。三个线上包的 SHA-512 校验值均与本地发布包一致。
+
+安装包测试覆盖 Desktop Host、Web 认证和资源加载，以及两个 IM 配套插件的私聊/群聊路由、群内派活、重复消息、共享群和重启后的会话隔离。测试使用确定性模型和传输夹具，发布包不包含这些测试实现。Windows 桌面端尚未验证。
 
 ## Web 源码安装
 
@@ -128,7 +136,7 @@ npm start -- --patch /absolute/path/bot-settings.patch.yml
 ## 当前限制
 
 - 群聊在回答完成后显示回复；逐字输出、工具和审批位于对应成员的执行 Session。
-- 所有 Bot 继承 DSH 的模型选择，尚不支持每 Bot 单独选模型、编辑身份、自动交接、定时任务。如流和飞书文字接入由独立可选配套插件提供。
+- 所有 Bot 继承 DSH 的模型选择，尚不支持每 Bot 单独选模型、编辑身份、定时任务。Bot 之间的派活仅限已接入的飞书群或如流群；私聊和 Web 聊天仍由用户消息驱动。
 - 使用可扩展的 `standard` preset；`minimal` 等完整提示词 preset 会被拒绝。
 - 重启会把尚未结束的公开回复标为中断，不自动重发。涉及工具执行时，重试前请查看原始 Session。
 - 暂不支持删除 Bot / 聊天和大历史分页。移除成员后重新加入会创建新的 Session，并保留公开历史。
@@ -148,6 +156,7 @@ npm run test:package
 npm run test:feishu-package
 npm run test:infoflow-managed-package
 npm run test:im-isolation-package
+npm run test:im-delegation-package
 ```
 
 测试在准备好的 DSH 工作区中运行，覆盖消息路由、原生 UI 插槽和交互、持久化、停止与进程重启。`pack` 在 `dist/` 中生成编译包与校验和；`test:package` 将该压缩包解压到隔离 profile，验证 DSH 兼容性检查、Desktop / Web Host 认证、资源加载与重启恢复。桌面 Host 测试无需 Electron 或显示器。仅测试使用确定性模拟模型，无需 API Key。GitHub Actions 会从干净环境执行安装、构建和相同测试，并保留安装包作为 CI 附件，不自动发布 npm。`npm run test:install` 通过 DSH 统一插件管理器验证本地主包和飞书包；发布后可单独运行 `npm run test:registry` 验证 npm 线上安装；该检查需要访问公共 registry，不属于 CI。
