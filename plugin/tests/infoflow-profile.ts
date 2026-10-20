@@ -63,9 +63,21 @@ export async function exerciseInfoflow(ctx: Context, requests: GenerateOptions[]
     if (all.status === 'accepted') assert.equal(all.attemptIds.length, 2)
     await settled(groupRoom.id)
     assert.ok(requests.slice(-2).every(request => !JSON.stringify(request.messages).includes('EXTERNAL_ALICE_ONLY')))
+    // DSH-local group messages run real turns but never enter the connector outbox.
+    await service.send({ roomId: groupRoom.id, text: '@critic LOCAL_GROUP_ONLY' })
+    const localGroup = await settled(groupRoom.id) as typeof groupRoom
+    const localMessages = localGroup.messages.slice(-2)
+    assert.ok(localMessages.every(message => message.localOnly === true && message.status === 'complete'), JSON.stringify(localMessages))
+    assert.ok(JSON.stringify(requests.at(-1)!.messages.filter(message => message.role === 'system')).includes('not delivered to the external IM group'))
+    await service.updateBot({ id: critic.id, name: 'Critic 2', instructions: 'PERSONA_CRITIC_EDITED' })
+    await service.send({ roomId: groupRoom.id, text: '@critic after edit' })
+    await settled(groupRoom.id)
+    assert.ok(JSON.stringify(requests.at(-1)!.messages.filter(message => message.role === 'system')).includes('PERSONA_CRITIC_EDITED'), 'edits apply to existing Sessions')
+    await service.updateBot({ id: critic.id, name: 'Critic', instructions: 'PERSONA_CRITIC' })
     await bridge.receive(input('queued-1', 'external persistent reply'))
     await bridge.wake(); await settled(alice.id); await bridge.wake()
     assert.ok(domain.global.get().outbox.some(delivery => delivery.text.includes('fixture answer')))
+    assert.ok(!domain.global.get().outbox.some(delivery => delivery.conversation.kind === 'group'), 'local group replies are never synced')
     await bridge.receive(input('crash-1', 'WAIT_FOR_STOP', 'bob')); await bridge.wake()
     const deadline = Date.now() + 10000
     while (!requests.some(request => request.messages.some(message => JSON.stringify(message).includes('WAIT_FOR_STOP') && JSON.stringify(message).includes('PERSONA_INJECT_bob')))) {

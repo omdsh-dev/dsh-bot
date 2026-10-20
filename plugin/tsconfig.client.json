@@ -24,7 +24,10 @@
     "src/client/feishu-face.ts",
     "src/client/IMPanel.tsx",
     "src/compatibility.ts",
-    "src/client/Icons.tsx"
+    "src/client/Icons.tsx",
+    "src/client/Controls.tsx",
+    "src/client/capability-face.ts",
+    "src/client/VoiceInput.tsx"
   ],
   "references": [
     {

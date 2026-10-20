@@ -1,6 +1,6 @@
 /** Durable text bridge. The Bot owner commits work; this module retries only admission and delivery. */
 import type { BotMode } from '../index.ts'
-import type { BotId, Room } from '../types.ts'
+import type { BotId, Room, FailureView } from '../types.ts'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { conversationKey, splitMessage, type Incoming } from './messages.ts'
 import type { BridgeState, Delivery, Pending, RobotMention } from './domain.ts'
@@ -15,6 +15,8 @@ export interface BridgeConfig {
   labelReplies?: boolean
   /** Only runtimes able to send through the target robot opt into Host handoffs. */
   allowDelegation?: boolean
+  notifyScheduled?: boolean
+  notifyGroup?: (id: string) => boolean
   /** Resolve a committed handoff to this platform's robot identity, captured durably before sending. */
   mentionId?: (botId: BotId) => string | undefined
   /** Configured peers allowed in this group, including groups first seen after startup. */
@@ -120,7 +122,7 @@ export class InfoFlowBridge {
           const shared = conversation.kind === 'group'
           const owned = room ? state.pending.flatMap(item => item.submitted ? responseTree(room, item.submitted.attemptIds).map(message => message.id) : []) : []
           const attemptIds = room?.messages.filter(item => {
-            if (item.status !== 'running' || !item.replyTo || shared && !owned.includes(item.id) && (!item.botId || !this.config.botIds.includes(item.botId))) return false
+            if (item.status !== 'running' || item.localOnly || !item.replyTo || shared && !owned.includes(item.id) && (!item.botId || !this.config.botIds.includes(item.botId))) return false
             const external = humanRequest(room, item)?.external
             const sender = shared && conversation.provider === 'feishu' ? external?.sources?.find(source => source.accountId === this.config.accountId)?.senderId : external?.sender.id
             return mayStop(sender ?? '')
@@ -238,6 +240,7 @@ export class InfoFlowBridge {
       try {
         const room = await this.bots.ensureExternalRoom(item.binding)
         const accepted = await this.bots.submitExternalMessage({ roomId: room.id, text: item.input.text, external: item.input.message, sourceAccountId: item.input.conversation.accountId,
+          ...(item.input.attachments ? { attachments: item.input.attachments } : {}),
           ...(this.config.allowDelegation ? { allowDelegation: true } : {}), ...(item.input.targets ? { targets: item.input.targets } : {}) })
         if (accepted.status === 'rejected') { await this.finish(item, accepted.reason === 'room-full' ? '该聊天的历史容量已满，请部署者调整 DSH Bot 的 maxMessages 配置。' : '消息无法提交，请检查文字和 @Bot 是否属于当前聊天。'); continue }
         if (accepted.status === 'accepted') {
@@ -274,6 +277,7 @@ export class InfoFlowBridge {
   }
 
   private async deliver(): Promise<void> {
+    if (this.config.notifyScheduled) await this.scheduledNotifications()
     // Older versions persisted up to 3000 characters. InfoFlow rejects group Markdown
     // over 2048 (40068), so retrying it unchanged would block every later room reply.
     const oversized = (delivery: Delivery) => delivery.conversation.accountId === this.config.accountId
@@ -310,6 +314,64 @@ export class InfoFlowBridge {
       }
       await this.change((state) => { state.outbox = state.outbox.filter(item => item.id !== delivery.id) })
     }
+  }
+
+  /** Reserve outbound chunks and advance the scan cursor atomically. */
+  private async scheduledNotifications(): Promise<void> {
+    const rooms = this.bots.snapshot().rooms.filter(room => !room.deleted && room.external?.provider === (this.config.provider ?? 'infoflow')
+      && (room.external.kind === 'group' ? this.config.notifyGroup?.(room.external.id) !== false && (this.config.allowAllGroups || this.config.allowGroups.includes(room.external.id))
+        : room.external.accountId === this.config.accountId))
+    await this.change(state => {
+      state.notificationCursors ??= {}
+      for (const room of rooms) {
+        let cursor = state.notificationCursors[room.id] ?? 0
+        for (; cursor < room.messages.length; cursor++) {
+          const response = room.messages[cursor]!
+          if (!response.botId && response.publishExternal && response.notifyBot && this.config.botIds.includes(response.notifyBot)) {
+            this.enqueue(state, `web:${response.id}`, { conversation: { ...room.external!, accountId: this.config.accountId },
+              message: { id: response.id, sender: { id: '', name: 'DSH' } }, text: response.text },
+              `DSH 用户：${response.text}${response.attachments?.length ? '\n（附件请在 DSH 查看）' : ''}`, response.notifyBot)
+          }
+          if (!response.botId || !this.config.botIds.includes(response.botId)) continue
+          const root = humanRequest(room, response)
+          if ((!root?.scheduleId && !root?.publishExternal) || root.localOnly) continue
+          if (response.status === 'running' || response.status === 'queued') break
+          const conversation = { ...room.external!, accountId: this.config.accountId }
+          const sender = [...room.messages].reverse().find(message => message.external)?.external?.sender.id
+          if (conversation.kind === 'private' && !this.config.allowUsers.includes(conversation.provider === 'feishu' ? sender ?? '' : conversation.id)) continue
+          this.enqueue(state, `scheduled:${response.id}`, { conversation, message: { id: root.id, sender: { id: '', name: 'Scheduler' } }, text: root.text },
+            response.status === 'complete' ? response.text || '定时任务已完成。' : `定时任务${response.status}，请在 DSH 查看。`, response.botId)
+        }
+        state.notificationCursors[room.id] = cursor
+      }
+    })
+  }
+
+  failures(queue: string): FailureView[] {
+    return (this.state.failed ?? []).map(item => ({
+      provider: this.config.provider ?? 'infoflow', queue, id: item.delivery?.id ?? item.pending!.key,
+      time: item.time, kind: item.delivery ? 'delivery' : 'admission', reason: item.reason,
+      destination: item.delivery?.conversation.id ?? item.pending!.input.conversation.id,
+      text: item.delivery?.text ?? item.pending!.input.text, attempts: item.delivery?.attempts ?? item.pending?.attempts ?? 0,
+    }))
+  }
+
+  async resolveFailure(id: string, action: 'retry' | 'discard'): Promise<void> {
+    await this.change(state => {
+      const failed = state.failed?.find(item => (item.delivery?.id ?? item.pending?.key) === id)
+      if (!failed) throw new Error('Failed work no longer exists')
+      if (action === 'retry') {
+        if (failed.delivery) {
+          if (state.outbox.length >= this.config.maxOutbox) throw new Error('Outbox is full')
+          state.outbox.push({ ...failed.delivery, attempts: 0, nextAt: 0 })
+        } else if (failed.pending) {
+          if (state.pending.length >= this.config.maxPending) throw new Error('Admission queue is full')
+          state.pending.push({ ...failed.pending, attempts: 0, nextAt: 0 })
+        }
+      }
+      state.failed = state.failed!.filter(item => item !== failed)
+    })
+    void this.wake().catch(() => this.report('Failed work retry could not be reconciled'))
   }
 
   private retryAt(attempts: number): number {

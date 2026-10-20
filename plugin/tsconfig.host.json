@@ -27,7 +27,10 @@
     "src/feishu/sdk.ts",
     "src/external-rooms.ts",
     "src/compatibility.ts",
-    "src/external-errors.ts"
+    "src/external-errors.ts",
+    "src/capabilities.ts",
+    "src/media.ts",
+    "src/infoflow/media.ts"
   ],
   "references": [
     {

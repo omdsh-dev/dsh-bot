@@ -20,7 +20,26 @@ export interface ExternalSendRequest extends SendRequest { external: ExternalMes
 export type ExternalSendResult = { status: 'busy' } | { status: 'rejected'; reason: 'room-full' | 'invalid-input' }
   | { status: 'accepted'; messageId: ChatMessageId; attemptIds: ChatMessageId[] }
 /** Reusable Bot identity; each membership owns a separate Session. */
-export interface Bot { id: BotId; name: string; instructions: string; preset: string }
+export interface Bot { id: BotId; name: string; instructions: string; preset: string; archived?: boolean | undefined; policy?: BotPolicy | undefined }
+/** Optional restrictions only narrow the deployment's existing permissions. */
+export interface BotPolicy {
+  provider?: string | undefined; model?: string | undefined
+  fileMode?: 'inherit' | 'read-only' | 'workspace-write' | undefined
+  toolMode?: 'inherit' | 'none' | 'allow' | undefined
+  tools?: string[] | undefined
+  /** Price per million tokens, in the budget's configured currency. */
+  inputPrice?: number | undefined; outputPrice?: number | undefined
+}
+/** Native immutable attachment reference; binary bytes never enter the chat snapshot. */
+export interface ChatAttachment {
+  type: 'image' | 'file'
+  attachment: { attachmentId: string; name: string; bytes: number; mediaType?: string | undefined; width?: number | undefined; height?: number | undefined }
+  transcript?: string | undefined
+}
+export interface UploadRequest { name: string; mediaType: string; base64: string; transcribe?: boolean }
+export interface Usage { input: number; output: number; cost: number }
+export interface Budget { tokenLimit: number; costLimit: number; currency: string; used: Usage; since: number }
+export interface ConfigureBudget { tokenLimit: number; costLimit: number; currency: string; reset?: boolean }
 /** One Bot's persistent context and consumed public-history position. */
 export interface Member { botId: BotId; sessionId: SessionId; cursor: number }
 /** A public user message or one Bot's response attempt. */
@@ -29,7 +48,7 @@ export interface ChatMessage {
   botId: BotId | null
   text: string
   replyTo: ChatMessageId | null
-  status: 'complete' | 'running' | 'failed' | 'canceled' | 'interrupted'
+  status: 'complete' | 'queued' | 'running' | 'failed' | 'canceled' | 'interrupted'
   error: string | null
   time: number
   external?: ExternalMessage | undefined
@@ -37,6 +56,16 @@ export interface ChatMessage {
   allowDelegation?: boolean | undefined
   /** Child reply belongs to its Bot parent and retains the original human authority. */
   delegation?: { rootId: ChatMessageId; task: string } | undefined
+  /** Sent from DSH into an external group; neither the request nor its replies reach the platform. */
+  localOnly?: boolean | undefined
+  attachments?: ChatAttachment[] | undefined
+  usage?: Usage | undefined
+  /** Transient projection, never persisted with token-level updates. */
+  progress?: { phase: string; tools: string[]; approvalId?: string | undefined; reason?: string | undefined } | undefined
+  /** Explicitly configured scheduler source, used for auditing and notification idempotency. */
+  scheduleId?: string | undefined
+  publishExternal?: boolean | undefined
+  notifyBot?: BotId | undefined
 }
 /** Canonical DM or explicitly composed group. */
 export interface Room {
@@ -49,23 +78,50 @@ export interface Room {
   external?: ExternalConversation | undefined
   /** Previous room IDs retained for queued replies and saved selections after a merge. */
   aliases?: RoomId[] | undefined
+  archived?: boolean | undefined
+  /** Tombstones retain external receipts to prevent replay after deletion. */
+  deleted?: boolean | undefined
+  messageCount?: number | undefined
 }
 /** Atomic persisted state; also the detached Client baseline. */
 export interface BotState {
   bots: Bot[]; rooms: Room[]
   /** Profile-wide UI preference. Missing in older data; existing InfoFlow use keeps its entry visible. */
   infoflowVisible?: boolean | undefined
+  budget?: Budget | undefined
+  retiredBotIds?: BotId[] | undefined
+  schedules?: Schedule[] | undefined
 }
+export interface Schedule {
+  id: string; roomId: RoomId; name: string; text: string; targets: BotId[]
+  nextAt: number; intervalMinutes: number; enabled: boolean
+  allowDelegation: boolean; notify: boolean
+  lastAt?: number | undefined; lastMessageId?: ChatMessageId | undefined; error?: string | undefined
+}
+export interface SaveScheduleRequest {
+  id?: string; roomId: RoomId; name: string; text: string; targets: BotId[]
+  nextAt: number; intervalMinutes: number; enabled: boolean; allowDelegation: boolean; notify: boolean
+}
+export interface HistoryRequest { roomId: RoomId; before?: ChatMessageId; limit?: number; query?: string }
+export interface HistoryPage { messages: ChatMessage[]; before: ChatMessageId | null; total: number }
+export interface LifecycleRequest { kind: 'bot' | 'room'; id: string; action: 'archive' | 'restore' | 'delete' }
+export interface FailureView {
+  provider: 'infoflow' | 'feishu'; queue: string; id: string; time: number
+  kind: 'admission' | 'delivery'; reason: string; destination: string; text: string; attempts: number
+}
+export interface FailureAction { provider: 'infoflow' | 'feishu'; queue: string; id: string; action: 'retry' | 'discard' }
 /** Reconnecting feed replaces the complete small-domain snapshot. */
 export type BotFrame = { type: 'baseline'; value: BotState } | { type: 'changed'; value: BotState }
 /** Create one Bot and its canonical direct chat atomically. */
 export interface CreateBotRequest { id: string; name: string; instructions: string; preset?: string }
+/** Edit a Bot's display identity. The handle and preset stay fixed for existing Sessions. */
+export interface UpdateBotRequest { id: BotId; name: string; instructions: string; policy?: BotPolicy }
 /** Create a group from existing Bots. */
 export interface CreateGroupRequest { title: string; botIds: BotId[]; defaultBot: BotId }
 /** Edit group membership while all its response attempts are settled. */
 export interface MembersRequest { roomId: RoomId; botIds: BotId[]; defaultBot: BotId }
 /** A public prompt with optional explicit recipients or reply routing. */
-export interface SendRequest { roomId: RoomId; text: string; targets?: BotId[]; replyTo?: ChatMessageId }
+export interface SendRequest { roomId: RoomId; text: string; targets?: BotId[]; replyTo?: ChatMessageId; allowDelegation?: boolean; attachments?: ChatAttachment[]; notify?: boolean }
 /** A stop/retry command addresses one response attempt. */
 export interface AttemptRequest { roomId: RoomId; messageId: ChatMessageId }
 /** External /stop cancels the original request's complete delegation tree. */

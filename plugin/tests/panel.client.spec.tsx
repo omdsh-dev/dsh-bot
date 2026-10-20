@@ -15,6 +15,7 @@ import { createBotViewStore } from '../src/client/view-store.ts'
 import { registerPanel } from '../src/client/registration.ts'
 import { en, zh } from '../src/client/locales.ts'
 import type { FeishuState } from '../src/feishu/types.ts'
+import type { CapabilityFace } from '../src/client/capability-face.ts'
 
 const runtimes = new Set<SlotTestRuntime>()
 afterEach(async () => { for (const runtime of runtimes) await runtime.dispose(); runtimes.clear(); cleanup(); vi.restoreAllMocks() })
@@ -31,7 +32,7 @@ async function bench(overrides: Partial<PanelFace> = {}, infoflowVisible = false
   const rooms: Room[] = [room, ...bots.map(bot => ({ id: `dm-${bot.id}` as RoomId, title: bot.name, kind: 'dm' as const, members: [members.find(member => member.botId === bot.id)!], defaultBot: bot.id, messages: [] }))]
   const model = new BotModel(); model.replace({ bots, rooms, infoflowVisible })
   const unused = async (): Promise<never> => { throw new Error('unexpected command') }
-  const face: PanelFace = { hooks: { bots: model }, createBot: unused, createGroup: unused, setMembers: vi.fn(async () => room),
+  const face: PanelFace = { hooks: { bots: model }, createBot: unused, updateBot: unused, createGroup: unused, setMembers: vi.fn(async () => room),
     setInfoflowVisible: vi.fn(async visible => { model.replace({ ...model.getSnapshot().value, infoflowVisible: visible }); return visible }),
     send: vi.fn(async () => {}), stop: unused, retry: unused, openSession: vi.fn(), toggleSidebar: vi.fn(), ...overrides }
   const locale = new LocaleRuntime(runtime.ctx); locale.setLocale('en')
@@ -49,6 +50,67 @@ async function bench(overrides: Partial<PanelFace> = {}, infoflowVisible = false
   runtime.renderRoot()
   return { face, model, room, rooms, bots }
 }
+
+it('keeps the composer available during execution and sends an explicit web delegation choice', async () => {
+  const unused = vi.fn(async () => undefined)
+  const capabilities = { openDirect: unused, history: unused, exportChat: unused, lifecycle: unused, configureBudget: unused,
+    upload: unused, decideApproval: unused, saveSchedule: unused, deleteSchedule: unused, failures: unused, resolveFailure: unused } as unknown as CapabilityFace
+  const b = await bench({ capabilities })
+  b.room.messages[1]!.status = 'running'
+  b.model.replace({ bots: b.bots, rooms: b.rooms })
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'next task' } })
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Allow Bot handoffs in this group' }))
+  expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false)
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+  await waitFor(() => expect(b.face.send).toHaveBeenCalledWith({ roomId: b.room.id, text: 'next task', allowDelegation: true }))
+})
+
+it('searches older server history and saves an explicit budget from the controls panel', async () => {
+  const unused = vi.fn(async () => undefined), history = vi.fn(async () => ({ messages: [], before: null, total: 0 }))
+  const configureBudget = vi.fn(async () => undefined)
+  const capabilities = { openDirect: unused, history, exportChat: unused, lifecycle: unused, configureBudget,
+    upload: unused, decideApproval: unused, saveSchedule: unused, deleteSchedule: unused, failures: unused, resolveFailure: unused } as unknown as CapabilityFace
+  const b = await bench({ capabilities })
+  fireEvent.click(screen.getByRole('button', { name: 'Chat & execution controls' }))
+  fireEvent.change(screen.getByRole('textbox', { name: 'Search message text' }), { target: { value: 'needle' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Search', exact: true }))
+  await waitFor(() => expect(history).toHaveBeenCalledWith({ roomId: b.room.id, query: 'needle', limit: 50 }))
+  fireEvent.click(screen.getByRole('button', { name: 'Budget', exact: true }))
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Total token limit (0 unlimited)' }), { target: { value: '50000' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save budget' }))
+  await waitFor(() => expect(configureBudget).toHaveBeenCalledWith({ tokenLimit: 50000, costLimit: 0, currency: 'USD' }))
+})
+
+it('preserves unsaved model settings when a fresh live snapshot arrives', async () => {
+  const unused = vi.fn(async () => undefined)
+  const capabilities = { openDirect: unused, history: unused, exportChat: unused, lifecycle: unused, configureBudget: unused,
+    upload: unused, decideApproval: unused, saveSchedule: unused, deleteSchedule: unused, failures: unused, resolveFailure: unused } as unknown as CapabilityFace
+  const b = await bench({ capabilities })
+  fireEvent.click(screen.getByRole('button', { name: 'Chat & execution controls' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Model & tools' }))
+  fireEvent.change(screen.getByRole('textbox', { name: 'Model ID' }), { target: { value: 'unsaved-model' } })
+  b.model.replace(structuredClone({ bots: b.bots, rooms: b.rooms }))
+  await waitFor(() => expect((screen.getByRole('textbox', { name: 'Model ID' }) as HTMLInputElement).value).toBe('unsaved-model'))
+})
+
+it('does not attach a late upload to a different chat after navigation', async () => {
+  const unused = vi.fn(async () => undefined)
+  let finish!: (value: unknown) => void
+  const upload = vi.fn(() => new Promise(resolve => { finish = resolve }))
+  const capabilities = { openDirect: unused, history: unused, exportChat: unused, lifecycle: unused, configureBudget: unused,
+    upload, decideApproval: unused, saveSchedule: unused, deleteSchedule: unused, failures: unused, resolveFailure: unused } as unknown as CapabilityFace
+  const b = await bench({ capabilities })
+  fireEvent.change(screen.getByLabelText(en.attach), { target: { files: [new File(['hello'], 'private-notes.txt', { type: 'text/plain' })] } })
+  await waitFor(() => expect(upload).toHaveBeenCalledOnce())
+  const roster = screen.getByRole('complementary', { name: en.chats })
+  fireEvent.click(within(roster).getByRole('button', { name: /Nova\s*@nova/ }))
+  finish({ kind: 'file', attachment: { attachmentId: 'sha256:test', name: 'private-notes.txt', bytes: 5, mediaType: 'text/plain' } })
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' }).hasAttribute('disabled')).toBe(false))
+  expect(screen.queryByRole('button', { name: /private-notes/ })).toBeNull()
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'another chat' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+  await waitFor(() => expect(b.face.send).toHaveBeenCalledWith({ roomId: 'dm-nova', text: 'another chat' }))
+})
 
 it('renders named speakers and Markdown without repeating the human prompt as a Bot quote', async () => {
   await bench()
@@ -179,9 +241,9 @@ it('opens member responsibilities and the original Session from chat info', asyn
   await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
 })
 
-it('labels external speakers and keeps InfoFlow rooms read-only while retaining execution access', async () => {
+it('labels external speakers and keeps external private chats read-only while retaining execution access', async () => {
   const { model, room, bots, face } = await bench()
-  model.replace({ bots, rooms: [{ ...room, external: { provider: 'infoflow', accountId: 'app', kind: 'group', id: '123' },
+  model.replace({ bots, rooms: [{ ...room, kind: 'dm', members: room.members.slice(0, 1), external: { provider: 'infoflow', accountId: 'app', kind: 'private', id: 'alice' },
     messages: room.messages.map(message => message.botId ? message : { ...message, external: { id: 'wire-1', sender: { id: 'alice', name: 'Alice' } } }) }] })
   await waitFor(() => { expect(screen.getByRole('article', { name: 'Alice (alice)' })).toBeTruthy() })
   expect(screen.getByText(en.externalReadOnly)).toBeTruthy()
@@ -192,6 +254,41 @@ it('labels external speakers and keeps InfoFlow rooms read-only while retaining 
   expect(face.openSession).toHaveBeenCalledWith('sage-group')
 })
 
+it('lets external groups chat in DSH with a not-synced notice, and marks local messages', async () => {
+  const { model, room, bots, face } = await bench()
+  for (const provider of ['infoflow', 'feishu'] as const) {
+    model.replace({ bots, rooms: [{ ...room, title: provider, external: { provider, accountId: 'group:123', kind: 'group', id: '123' },
+      messages: [{ ...room.messages[0]!, external: { id: 'wire-1', sender: { id: 'alice', name: 'Alice' } } },
+        { ...room.messages[1]!, id: 'local' as ChatMessageId, text: 'Local answer', localOnly: true }] }] })
+    const hint = en[provider === 'feishu' ? 'fsLocalHint' : 'ifLocalHint']
+    await waitFor(() => { expect(screen.getByRole('note').textContent).toBe(hint) })
+    expect(within(screen.getByRole('article', { name: 'Sage' })).getByText(en.localOnly)).toBeTruthy()
+    expect(within(screen.getByRole('article', { name: 'Alice (alice)' })).queryByText(en.localOnly)).toBeNull()
+    expect(screen.queryByRole('button', { name: en.settings })).toBeNull()
+  }
+  const input = screen.getByRole('textbox', { name: en.message })
+  fireEvent.change(input, { target: { value: '@nova local only' } })
+  fireEvent.click(screen.getByRole('button', { name: en.send }))
+  await waitFor(() => { expect(face.send).toHaveBeenCalledWith({ roomId: 'studio', text: '@nova local only' }) })
+})
+
+it('edits a Bot identity from chat info without changing its handle or preset', async () => {
+  const updateBot = vi.fn(async (request: { id: BotId; name: string; instructions: string }) => ({ ...request, preset: 'standard' }))
+  await bench({ updateBot })
+  fireEvent.click(screen.getByRole('button', { name: en.chatInfo }))
+  const info = screen.getByRole('dialog', { name: en.chatInfo })
+  const nova = within(info).getByText('Review assumptions.').closest('section')!
+  fireEvent.click(within(nova).getByRole('button', { name: en.editBot }))
+  const dialog = await screen.findByRole('dialog', { name: en.editBot })
+  const handle = within(dialog).getByRole<HTMLInputElement>('textbox', { name: en.handle })
+  expect(handle.value).toBe('nova')
+  expect(handle.disabled).toBe(true)
+  fireEvent.change(within(dialog).getByRole('textbox', { name: en.name }), { target: { value: 'Nova 2' } })
+  fireEvent.change(within(dialog).getByRole('textbox', { name: en.instructions }), { target: { value: 'Challenge plans.' } })
+  fireEvent.click(within(dialog).getByRole('button', { name: en.save }))
+  await waitFor(() => { expect(updateBot).toHaveBeenCalledWith({ id: 'nova', name: 'Nova 2', instructions: 'Challenge plans.' }) })
+  await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
+})
 
 it('hides InfoFlow and its group option by default, and remembers explicit visibility across panel navigation', async () => {
   const infoflow = { snapshot: vi.fn(async () => ({ available: false, bindings: [], groups: [] })),

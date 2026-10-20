@@ -1,9 +1,9 @@
 /** Decode the SDK's external wire payloads without coercing unsafe numeric IDs. */
 import { z } from 'zod'
-import type { BotId, ExternalConversation, ExternalMessage } from '../types.ts'
+import type { BotId, ExternalConversation, ExternalMessage, ChatAttachment } from '../types.ts'
 
 /** Normalized text event; the SDK connection supplies the trusted account identity. */
-export interface Incoming { conversation: ExternalConversation; message: ExternalMessage; text: string; targets?: BotId[] | undefined }
+export interface Incoming { conversation: ExternalConversation; message: ExternalMessage; text: string; targets?: BotId[] | undefined; attachments?: ChatAttachment[] | undefined }
 const record = z.record(z.string(), z.unknown())
 function object(value: unknown): Record<string, unknown> { return record.safeParse(value).data ?? {} }
 function id(value: unknown): string | undefined {
@@ -21,17 +21,18 @@ function text(value: unknown): string { return typeof value === 'string' ? value
  * @param robotIds - other bound robot identities, including disabled bindings.
  * @returns a text message or null for irrelevant/unsupported events.
  */
-export function decodeMessage(event: string, value: unknown, accountId: string, robotId: string, robotIds: string[] = []): Incoming | null {
+export function decodeMessage(event: string, value: unknown, accountId: string, robotId: string, robotIds: string[] = []): (Incoming & { hasMedia?: boolean }) | null {
   const raw = object(object(object(value).data).raw)
-  if (event === 'private.text' || event === 'private.markdown') {
+  if (['private.text', 'private.markdown', 'private.image', 'private.file', 'private.voice'].includes(event)) {
     const sender = id(raw.FromUserId ?? raw.fromUserId)
     const receipt = id(raw.MsgId ?? raw.msgId)
     const content = text(raw.Content ?? raw.content ?? raw.Text ?? raw.text).trim()
-    if (!sender || sender === robotId || robotIds.includes(sender) || !receipt || !content) return null
+    const hasMedia = ['private.image', 'private.file', 'private.voice'].includes(event)
+    if (!sender || sender === robotId || robotIds.includes(sender) || !receipt || !content && !hasMedia) return null
     return { conversation: { provider: 'infoflow', accountId, kind: 'private', id: sender },
-      message: { id: receipt, sender: { id: sender, name: sender } }, text: content }
+      message: { id: receipt, sender: { id: sender, name: sender } }, text: hasMedia ? '[附件]' : content, ...(hasMedia ? { hasMedia } : {}) }
   }
-  if (!['group.text', 'group.markdown', 'group.mixed'].includes(event)) return null
+  if (!['group.text', 'group.markdown', 'group.mixed', 'group.image', 'group.file', 'group.voice'].includes(event)) return null
   if (raw.eventtype !== undefined && raw.eventtype !== 'MESSAGE_RECEIVE') return null
   const group = id(raw.groupid ?? raw.groupId)
   const message = object(raw.message)
@@ -49,9 +50,11 @@ export function decodeMessage(event: string, value: unknown, accountId: string, 
     if (type === 'LINK') return [text(block.label ?? block.url ?? block.href)]
     return []
   }).join('\n').trim()
-  if (!content) return null
+  const hasMedia = blocks.some(block => ['IMAGE', 'FILE', 'VOICE'].includes(text(block.type).toUpperCase()))
+    || ['group.image', 'group.file', 'group.voice'].includes(event)
+  if (!content && !hasMedia) return null
   return { conversation: { provider: 'infoflow', accountId, kind: 'group', id: group },
-    message: { id: receipt, sender: { id: sender, name: text(header.fromusername) || sender } }, text: content }
+    message: { id: receipt, sender: { id: sender, name: text(header.fromusername) || sender } }, text: content || '[附件]', ...(hasMedia ? { hasMedia } : {}) }
 }
 
 /** Unambiguous key for receipts and per-conversation ordering.

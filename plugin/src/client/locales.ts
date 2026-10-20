@@ -1,5 +1,8 @@
 /** All Bot Mode product copy, owned by the plugin. */
 export const zh = {
+  syncMessage: '同步本条文字与 Bot 回复到群', syncHint: '本条文字和 Bot 回复将同步到 IM 群；附件仅在 DSH 中可见。', recordVoice: '录制语音', stopRecording: '停止并转写', queued: '排队中', showArchived: '显示归档聊天', capabilities: '聊天与执行管理', loadEarlier: '加载更早消息',
+  allowOnce: '允许一次', reject: '拒绝', allowDelegation: '允许 Bot 在群内派活', attach: '图片 / 文件 / 语音',
+  attachmentLimit: '每条消息最多 8 个附件、总计 20 MiB', queueHint: '正在执行，新消息将排队',
   imTitle: 'IM 接入', imConfiguration: '连接配置', imPlatforms: 'IM 平台',
   imSubtitle: '统一管理各平台的机器人绑定、连接状态和群聊接入。',
   imAdvanced: '高级设置', imShowInfoflow: '显示如流接入（内部用户）',
@@ -43,6 +46,7 @@ export const zh = {
   fsGroupHistory: '查看对话记录', fsGroupResume: '继续完成', fsGroupPermission: '一键建群需要建群应用的 im:chat:create 权限。', fsGroupAuthorize: '开通建群权限',
   fsPermissionHint: "以飞书授权页实际展示的权限为准。启用前确认应用已发布，并通过长连接订阅消息接收事件；平台或企业可能要求管理员审批。已有应用请先停用其他接收进程。",
   fsExternalHelp: "消息来自飞书，请回到飞书聊天继续对话。这里可以查看记录、停止响应和打开执行会话。",
+  fsLocalHint: '在 DSH 中发送的消息及 Bot 的回复只保存在 DSH，不会同步到飞书群。飞书群里的消息仍会显示在这里。',
 
   ifSetupTitle: "还没有如流机器人？三步完成接入",
   ifPlatform: "打开如流开放平台",
@@ -108,6 +112,9 @@ export const zh = {
   ifHumanMembers: "邀请成员（账号前缀，逗号分隔，可留空）",
   ifGroupRetryHint: "此请求已提交。重试只恢复同一次建群；结果不明时请先查看如流。",
 
+  ifLocalHint: '在 DSH 中发送的消息及 Bot 的回复只保存在 DSH，不会同步到如流群。如流群里的消息仍会显示在这里。',
+  localOnly: '仅 DSH',
+  editBot: '编辑 Bot', editHelp: '修改显示名称和身份职责，下次回复时生效。已有会话和聊天记录保留。', editLocked: '已有会话绑定此预设，创建后不可修改。',
   infoflow: '如流', externalReadOnly: '请在如流中发送消息。这里可以查看记录、停止响应和打开执行会话。', externalHistory: '来自如流的独立聊天，由该 DSH 实例的部署者管理。',
   workspace: '你的 AI 搭档', filterChats: '筛选聊天', allChats: '全部', bots: 'Bot', botLabel: 'BOT', startGroup: '发起群聊',
   chatInfo: '聊天信息', defaultResponder: '默认回复', noDescription: '还没有填写职责。', quickMention: '邀请发言',
@@ -138,6 +145,9 @@ export const zh = {
 export type BotKey = keyof typeof zh
 /** Complete English counterpart. */
 export const en = {
+  syncMessage: 'Sync this text and Bot replies to the group', syncHint: 'This text and Bot replies will be sent to the IM group. Attachments remain in DSH.', recordVoice: 'Record voice', stopRecording: 'Stop and transcribe', queued: 'Queued', showArchived: 'Show archived chats', capabilities: 'Chat & execution controls', loadEarlier: 'Load earlier messages',
+  allowOnce: 'Allow once', reject: 'Reject', allowDelegation: 'Allow Bot handoffs in this group', attach: 'Images / files / audio',
+  attachmentLimit: 'At most 8 attachments and 20 MiB per message', queueHint: 'Running; new messages will be queued',
   imTitle: 'IM connections', imConfiguration: 'Connection settings', imPlatforms: 'IM platforms',
   imSubtitle: 'Manage robot bindings, connections and group access across platforms.',
   imAdvanced: 'Advanced settings', imShowInfoflow: 'Show InfoFlow integration (internal users)',
@@ -181,6 +191,7 @@ export const en = {
   fsGroupHistory: 'View history', fsGroupResume: 'Continue setup', fsGroupPermission: 'Group creation requires im:chat:create on the creating app.', fsGroupAuthorize: 'Enable group permission',
   fsPermissionHint: "Review the actual permissions on Feishu's consent page. Before enabling, publish the app and subscribe to message events through a long connection. Tenant admin approval may be required. Stop other receivers for the same app.",
   fsExternalHelp: "Messages come from Feishu. Continue there; view history, stop responses and open execution sessions here.",
+  fsLocalHint: 'Messages sent here and their Bot replies stay in DSH and are not synced to the Feishu group. Messages from the Feishu group still appear here.',
 
   ifSetupTitle: "New to InfoFlow? Connect in three steps",
   ifPlatform: "Open the InfoFlow platform",
@@ -246,6 +257,9 @@ export const en = {
   ifHumanMembers: "Invite members (comma-separated account prefixes, optional)",
   ifGroupRetryHint: "This request has been submitted. Retry resumes the same creation; check InfoFlow first if the outcome is unknown.",
 
+  ifLocalHint: 'Messages sent here and their Bot replies stay in DSH and are not synced to the InfoFlow group. Messages from the InfoFlow group still appear here.',
+  localOnly: 'DSH only',
+  editBot: 'Edit Bot', editHelp: 'Change the display name and responsibilities. Changes apply from the next reply; existing sessions and history are kept.', editLocked: 'Existing sessions are bound to this preset; it cannot change after creation.',
   infoflow: 'InfoFlow', externalReadOnly: 'Send messages in InfoFlow. View history, stop responses, or open execution sessions here.', externalHistory: 'An external InfoFlow conversation managed by this DSH deployment.',
   workspace: 'Your AI teammates', filterChats: 'Filter chats', allChats: 'All', bots: 'Bots', botLabel: 'BOT', startGroup: 'Start a group chat',
   chatInfo: 'Chat info', defaultResponder: 'Default', noDescription: 'No responsibilities added yet.', quickMention: 'Bring in',

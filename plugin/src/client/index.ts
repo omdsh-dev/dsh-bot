@@ -52,6 +52,19 @@ function install(ctx: Context): void {
   control.start()
   ctx.effect(() => () => control.dispose(), 'bot-mode: state stream')
   const face: PanelFace = {
+    capabilities: {
+      openDirect: botId => value(ctx.remote.bots.openDirect(botId)),
+      history: request => value(ctx.remote.bots.history(request)),
+      exportChat: request => value(ctx.remote.bots.exportChat(request)),
+      lifecycle: request => value(ctx.remote.bots.lifecycle(request)),
+      configureBudget: request => value(ctx.remote.bots.configureBudget(request)),
+      upload: request => value(ctx.remote.bots.upload(request)),
+      decideApproval: request => value(ctx.remote.bots.decideApproval(request)),
+      saveSchedule: request => value(ctx.remote.bots.saveSchedule(request)),
+      deleteSchedule: id => value(ctx.remote.bots.deleteSchedule(id)),
+      failures: () => value(ctx.remote.bots.failures()),
+      resolveFailure: request => value(ctx.remote.bots.resolveFailure(request)),
+    },
     feishu: {
       createGroup: request => value(ctx.remote.bots.createFeishuGroup(request)),
       resumeGroup: requestId => value(ctx.remote.bots.resumeFeishuGroup(requestId)),
@@ -74,6 +87,7 @@ function install(ctx: Context): void {
     hooks: { bots: model }, toggleSidebar: () => { ctx.layout.toggleSidebar() },
     setInfoflowVisible: visible => value(ctx.remote.bots.setInfoflowVisible(visible)),
     createBot: request => value(ctx.remote.bots.createBot(request)),
+    updateBot: request => value(ctx.remote.bots.updateBot(request)),
     createGroup: request => value(ctx.remote.bots.createGroup(request)), setMembers: request => value(ctx.remote.bots.setMembers(request)),
     send: request => value(ctx.remote.bots.send(request)), stop: request => value(ctx.remote.bots.stop(request)),
     retry: request => value(ctx.remote.bots.retry(request)), openSession: (id) => { ctx.uiWorkspace.openSession(id) },

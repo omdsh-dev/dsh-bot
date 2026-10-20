@@ -1,5 +1,18 @@
 # Release notes
 
+## 0.9.0 — unreleased
+
+Bot `0.9.0`, Feishu `0.5.0`, InfoFlow `0.6.0`; the new companions require Bot `>=0.9.0 <1.0.0` for queue recovery and media ingress.
+
+- Add Bot editing, archive/restore/delete, paginated history, full-text search and Markdown/JSON export. Identity edits apply to existing Sessions from the next reply; handles and presets remain fixed.
+- Queue Web prompts durably during execution. Enable bounded Web group handoffs and optional IM synchronization per message.
+- Add per-Bot model, tool allowlist and native file-sandbox restrictions; persist reported token usage and estimated spending budgets.
+- Show live text, tool progress and one-shot approvals in the Bot panel. Keep token updates out of durable snapshots.
+- Accept native image/file attachments, microphone recordings and audio transcription; connect Feishu and InfoFlow media input.
+- Inspect, retry or discard retained admission/delivery failures individually without replaying accepted model work.
+- Add persistent one-shot/recurring tasks, pause/resume/delete, missed-interval coalescing, and opt-in IM result notifications.
+- See [capability guide](docs/capabilities.md) for setup, limits and recovery semantics.
+
 ## 0.8.1 — 2026-10-20
 
 Bot `0.8.1`, Feishu `0.4.1`, and InfoFlow `0.5.1`, released under the experimental `next` tag. Upgrade the base and installed companions together to receive the execution, queue and SDK fixes.

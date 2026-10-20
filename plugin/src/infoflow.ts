@@ -57,8 +57,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   let transport: InfoFlowTransport | undefined
   let feed: Promise<void> | undefined
   let timer: ReturnType<typeof setInterval> | undefined
+  let detachQueue = () => {}
   ctx.effect(() => async () => {
     abort.abort()
+    detachQueue()
     if (timer) clearInterval(timer)
     await transport?.close()
     await bridge?.close()
@@ -66,11 +68,15 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     await domain.close()
   }, 'infoflow: disconnect, drain handlers and close durable queues')
   const report = (message: string) => { ctx.logger.warn(message) }
-  const connection = new InfoFlowTransport(sdk, { ...config, appKey: key.value, appSecret: secret.value }, input => bridge!.receive(input), report)
+  const connection = new InfoFlowTransport(sdk, { ...config, appKey: key.value, appSecret: secret.value,
+    upload: request => ctx.botMode.upload(request),
+    allowMedia: input => input.conversation.kind === 'private' ? config.allowUsers.includes(input.message.sender.id) : config.allowAllGroups === true || config.allowGroups.includes(input.conversation.id),
+  }, input => bridge!.receive(input), report)
   transport = connection
   const owner = new InfoFlowBridge(ctx.botMode, domain.global, connection,
-    { ...config, botIds: config.botIds.map(brandString<BotId>), defaultBot: brandString<BotId>(config.defaultBot), labelReplies: config.botIds.length > 1 }, report)
+    { ...config, notifyScheduled: true, botIds: config.botIds.map(brandString<BotId>), defaultBot: brandString<BotId>(config.defaultBot), labelReplies: config.botIds.length > 1 }, report)
   bridge = owner
+  detachQueue = ctx.botMode.attachQueue('infoflow', 'legacy', owner)
   ctx.on('session/event', (session, event) => {
     if (event.type === 'approval/asked') void owner.attention(session.id, `approval:${event.data.id}`).catch(() => { report('InfoFlow approval notice could not be persisted') })
   })

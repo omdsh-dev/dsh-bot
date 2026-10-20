@@ -54,18 +54,19 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       let bridge: InfoFlowBridge | undefined, transport: FeishuTransport | undefined
       try {
         transport = new FeishuTransport(loadSdk(config.endpointTimeoutMs), { ...binding, appSecret, timeoutMs: config.endpointTimeoutMs }, input => bridge!.receive({ ...input, targets: [binding.botId] }),
-          status => { manager.connection(binding.botId, status, status === 'error' ? '长连接异常，请检查事件订阅、应用发布状态和网络后重新启用' : null) }, report)
+          status => { manager.connection(binding.botId, status, status === 'error' ? '长连接异常，请检查事件订阅、应用发布状态和网络后重新启用' : null) }, report, request => ctx.botMode.upload(request))
         bridge = new InfoFlowBridge(ctx.botMode, queue.global, { send: async delivery => {
           const target = connections.get(delivery.botId ?? binding.botId)
           if (!target) throw new PermanentChatError('Replying robot is disabled')
           await target.transport.send(delivery)
-        } }, { ...config, allowDelegation: true, mentionId: botId => manager.snapshot().bindings.find(binding => binding.botId === botId)?.botOpenId,
+        } }, { ...config, notifyScheduled: true, allowDelegation: true, mentionId: botId => manager.snapshot().bindings.find(binding => binding.botId === botId)?.botOpenId,
           groupBotIds: chatId => manager.snapshot().bindings.filter(peer => peer.enabled && peer.brand === binding.brand
             && (peer.allowAllGroups === true || peer.allowGroups.includes(chatId))).map(peer => peer.botId),
           provider: 'feishu', accountId: binding.appId,
           botIds: [binding.botId], defaultBot: binding.botId, allowUsers: binding.allowUsers, allowGroups: binding.allowGroups, allowAllGroups: binding.allowAllGroups === true, admins: binding.admins }, report)
         const currentBridge = bridge, currentTransport = transport
-        connections.set(binding.botId, { bridge, transport, close: async () => { await currentTransport.close(); await currentBridge.close(); await queue.close() } })
+        const detachQueue = ctx.botMode.attachQueue('feishu', binding.botId, bridge)
+        connections.set(binding.botId, { bridge, transport, close: async () => { detachQueue(); await currentTransport.close(); await currentBridge.close(); await queue.close() } })
         transport.start()
       } catch (cause) { await transport?.close(); await bridge?.close(); await queue.close(); throw cause }
     },

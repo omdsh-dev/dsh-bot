@@ -12,6 +12,8 @@ This is an independent, experimental community plugin. It is not an official Dee
 
 One Bot can use Feishu and InfoFlow at the same time. Bot instructions, models and tools are shared; conversation histories and reply destinations stay separate by platform and chat. Files and external memory accessed through tools still follow the deployment's permissions.
 
+The source tree is preparing **0.9.0** with chat management, queued handoffs, model/budget/tool controls, media input, live progress, delivery recovery and scheduled tasks. Published npm versions remain those listed below. See the [capability guide](docs/capabilities.md).
+
 ## What you can do
 
 - Create Bots with a handle, display name, responsibilities, and DSH Agent preset.
@@ -136,7 +138,7 @@ npm start -- --patch /absolute/path/bot-settings.patch.yml
 ## Current limits
 
 - Group replies appear when complete; token streaming, tools, and approvals are in each member's execution Session.
-- Bots inherit DSH's selected model. Per-Bot models, identity editing and scheduling are not implemented. Bot-to-Bot handoffs are supported only within connected Feishu or InfoFlow groups; private chats and Web chats require human messages to dispatch work.
+- Bots inherit DSH's selected model. Per-Bot models and scheduling are not implemented. Edit a Bot's name and responsibilities from chat info; the handle and preset are fixed after creation. Bot-to-Bot handoffs are supported only within connected Feishu or InfoFlow groups; private chats and Web chats require human messages to dispatch work.
 - Use the extensible `standard` preset. Complete-prompt presets such as `minimal` are rejected.
 - A restart marks unfinished public replies interrupted. It does not resend them; inspect the execution Session before retrying uncertain tool work.
 - There is no Bot/chat deletion or large-history pagination yet. Removing and rejoining a member creates a new Session and preserves the public history.

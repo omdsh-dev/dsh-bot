@@ -5,7 +5,10 @@ import { Button, Input, MarkdownText, Modal } from '@deepseek-ai/dsh-client-ui-p
 import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import type { AttemptRequest, Bot, BotId, ChatMessageId, CreateBotRequest, CreateGroupRequest, MembersRequest, Room, SendRequest } from '../types.ts'
+import type { AttemptRequest, Bot, BotId, ChatMessage, ChatAttachment, ChatMessageId, CreateBotRequest, CreateGroupRequest, MembersRequest, Room, SendRequest, UpdateBotRequest } from '../types.ts'
+import { Controls } from './Controls.tsx'
+import { VoiceInput } from './VoiceInput.tsx'
+import type { CapabilityFace } from './capability-face.ts'
 import type { ModelSnapshot } from './model.ts'
 import type { createBotViewStore } from './view-store.ts'
 import { Avatar } from './Avatar.tsx'
@@ -18,10 +21,12 @@ import type { InfoFlowFace } from './infoflow-face.ts'
 import type { FeishuState } from '../feishu/types.ts'
 
 export interface PanelFace {
+  capabilities?: CapabilityFace
   infoflow?: InfoFlowFace
   feishu?: FeishuFace
   hooks: { bots: ObservableSnapshot<ModelSnapshot> }
   createBot: (request: CreateBotRequest) => Promise<Bot>
+  updateBot: (request: UpdateBotRequest) => Promise<Bot>
   createGroup: (request: CreateGroupRequest) => Promise<Room>
   setMembers: (request: MembersRequest) => Promise<Room>
   send: (request: SendRequest) => Promise<unknown>
@@ -46,7 +51,7 @@ export function BotPanel(props: Props) {
   const infoflowVisible = snapshot.value.infoflowVisible === true
   const selected = props.useStore(value => value.roomId)
   const select = props.actions.select
-  const [form, setForm] = useState<'bot' | 'group' | 'members' | null>(null)
+  const [form, setForm] = useState<'bot' | 'edit' | 'group' | 'members' | null>(null)
   const [integration, setIntegration] = useState(false)
   const [syncGroup, setSyncGroup] = useState<'none' | 'infoflow' | 'feishu'>('none')
   const [groupOwner, setGroupOwner] = useState('')
@@ -61,6 +66,12 @@ export function BotPanel(props: Props) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | Room['kind']>('all')
   const [details, setDetails] = useState(false)
+  const [controls, setControls] = useState(false)
+  const [older, setOlder] = useState<ChatMessage[]>([])
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([])
+  const [delegation, setDelegation] = useState(false)
+  const [syncMessage, setSyncMessage] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
   const [showChats, setShowChats] = useState(false)
   const [pendingBot, setPendingBot] = useState<BotId | null>(null)
   const [name, setName] = useState('')
@@ -69,12 +80,20 @@ export function BotPanel(props: Props) {
   const [preset, setPreset] = useState('standard')
   const [members, setMembers] = useState<BotId[]>([])
   const [defaultBot, setDefault] = useState<BotId | undefined>()
-  const room = rooms.find(item => item.id === selected || !!selected && item.aliases?.includes(selected)) ?? rooms[0]
+  const room = rooms.find(item => (item.id === selected || !!selected && item.aliases?.includes(selected)) && !item.deleted) ?? rooms.find(item => !item.archived && !item.deleted)
+  const selection = useRef({ id: room?.id, revision: 0 })
+  if (selection.current.id !== room?.id) selection.current = { id: room?.id, revision: selection.current.revision + 1 }
+  const revision = selection.current.revision
+  const messages = [...older.filter(message => !room?.messages.some(item => item.id === message.id)), ...(room?.messages ?? [])]
   const roomBots = bots.filter(bot => room?.members.some(member => member.botId === bot.id))
   const running = room?.messages.some(item => item.status === 'running') ?? false
+  // External private chats stay platform-only. Group sends remain local unless explicitly synchronized.
+  const writable = !!room && !room.archived && (!room.external || room.kind === 'group')
+  const localHint = room?.external ? t(room.external.provider === 'feishu' ? 'fsLocalHint' : 'ifLocalHint') : ''
   const end = useRef<HTMLDivElement>(null)
   const timeline = useRef<HTMLDivElement>(null)
   const follow = useRef(true)
+  useEffect(() => { setOlder([]); setAttachments([]); setDraft(''); setReply(null); setDelegation(false); setSyncMessage(false) }, [room?.id])
   const labels = useMemo(() => ({ code: { copyLabel: t('copy'), copiedLabel: t('copied') }, footnotes: t('footnotes') }), [t])
   useEffect(() => { if (follow.current) end.current?.scrollIntoView({ block: 'end' }) }, [room?.id, room?.messages])
   useEffect(() => {
@@ -90,12 +109,17 @@ export function BotPanel(props: Props) {
   }, [rooms, pendingBot, select])
   const act = async (action: () => Promise<unknown>) => {
     setBusy(true); setError(null)
-    try { await action() } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
+    try { await action() } catch (cause) { if (selection.current.revision === revision) setError(cause instanceof Error ? cause.message : String(cause)) }
     finally { setBusy(false) }
   }
-  const openForm = (next: 'bot' | 'group' | 'members') => {
+  const uploadFile = async (file: File) => {
+    if (attachments.length >= 8 || file.size + attachments.reduce((total, item) => total + item.attachment.bytes, 0) > 20 * 1024 * 1024) throw new Error(t('attachmentLimit'))
+    const base64 = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onerror = () => reject(new Error('File read failed')); reader.onload = () => resolve(String(reader.result).split(',')[1]!); reader.readAsDataURL(file) })
+    return props.capabilities!.upload({ name: file.name, mediaType: file.type, base64, transcribe: file.type.startsWith('audio/') || file.name.toLowerCase().endsWith('.wav') })
+  }
+  const openForm = (next: 'bot' | 'edit' | 'group' | 'members', bot?: Bot) => {
     setSyncGroup('none'); setGroupOwner(''); setHumanMembers(''); setGroupRequestId(crypto.randomUUID()); setGroupSubmitted(false); setFeishuGroups(null)
-    setForm(next); setError(null); setName(''); setHandle(''); setInstructions(''); setPreset('standard')
+    setForm(next); setError(null); setName(bot?.name ?? ''); setHandle(bot?.id ?? ''); setInstructions(bot?.instructions ?? ''); setPreset(bot?.preset ?? 'standard')
     const ids = next === 'members' && room ? room.members.map(item => item.botId) : bots.slice(0, 2).map(bot => bot.id)
     setMembers(ids); setDefault(next === 'members' ? room?.defaultBot : ids[0])
   }
@@ -123,7 +147,7 @@ export function BotPanel(props: Props) {
       throw cause
     }
   }
-  const visible = rooms.filter(item => (filter === 'all' || item.kind === filter)
+  const visible = rooms.filter(item => !item.deleted && (showArchived || !item.archived) && (filter === 'all' || item.kind === filter)
     && `${item.title} ${item.members.map(member => `${member.botId} ${botName(member.botId)}`).join(' ')}`.toLowerCase().includes(search.toLowerCase()))
     .sort((left, right) => (right.messages.at(-1)?.time ?? 0) - (left.messages.at(-1)?.time ?? 0))
   const time = (value: number) => new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(value)
@@ -136,6 +160,7 @@ export function BotPanel(props: Props) {
       <div className={css.filters} role="group" aria-label={t('filterChats')}>
         {(['all', 'group', 'dm'] as const).map(kind => <button type="button" key={kind} aria-pressed={filter === kind} onClick={() => { setFilter(kind) }}>{t(kind === 'all' ? 'allChats' : kind === 'group' ? 'groups' : 'bots')}</button>)}
       </div>
+      {props.capabilities && <label className={css.history}><input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)}/>{t('showArchived')}</label>}
       <div className={css.roomList}>
         {(['group', 'dm'] as const).filter(kind => filter === 'all' || kind === filter).map(kind => <section key={kind}>
           <div className={css.sectionLabel}><h2>{t(kind === 'dm' ? 'direct' : 'groups')}<span>{rooms.filter(item => item.kind === kind).length}</span></h2>
@@ -158,6 +183,7 @@ export function BotPanel(props: Props) {
       </div>
       <Button className={css.newChat} variant="outline" disabled={!snapshot.ready || !bots.length} icon={<PlusIcon />} onClick={() => { openForm('group') }}>{t('startGroup')}</Button>
       <Button className={css.newChat} variant="outline" aria-pressed={integration} onClick={() => { setIntegration(true); setShowChats(false) }}>{t('imTitle')}</Button>
+      {props.capabilities && <Button className={css.newChat} variant="outline" onClick={() => setControls(true)}>{t('capabilities')}</Button>}
       <footer className={css.rosterFooter}><span className={css.connection} data-ready={snapshot.ready && !snapshot.error} /><span>{snapshot.error ? t('disconnected') : snapshot.ready ? t('connected') : t('loading')}</span>
         <Button size="sm" title={t('toggleSidebar')} aria-label={t('toggleSidebar')} icon={<SidebarIcon />} onClick={props.toggleSidebar} /></footer>
     </aside>
@@ -181,13 +207,18 @@ export function BotPanel(props: Props) {
           if (node) follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100
         }}>
           <div className={css.transcript}>
+            {props.capabilities && room.messageCount !== undefined && room.messageCount > messages.length && <Button disabled={busy} onClick={() => { void act(async () => {
+              const page = await props.capabilities!.history({ roomId: room.id, ...(messages[0] ? { before: messages[0].id } : {}), limit: 50 })
+              if (selection.current.revision !== revision) return
+              setOlder(current => [...page.messages, ...current]); follow.current = false
+            }) }}>{t('loadEarlier')}</Button>}
             {!room.messages.length ? <div className={css.welcome}>
               <RoomPortrait room={room} large /><span className={css.eyebrow}>{t(room.kind === 'group' ? 'sharedChat' : 'privateChat')}</span><h3>{t(room.kind === 'group' ? 'groupGreeting' : 'directGreeting')}</h3>
               <p>{room.kind === 'dm' ? roomBots[0]?.instructions || t('noMessages') : t('groupWelcome')}</p>
-              {!room.external && <div className={css.suggestions}>{(['suggestPlan', 'suggestReview'] as const).map(key => <button type="button" key={key} onClick={() => { setDraft(t(key)) }}><span aria-hidden="true">{key === 'suggestPlan' ? '↗' : '◎'}</span><strong>{t(key === 'suggestPlan' ? 'planTitle' : 'reviewTitle')}</strong><span>{t(key)}</span></button>)}</div>}
+              {writable && <div className={css.suggestions}>{(['suggestPlan', 'suggestReview'] as const).map(key => <button type="button" key={key} onClick={() => { setDraft(t(key)) }}><span aria-hidden="true">{key === 'suggestPlan' ? '↗' : '◎'}</span><strong>{t(key === 'suggestPlan' ? 'planTitle' : 'reviewTitle')}</strong><span>{t(key)}</span></button>)}</div>}
             </div> : <>
               <p className={css.history}><span>{t(room.kind === 'group' ? 'sharedChat' : 'privateChat')}</span></p>
-              {room.messages.map((message) => {
+              {messages.map((message) => {
                 const own = message.botId === null
                 const speaker = message.external ? `${message.external.sender.name} (${message.external.sender.id})` : botName(message.botId)
                 const quoted = own && message.replyTo ? room.messages.find(item => item.id === message.replyTo) : undefined
@@ -196,12 +227,19 @@ export function BotPanel(props: Props) {
                   {!own && message.botId && <Avatar id={message.botId} small />}
                   <div className={css.messageContent}>
                     <div className={css.messageHeader}><strong>{speaker}</strong>{!own && <span className={css.speakerBadge}>{t('botLabel')}</span>}
+                      {room.external && message.localOnly && <span className={css.speakerBadge} title={localHint}>{t('localOnly')}</span>}
                       <time dateTime={new Date(message.time).toISOString()}>{time(message.time)}</time></div>
                     <div className={css.bubble}>
                       {quoted && <div className={css.quote}><strong>{botName(quoted.botId)}</strong>
                         <span>{quoted.text.slice(0, 140)}</span></div>}
                       {message.text && (own ? <div className={css.body}>{message.text}</div>
                         : <MarkdownText text={message.text} labels={labels} />)}
+                      {message.attachments?.map(item => <p key={item.attachment.attachmentId}>📎 {item.attachment.name} · {Math.ceil(item.attachment.bytes / 1024)} KB{item.transcript && <span> · {item.transcript}</span>}</p>)}
+                      {message.progress && <div role="status"><span>{message.progress.phase} {message.progress.tools.join(', ')}</span>
+                        {message.progress.approvalId && props.capabilities && <><p>{message.progress.reason}</p>
+                          <Button disabled={busy} onClick={() => { void act(() => props.capabilities!.decideApproval({ roomId: room.id, id: message.progress!.approvalId!, allow: true })) }}>{t('allowOnce')}</Button>
+                          <Button disabled={busy} onClick={() => { void act(() => props.capabilities!.decideApproval({ roomId: room.id, id: message.progress!.approvalId!, allow: false })) }}>{t('reject')}</Button></>}
+                      </div>}
                       {message.status === 'running' &&
                         <div className={css.working} role="status"><span className={css.thinkingDots}><i /><i /><i /></span>{t('running')}</div>}
                       {message.error && <p className={css.messageError}>{message.error}</p>}
@@ -209,10 +247,10 @@ export function BotPanel(props: Props) {
                     </div>
                     {message.status === 'running' && member && <button type="button" className={css.progress} onClick={() => { props.openSession(member.sessionId) }}>{t('progress')}<span aria-hidden="true">↗</span></button>}
                     <div className={clsx(css.messageActions, message.status !== 'complete' && css.visibleActions)}>
-                      {!room.external && <Button size="sm" onClick={() => { setReply(message.id) }}>{t('reply')}</Button>}
+                      {writable && <Button size="sm" onClick={() => { setReply(message.id) }}>{t('reply')}</Button>}
                       {member && <Button size="sm" onClick={() => { props.openSession(member.sessionId) }}>{t('execution')}</Button>}
-                      {message.status === 'running' && <Button size="sm" disabled={busy} onClick={() => { void act(() => props.stop({ roomId: room.id, messageId: message.id })) }}>{t('stop')}</Button>}
-                      {!room.external && message.botId && !['running', 'complete'].includes(message.status) && <Button size="sm" disabled={busy} onClick={() => { void act(() => props.retry({ roomId: room.id, messageId: message.id })) }}>{t('retry')}</Button>}
+                      {['queued', 'running'].includes(message.status) && <Button size="sm" disabled={busy} onClick={() => { void act(() => props.stop({ roomId: room.id, messageId: message.id })) }}>{t('stop')}</Button>}
+                      {(!room.external || message.localOnly) && message.botId && !['running', 'complete'].includes(message.status) && <Button size="sm" disabled={busy} onClick={() => { void act(() => props.retry({ roomId: room.id, messageId: message.id })) }}>{t('retry')}</Button>}
                     </div>
                   </div>
                 </article>
@@ -220,32 +258,65 @@ export function BotPanel(props: Props) {
             </>}<div ref={end} />
           </div>
         </div>
-        {room.external ? <p className={css.history}>{t(room.external.provider === 'feishu' ? 'fsExternalHelp' : 'externalReadOnly')}</p> : <Composer key={room.id} bots={roomBots} t={t} draft={draft} onDraft={setDraft}
-          disabled={busy || running || !snapshot.ready || !!snapshot.error || form !== null || details}
+        {room.external && <p role="note" className={css.history}>{room.kind === 'group' ? syncMessage ? t('syncHint') : localHint : t(room.external.provider === 'feishu' ? 'fsExternalHelp' : 'externalReadOnly')}</p>}
+        {writable && props.capabilities && <div className={css.inputOptions}>
+          {room.kind === 'group' && <label><input type="checkbox" checked={delegation} onChange={event => setDelegation(event.target.checked)}/>{t('allowDelegation')}</label>}
+          {room.external && <label><input type="checkbox" checked={syncMessage} onChange={event => setSyncMessage(event.target.checked)}/>{t('syncMessage')}</label>}
+          <label>{t('attach')}<input type="file" multiple disabled={busy} onChange={event => {
+            const files = Array.from(event.target.files ?? []); event.target.value = ''
+            void act(async () => {
+              if (files.length + attachments.length > 8 || files.reduce((sum, file) => sum + file.size, 0) + attachments.reduce((sum, item) => sum + item.attachment.bytes, 0) > 20 * 1024 * 1024) throw new Error(t('attachmentLimit'))
+              const uploaded: ChatAttachment[] = []
+              for (const file of files) {
+                uploaded.push(await uploadFile(file))
+                if (selection.current.revision !== revision) return
+              }
+              setAttachments(current => [...current, ...uploaded])
+            })
+          }}/></label>
+          <VoiceInput key={room.id} disabled={busy} label={t('recordVoice')} stopLabel={t('stopRecording')} onError={setError} onAudio={file => act(async () => {
+            const attachment = await uploadFile(file)
+            if (selection.current.revision === revision) setAttachments(current => [...current, attachment])
+          })}/>
+          {attachments.map((item, index) => <Button key={index} size="sm" onClick={() => setAttachments(current => current.filter((_, i) => i !== index))}>📎 {item.attachment.name} ×</Button>)}
+          {running && <span>{t('queueHint')}</span>}
+        </div>}
+        {writable && <Composer key={room.id} bots={roomBots} t={t} draft={draft} onDraft={setDraft}
+          hasAttachments={attachments.length > 0}
+          disabled={busy || !snapshot.ready || !!snapshot.error || form !== null || details || controls}
           reply={room.messages.find(message => message.id === reply)}
           onCancelReply={() => { setReply(null) }}
           onSend={() => { void act(async () => {
-            await props.send({ roomId: room.id, text: draft, ...(reply ? { replyTo: reply } : {}) })
+            await props.send({ roomId: room.id, text: draft, ...(reply ? { replyTo: reply } : {}), ...(delegation ? { allowDelegation: true } : {}), ...(attachments.length ? { attachments } : {}), ...(syncMessage ? { notify: true } : {}) })
+            if (selection.current.revision !== revision) return
+            setAttachments([])
             setDraft(current => current === draft ? '' : current); setReply(null); follow.current = true
           }) }} />}
       </> : <div className={css.welcome}><Avatar id="dsh" large /><h2>{t('welcomeTitle')}</h2><p>{t('empty')}</p>
         <Button variant="primary" disabled={!snapshot.ready} onClick={() => { openForm('bot') }}>{t('newBot')}</Button></div>}
     </main>}
+    <Modal open={controls} onClose={() => setControls(false)} closeLabel={t('cancel')} title={t('capabilities')} className={clsx(css.dialog)}>
+      {props.capabilities && <Controls key={room?.id} state={snapshot.value} room={room} face={props.capabilities} updateBot={props.updateBot} english={t('you') === 'You'} openRoom={next => { choose(next); setControls(false) }}/>}
+    </Modal>
     <Modal open={details && !!room} onClose={() => { setDetails(false) }} closeLabel={t('cancel')} title={t('chatInfo')} className={clsx(css.dialog)}>
       {room && <div className={css.roomInfo}>
-        <RoomPortrait room={room} large /><h3>{room.title}</h3><p>{t(room.external ? room.external.provider === 'feishu' ? 'fsExternalHelp' : 'externalHistory' : room.kind === 'group' ? 'history' : 'privateHistory')}</p>
+        <RoomPortrait room={room} large /><h3>{room.title}</h3><p>{room.external && room.kind === 'group' ? localHint : t(room.external ? room.external.provider === 'feishu' ? 'fsExternalHelp' : 'externalHistory' : room.kind === 'group' ? 'history' : 'privateHistory')}</p>
         <div className={css.infoMembers}>{roomBots.map(bot => <section key={bot.id}>
           <div className={css.infoIdentity}><Avatar id={bot.id} /><div><strong>{bot.name}</strong><span>@{bot.id}</span></div>{room.defaultBot === bot.id && <small>{t('defaultResponder')}</small>}</div>
           <p>{bot.instructions || t('noDescription')}</p>
-          <Button size="sm" onClick={() => { const member = room.members.find(item => item.botId === bot.id); if (member) { setDetails(false); props.openSession(member.sessionId) } }}>{t('execution')}</Button>
+          <div className={css.infoActions}>
+            <Button size="sm" disabled={rooms.some(item => item.messages.some(message => message.botId === bot.id && message.status === 'running'))} onClick={() => { setDetails(false); openForm('edit', bot) }}>{t('editBot')}</Button>
+            <Button size="sm" onClick={() => { const member = room.members.find(item => item.botId === bot.id); if (member) { setDetails(false); props.openSession(member.sessionId) } }}>{t('execution')}</Button>
+          </div>
         </section>)}</div>
       </div>}
     </Modal>
-    <Modal open={form !== null} onClose={closeForm} closeLabel={t('cancel')} title={t(form === 'bot' ? 'newBot' : form === 'group' ? 'newGroup' : 'settings')}
-      description={t(form === 'bot' ? 'createHelp' : 'groupHelp')} className={clsx(css.dialog)} contentClassName={clsx(css.dialogContent)}
-      footer={<><Button disabled={busy} onClick={closeForm}>{t('cancel')}</Button><Button form="bot-settings" type="submit" variant="primary" disabled={busy || (form !== 'bot' && !members.length)}>{t(form === 'members' ? 'save' : syncGroup === 'feishu' && groupSubmitted ? 'fsGroupResume' : 'create')}</Button></>}>
+    <Modal open={form !== null} onClose={closeForm} closeLabel={t('cancel')} title={t(form === 'bot' ? 'newBot' : form === 'edit' ? 'editBot' : form === 'group' ? 'newGroup' : 'settings')}
+      description={t(form === 'bot' ? 'createHelp' : form === 'edit' ? 'editHelp' : 'groupHelp')} className={clsx(css.dialog)} contentClassName={clsx(css.dialogContent)}
+      footer={<><Button disabled={busy} onClick={closeForm}>{t('cancel')}</Button><Button form="bot-settings" type="submit" variant="primary" disabled={busy || ((form === 'group' || form === 'members') && !members.length)}>{t(form === 'members' || form === 'edit' ? 'save' : syncGroup === 'feishu' && groupSubmitted ? 'fsGroupResume' : 'create')}</Button></>}>
       <form id="bot-settings" className={css.form} onSubmit={(event) => { event.preventDefault(); void act(async () => {
         if (form === 'bot') { const created = await props.createBot({ id: handle, name, instructions, preset }); setPendingBot(created.id) }
+        else if (form === 'edit') await props.updateBot({ id: handle as BotId, name, instructions })
         else if (defaultBot && (form === 'group' || room)) {
           if (form === 'group' && syncGroup === 'infoflow' && !infoflowVisible) throw new Error(t('imInfoflowHidden'))
           const result = form === 'group' ? syncGroup === 'feishu' && props.feishu
@@ -259,12 +330,12 @@ export function BotPanel(props: Props) {
         setForm(null)
       }) }}>
         {error && <div role="alert" className={css.error}>{error}</div>}
-        {form === 'bot' ? <>
+        {form === 'bot' || form === 'edit' ? <>
           <div className={css.botPreview}><Avatar id={handle || 'dsh'} large /><div><strong>{name || t('newBot')}</strong><span>{handle ? `@${handle}` : t('identityPreview')}</span></div></div>
           <div className={css.formGrid}><label>{t('name')}<Input autoFocus required maxLength={80} value={name} onChange={(event) => { setName(event.target.value) }} /></label>
-            <label>{t('handle')}<Input required pattern="[a-zA-Z][a-zA-Z0-9_-]{0,31}" value={handle} onChange={(event) => { setHandle(event.target.value) }} /></label></div>
+            <label>{t('handle')}<Input required disabled={form === 'edit'} pattern="[a-zA-Z][a-zA-Z0-9_-]{0,31}" value={handle} onChange={(event) => { setHandle(event.target.value) }} /></label></div>
           <label>{t('instructions')}<textarea rows={4} maxLength={16000} placeholder={t('instructionsHint')} value={instructions} onChange={(event) => { setInstructions(event.target.value) }} /></label>
-          <details className={css.advanced}><summary>{t('advanced')}</summary><label>{t('preset')}<Input required value={preset} onChange={(event) => { setPreset(event.target.value) }} /></label></details>
+          <details className={css.advanced}><summary>{t('advanced')}</summary><label>{t('preset')}<Input required disabled={form === 'edit'} value={preset} onChange={(event) => { setPreset(event.target.value) }} />{form === 'edit' && <small>{t('editLocked')}</small>}</label></details>
         </> : <>
           {form === 'group' && <label>{t('groupTitle')}<Input autoFocus required disabled={groupLocked} maxLength={120} value={name} onChange={(event) => { setName(event.target.value) }} /></label>}
           <fieldset><legend>{t('members')}</legend><div className={css.memberList}>{bots.map(bot => <label className={css.member} key={bot.id}>

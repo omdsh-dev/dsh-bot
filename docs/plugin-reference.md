@@ -36,7 +36,7 @@ npm start -- --no-open
 
 Open the URL printed by DSH and select **Bots** in the sidebar. Configure the model through DSH's existing settings. Create a Bot with an ASCII handle, display name, instructions, and an extensible Agent preset (default: `standard`). Create groups by explicitly selecting existing Bots; creating another Bot does not add it to existing groups.
 
-Use `@handle` for a member, `@all` or `@everyone` for all current members, or Reply to address a Bot's answer. Explicit mentions override reply routing; otherwise the default member answers. Private chats always address their owner. Code, blockquotes, and email addresses do not dispatch mentions. A group accepts another prompt or membership change after its current responses settle. Stop cancels one response; Retry starts another attempt for an unsuccessful response from a current member.
+Use `@handle` for a member, `@all` or `@everyone` for all current members, or Reply to address a Bot's answer. Explicit mentions override reply routing; otherwise the default member answers. Private chats always address their owner. Code, blockquotes, and email addresses do not dispatch mentions. New Web prompts queue durably while responses run; membership changes require all responses to settle. Stop cancels one response; Retry starts another attempt for an unsuccessful response from a current member.
 
 **Open execution session** opens the member's original DSH conversation, including streaming, tool calls, questions, and approval controls. Return through **Bots**. These member Sessions belong to DSH's Session Controller; the plugin cancels and drains its active response intervals when unloaded.
 
@@ -60,7 +60,7 @@ The chat roster supports search by name or Bot handle, filters for groups and di
 <a id="implementation"></a>
 ## Implementation
 
-The Host service `ctx.botMode` owns Bot identities, canonical DMs, membership, public history, and explicit routing. It exposes `snapshot`, `createBot`, `createGroup`, `setMembers`, `send`, `stop`, `retry`, and `follow` through the generated `bots` Remote namespace. One serialized domain commit reserves a user message and all response attempts before any model work starts. Human sends and retries dispatch Bots. External group connectors may opt into bounded handoffs: a standalone `@handle task` line in a completed reply creates a child attempt in the same Room. Concrete follow-ups can revisit a Bot, with at most three attempts per Bot and twelve handoffs per human root; duplicate tasks are rejected with a visible reason; source and target must have active bindings in that group. Bot-generated platform events remain ignored. Child attempts retain their parent and original human request; restart marks unfinished attempts interrupted instead of replaying them.
+The Host service `ctx.botMode` owns Bot identities, canonical DMs, membership, public history, and explicit routing. It exposes `snapshot`, `createBot`, `updateBot`, `createGroup`, `setMembers`, `send`, `stop`, `retry`, and `follow` through the generated `bots` Remote namespace. One serialized domain commit reserves a user message and all response attempts before any model work starts. Human sends and retries dispatch Bots. External group connectors may opt into bounded handoffs: a standalone `@handle task` line in a completed reply creates a child attempt in the same Room. Concrete follow-ups can revisit a Bot, with at most three attempts per Bot and twelve handoffs per human root; duplicate tasks are rejected with a visible reason; source and target must have active bindings in that group. Bot-generated platform events remain ignored. Child attempts retain their parent and original human request; restart marks unfinished attempts interrupted instead of replaying them.
 
 `sessionController.create` creates or resumes the member's stable Session id and preset. Scoped system-prompt contributions apply its Bot identity, including when DSH opens that Session directly. Each response observes its own durable input receipt and Turn, then waits for Agent quiescence before publishing the final public text. Native prompts for later Turns cannot be attributed to that response. A per-member cursor supplies unseen public messages without copying private-chat transcripts.
 
@@ -77,7 +77,7 @@ The scoped `bot-mode.identity` system section identifies the Bot and its respons
 
 #### Token effect
 
-The identity adds a fixed system prefix cost per Bot Session. New deliveries append public context and the current request; the current request also appears in the public snapshot when first delivered. Old private Session history remains subject to the preset's normal compaction. Bounded message count is not a token budget.
+The identity adds a fixed system prefix cost per Bot Session. New deliveries append public context and the current request; the current request is excluded from the public snapshot, so its text is included once. Old private Session history remains subject to the preset's normal compaction. Bounded message count is not a token budget.
 
 #### KV Cache effect
 
@@ -87,12 +87,12 @@ The same member Session preserves the prior request prefix across turns. New pub
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- Responses appear in the group after completion; token streaming, tools, and approvals are in the native execution Session.
-- Models inherit DSH selection. Per-Bot model selection, editing Bot identities, unbounded autonomous conversations, scheduled routines, other IM adapters, and cross-chat memory are deferred.
+- The Bot panel streams response text, tool progress and approvals. IM replies are delivered after completion; native Session logs remain available.
+- Per-Bot models, tool/file policy, budgets and scheduled routines are configured in Chat & execution controls. Unbounded autonomous conversations, other IM adapters and cross-chat memory remain outside this plugin.
 - Fixed complete-prompt presets such as `minimal` cannot host the extra Bot identity and are rejected before delivery. Use `standard` or an extensible custom preset.
 - Group messages and Session logs use separate durable stores. A crash between commits can leave a completed DSH Turn marked interrupted publicly; inspect the execution log before retrying. No exactly-once external-tool guarantee is claimed.
 - Removing a member preserves public history; rejoining creates a new member Session. Existing removed Sessions remain accessible through DSH.
-- The small-domain feed replaces full snapshots. Large-history pagination, room deletion, Bot deletion, and migration of the separate Python prototype's SQLite database are deferred.
+- Browser snapshots contain a bounded recent window and active work; older history is paginated. Durable Bot and connector domains still rewrite whole snapshots. Migration from the Python prototype is unsupported.
 
 <a id="dev-note"></a>
 ### Dev Note
@@ -103,3 +103,5 @@ The same member Session preserves the prior request prefix across turns. New pub
 The [native plugin decision](architecture.md) explains the native integration and distribution. The real-profile test replaces only the external model and exercises Loader composition, personas, group/private isolation, stop, feed ordering, and process restart.
 
 </details>
+
+See [capability guide](capabilities.md) for lifecycle, media, budgets, schedules and delivery recovery.

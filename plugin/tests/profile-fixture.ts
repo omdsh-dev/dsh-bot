@@ -29,10 +29,12 @@ export async function apply(ctx: Context): Promise<void> {
       yield { type: 'block-start', index: 0, blockType: 'text' }
       yield { type: 'text-delta', index: 0, text }
       yield { type: 'block-end', index: 0, block: { type: 'text', text } }
+      yield { type: 'usage', usage: { inputTokens: 3, outputTokens: 2 } }
       yield { type: 'finish', reason: { kind: 'stop' } }
     }
   }
   ctx.llm.registerAdapter(['bot-fixture'], new Fixture())
+  ctx.llm.registerAdapter(['bot-selected-fixture'], new Fixture())
   async function settled(id: RoomId) {
     const deadline = Date.now() + 15000
     while (ctx.botMode.snapshot().rooms.find(room => room.id === id)!.messages.some(message => message.status === 'running')) {
@@ -55,6 +57,10 @@ export async function apply(ctx: Context): Promise<void> {
     const service = ctx.botMode
     if (process.env.BOT_TEST_PHASE === 'resume') {
       assert.equal(service.snapshot().infoflowVisible, false, 'An explicit hidden preference survives restart, including existing InfoFlow chats')
+      assert.deepEqual(service.snapshot().bots.find(bot => bot.id === 'critic')!.policy,
+        { provider: 'bot-selected-fixture', model: 'selected-fixture-model', toolMode: 'none', tools: [] })
+      assert.equal(service.snapshot().schedules?.find(item => item.name === 'Restart reservation')?.enabled, false, 'Paused schedule configuration survives native storage reload')
+      assert.equal(service.snapshot().budget?.currency, 'CNY', 'Budget settings survive native storage reload')
       const before = service.snapshot().rooms.find(room => room.kind === 'group')!
       assert.equal(before.messages.length, 8)
       const ids = before.members.map(member => member.sessionId)
@@ -123,6 +129,32 @@ export async function apply(ctx: Context): Promise<void> {
       current = await settled(room.id)
       assert.ok(current.messages.slice(-2).every(message => message.status === 'canceled'))
       assert.equal(current.messages.length, 8)
+      // Exercise new execution controls against the real Agent waterfall and durable storage.
+      const controlled = service.snapshot().rooms.find(item => item.kind === 'dm' && item.defaultBot === critic.id)!
+      await service.updateBot({ id: critic.id, name: critic.name, instructions: critic.instructions,
+        policy: { provider: 'bot-selected-fixture', model: 'selected-fixture-model', toolMode: 'none', inputPrice: 1, outputPrice: 2 } })
+      await service.configureBudget({ tokenLimit: 5, costLimit: 0, currency: 'USD', reset: true })
+      await service.send({ roomId: controlled.id, text: 'CONTROLLED_MODEL' })
+      const controlledResult = await settled(controlled.id)
+      assert.equal(controlledResult.messages.at(-1)!.status, 'complete', JSON.stringify(controlledResult.messages.at(-1)))
+      assert.equal(requests.at(-1)!.model, 'selected-fixture-model')
+      assert.equal(service.snapshot().budget!.used.input, 3)
+      assert.equal(service.snapshot().budget!.used.output, 2)
+      const beforeBlocked = requests.length
+      await service.send({ roomId: controlled.id, text: 'BUDGET_BLOCKED' })
+      assert.equal((await settled(controlled.id)).messages.at(-1)!.status, 'failed')
+      assert.equal(requests.length, beforeBlocked, 'Exhausted budget must block actual adapter calls')
+      await service.configureBudget({ tokenLimit: 0, costLimit: 0, currency: 'USD', reset: true })
+      await service.updateBot({ id: critic.id, name: critic.name, instructions: critic.instructions, policy: {} })
+      assert.ok(service.exportChat({ roomId: controlled.id, format: 'markdown' }).includes('CONTROLLED_MODEL'))
+      await service.lifecycle({ kind: 'room', id: controlled.id, action: 'archive' })
+      await assert.rejects(service.send({ roomId: controlled.id, text: 'archived' }), /Restore/)
+      await service.lifecycle({ kind: 'room', id: controlled.id, action: 'restore' })
+      await service.updateBot({ id: critic.id, name: critic.name, instructions: critic.instructions,
+        policy: { provider: 'bot-selected-fixture', model: 'selected-fixture-model', toolMode: 'none' } })
+      await service.saveSchedule({ roomId: controlled.id, name: 'Restart reservation', text: 'not enabled',
+        targets: [critic.id], nextAt: Date.now() + 3600000, intervalMinutes: 60, enabled: false, allowDelegation: false, notify: false })
+      await service.configureBudget({ tokenLimit: 0, costLimit: 0, currency: 'CNY' })
     }
     if (process.env.BOT_TEST_INFOFLOW === '1') await (await import('./infoflow-profile.ts')).exerciseInfoflow(ctx, requests, settled)
     await writeFile(process.env.BOT_TEST_RESULT!, JSON.stringify({ ok: true, requests: requests.length, state: service.snapshot() }))

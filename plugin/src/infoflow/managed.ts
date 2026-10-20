@@ -37,10 +37,11 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
         const target = connections.get(delivery.botId ?? group.defaultBot)
         if (!target) throw new PermanentChatError('Replying robot is disabled')
         await target.transport.send(delivery)
-      } }, { ...config, allowDelegation: true, mentionId: botId => manager.snapshot().bindings.find(binding => binding.botId === botId)?.agentId,
+      } }, { ...config, notifyScheduled: true, allowDelegation: true, mentionId: botId => manager.snapshot().bindings.find(binding => binding.botId === botId)?.agentId,
         accountId, botIds: group.botIds, defaultBot: group.defaultBot,
         allowUsers: [], allowGroups: [group.groupId], admins: [group.owner] }, report)
-      shared.set(group.groupId, { bridge, room, close: async () => { await bridge.close(); await domain.close() } })
+      const detachQueue = ctx.botMode.attachQueue('infoflow', accountId, bridge)
+      shared.set(group.groupId, { bridge, room, close: async () => { detachQueue(); await bridge.close(); await domain.close() } })
       return room
     })().finally(() => { opening.delete(group.groupId) })
     opening.set(group.groupId, task)
@@ -63,6 +64,10 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
       let transport: InfoFlowTransport | undefined
       try {
         const connection = new InfoFlowTransport(loadSdk(), { ...config, accountId: binding.agentId, robotId: binding.robotId, appKey, appSecret,
+          upload: request => ctx.botMode.upload(request),
+          allowMedia: input => input.conversation.kind === 'private' ? binding.allowUsers.includes(input.message.sender.id)
+            : binding.allowAllGroups === true || binding.allowGroups.includes(input.conversation.id)
+              || manager.snapshot().groups.some(group => group.groupId === input.conversation.id && group.botIds.includes(binding.botId) && group.status === 'ready'),
           robotIds: () => manager.snapshot().bindings.flatMap(peer => [peer.robotId, peer.agentId]) }, async (input, mentions) => {
           const state = manager.snapshot()
           const group = input.conversation.kind === 'group' ? state.groups.find(item => item.groupId === input.conversation.id) : undefined
@@ -80,13 +85,15 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
           const target = connections.get(delivery.botId ?? binding.botId)
           if (!target) throw new PermanentChatError('Replying robot is disabled')
           await target.transport.send(delivery)
-        } }, { ...config, accountId: binding.agentId, allowDelegation: true,
+        } }, { ...config, accountId: binding.agentId, notifyScheduled: true, allowDelegation: true,
+          notifyGroup: groupId => !manager.snapshot().groups.some(group => group.groupId === groupId && group.status === 'ready'),
           mentionId: botId => manager.snapshot().bindings.find(item => item.botId === botId)?.agentId,
           groupBotIds: groupId => manager.snapshot().bindings.filter(peer => peer.enabled
             && (peer.allowAllGroups === true || peer.allowGroups.includes(groupId))).map(peer => peer.botId),
           botIds: [binding.botId], defaultBot: binding.botId, allowUsers: binding.allowUsers, allowGroups: binding.allowGroups, allowAllGroups: binding.allowAllGroups === true, admins: binding.admins }, report)
         bridge = owner
-        connections.set(binding.botId, { transport: connection, bridge: owner, close: async () => { await connection.close(); await owner.close(); await domain.close() } })
+        const detachQueue = ctx.botMode.attachQueue('infoflow', binding.botId, owner)
+        connections.set(binding.botId, { transport: connection, bridge: owner, close: async () => { detachQueue(); await connection.close(); await owner.close(); await domain.close() } })
         connection.start()
       } catch (error) { await transport?.close(); await bridge?.close(); await domain.close(); throw error }
     },

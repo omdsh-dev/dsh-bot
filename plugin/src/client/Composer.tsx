@@ -10,6 +10,7 @@ import css from './Panel.module.css'
 interface ComposerProps {
   bots: Bot[]
   disabled: boolean
+  hasAttachments?: boolean
   draft: string
   onDraft: (text: string) => void
   reply: ChatMessage | undefined
@@ -23,7 +24,7 @@ interface ComposerProps {
  * @param props - Room members, controlled draft, reply, and submit action.
  * @returns The composer and its inline recipient picker.
  */
-export function Composer({ bots, disabled, draft, onDraft, reply, onCancelReply, onSend, t }: ComposerProps) {
+export function Composer({ bots, disabled, hasAttachments = false, draft, onDraft, reply, onCancelReply, onSend, t }: ComposerProps) {
   const input = useRef<HTMLTextAreaElement>(null)
   const menuId = useId()
   const [caret, setCaret] = useState(0)
@@ -52,7 +53,7 @@ export function Composer({ bots, disabled, draft, onDraft, reply, onCancelReply,
       {bots.map(bot => <button type="button" key={bot.id} title={`@${bot.id}`} onClick={() => { invite(bot.id) }}><Avatar id={bot.id} small /><span>{bot.name}</span></button>)}
       <button type="button" onClick={() => { invite('all') }}><span className={css.atMark}>@</span><span>{t('everyone')}</span></button>
     </div>}
-    <form className={css.composer} onSubmit={(event) => { event.preventDefault(); if (!disabled && draft.trim()) onSend() }}>
+    <form className={css.composer} onSubmit={(event) => { event.preventDefault(); if (!disabled && (draft.trim() || hasAttachments)) onSend() }}>
       {reply && <div className={css.replyPreview}><div><strong>{t('replying')} {bots.find(bot => bot.id === reply.botId)?.name ?? t('you')}</strong><span>{reply.text}</span></div>
         <Button size="sm" aria-label={t('removeReply')} icon={<CloseIcon />} onClick={onCancelReply} /></div>}
       {open && <div className={css.mentionMenu} role="listbox" id={menuId} aria-label={t('invite')}>
@@ -75,11 +76,11 @@ export function Composer({ bots, disabled, draft, onDraft, reply, onCancelReply,
             event.preventDefault(); setActive((activeIndex + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length)
           } else if (open && event.key === 'Escape') { event.preventDefault(); setDismissed(true) }
           else if (open && event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); const option = options[activeIndex]; if (option) insert(option.id) }
-          else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!disabled && draft.trim()) onSend() }
+          else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!disabled && (draft.trim() || hasAttachments)) onSend() }
         }} />
       <div className={css.composerTools}>
         <Button size="sm" onClick={() => { invite() }} aria-label={t('invite')}><span className={css.atMark}>@</span>{t('invite')}</Button>
-        <div className={css.sendTools}><span>{t('sendHint')}</span><Button type="submit" variant="primary" aria-label={t('send')} title={t('send')} disabled={disabled || !draft.trim()} icon={<SendIcon />} /></div>
+        <div className={css.sendTools}><span>{t('sendHint')}</span><Button type="submit" variant="primary" aria-label={t('send')} title={t('send')} disabled={disabled || (!draft.trim() && !hasAttachments)} icon={<SendIcon />} /></div>
       </div>
     </form>
     <p className={css.composerHint}>{t('addressHint')}</p>

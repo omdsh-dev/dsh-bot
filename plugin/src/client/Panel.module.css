@@ -136,6 +136,7 @@
 .infoIdentity strong { font-size: 13px; font-weight: 600; }
 .infoIdentity > div > span { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
 .infoIdentity small { margin-left: auto; font-size: 10px; color: var(--dsw-alias-label-tertiary); }
+.infoActions { display: flex; flex-wrap: wrap; gap: 8px; }
 .infoMembers p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 22px; color: var(--dsw-alias-label-secondary); margin: 12px 0 8px; }
 .infoMembers button { font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .dialog { width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); }
@@ -210,3 +211,14 @@
 .infoflowProvider { container: infoflow-config / inline-size; }
 @container infoflow-config (max-width: 720px) { .integrationBody { grid-template-columns: minmax(0, 1fr); gap: 20px; }.integrationBots { flex-direction: row; overflow-x: auto; }.integrationBots > button { min-width: 160px; }.integrationEditor { max-width: none; } }
 @container infoflow-config (max-width: 420px) { .formGrid { grid-template-columns: 1fr; gap: 0; }.integrationIdentity { gap: 8px; flex-wrap: wrap; } }
+
+.controls { display: grid; gap: 16px; min-width: 0; max-height: 70vh; overflow: auto; }
+.controls nav, .inputOptions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.controls section { display: grid; gap: 12px; }
+.controls label { display: grid; gap: 6px; }
+.controls textarea, .controls select { padding: 8px; border: 1px solid var(--border-color, #8885); border-radius: 6px; background: transparent; color: inherit; }
+.controls textarea { min-height: 80px; }
+.controls article { border-bottom: 1px solid #8883; padding: 10px 0; }
+.controls article pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
+.inputOptions { padding: 8px 20px; font-size: 12px; }
+.inputOptions input[type=file] { max-width: 230px; }

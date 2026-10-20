@@ -23,7 +23,7 @@ export function checkAgent(agent: unknown): void {
 
 /** Both IM connectors use the same native credential and storage contract. */
 export function checkIM(ctx: unknown): void {
-  requireMethods('IM Host', ctx, ['storageDomain.open', 'credentials.resolve', 'credentials.set', 'botMode.snapshot', 'botMode.ensureExternalRoom', 'botMode.submitExternalMessage', 'botMode.follow'])
+  requireMethods('IM Host', ctx, ['storageDomain.open', 'credentials.resolve', 'credentials.set', 'botMode.snapshot', 'botMode.ensureExternalRoom', 'botMode.submitExternalMessage', 'botMode.follow', 'botMode.attachQueue', 'botMode.upload'])
 }
 
 /** Check the Client services before mounting a Remote namespace or UI slots. */

@@ -1,12 +1,18 @@
 {
   "dsh": ">=0.1.5-rc.2 || >=0.2.0-0 || >=0.2.1-0 || >=0.3.0-0",
-  "bot": ">=0.8.0 <1.0.0",
+  "bot": ">=0.9.0 <1.0.0",
   "peers": {
     "@deepseek-ai/cordis": "^4.0.2",
     "@deepseek-ai/schemastery": "^3.18.2"
   },
   "tested": [
-    { "version": "0.1.5-rc.2", "commit": "c291e7961a515f6d7af9304e7fd1d257929aef26" },
-    { "version": "0.2.0-rc.2", "commit": "639ed015397290b3745d163aafe02ffee4aa3f84" }
+    {
+      "version": "0.1.5-rc.2",
+      "commit": "c291e7961a515f6d7af9304e7fd1d257929aef26"
+    },
+    {
+      "version": "0.2.0-rc.2",
+      "commit": "639ed015397290b3745d163aafe02ffee4aa3f84"
+    }
   ]
 }

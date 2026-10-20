@@ -60,6 +60,40 @@ function bench(initial?: BridgeState) {
   return { bridge, create, bots, state: () => state, durable, submitted, sent, save, send, stop, complete }
 }
 
+it('retries one retained delivery without repeating model admission and discards only the selected failure', async () => {
+  const delivery = { id: 'failed-1', conversation: input('source').conversation, user: 'alice', text: 'retained reply', attempts: 8, nextAt: 10000 }
+  const b = bench({ receipts: [], pending: [], outbox: [], notices: [], failed: [
+    { time: 1, reason: 'exhausted', delivery }, { time: 2, reason: 'permanent', delivery: { ...delivery, id: 'failed-2' } },
+  ] })
+  expect(b.bridge.failures('sage').map(item => item.id)).toEqual(['failed-1', 'failed-2'])
+  await b.bridge.resolveFailure('failed-1', 'retry'); await b.bridge.wake()
+  expect(b.sent.map(item => item.text)).toEqual(['retained reply'])
+  expect(b.submitted).toHaveLength(0)
+  expect(b.bridge.failures('sage')).toHaveLength(1)
+  await b.bridge.resolveFailure('failed-2', 'discard')
+  expect(b.bridge.failures('sage')).toHaveLength(0)
+  await b.bridge.close()
+})
+
+it('persists scheduled notification cursors without skipping unfinished replies or sending DSH-local work', async () => {
+  const b = bench()
+  const room = await b.bots.ensureExternalRoom({ conversation: input('x', '', 'alice', true).conversation, title: 'group', botIds: [bot], defaultBot: bot })
+  const live = b.durable.rooms.find(item => item.id === room.id)!
+  const user = { id: 'scheduled' as ChatMessageId, botId: null, text: 'check', replyTo: null, status: 'complete' as const, error: null, time: 1, scheduleId: 's1' }
+  live.messages.push(user, { ...user, id: 'response' as ChatMessageId, botId: bot, replyTo: user.id, status: 'running' })
+  const bridge = b.create({ notifyScheduled: true })
+  await bridge.wake(); expect(b.sent).toHaveLength(0)
+  live.messages[1]!.status = 'complete'; live.messages[1]!.text = 'scheduled result'
+  await bridge.wake(); expect(b.sent).toHaveLength(1)
+  await bridge.close()
+  const restarted = b.create({ notifyScheduled: true })
+  await restarted.wake(); expect(b.sent).toHaveLength(1)
+  live.messages.push({ ...user, id: 'local-user' as ChatMessageId, localOnly: true },
+    { ...live.messages[1]!, id: 'local-result' as ChatMessageId, replyTo: 'local-user' as ChatMessageId, localOnly: true })
+  await restarted.wake(); expect(b.sent).toHaveLength(1)
+  await restarted.close(); await b.bridge.close()
+})
+
 it('delivers a parent promptly, retains its delegated child through restart, and stops it for the original human', async () => {
   const b = bench(), other = brandString<BotId>('worker')
   await b.bridge.receive(input('delegation', 'delegate', 'alice', true)); await b.bridge.wake()

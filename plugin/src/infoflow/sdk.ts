@@ -4,6 +4,8 @@ import { createRequire } from 'node:module'
 import { EventEmitter } from 'node:events'
 import type { Delivery } from './domain.ts'
 import { decodeMessage, mentionedRobots, type Incoming } from './messages.ts'
+import { receiveMedia, type InfoFlowMediaApi } from './media.ts'
+import type { ChatAttachment, UploadRequest } from '../types.ts'
 
 /** SDK management results are validated before they become saved configuration. */
 export interface RobotIdentity { agentId: number | string; imId?: number | string; name: string }
@@ -41,6 +43,8 @@ export interface Sdk {
 }
 /** Deployment options and resolved secrets, never persisted in the bridge domain. */
 export interface TransportConfig {
+  allowMedia?: (input: Incoming) => boolean
+  upload?: (request: UploadRequest) => Promise<ChatAttachment>
   robotIds?: () => string[]
   accountId: string; robotId: string; appKey: string; appSecret: string
   baseUrl: string; wsGateway: string; wsConnectDomain: string
@@ -88,12 +92,17 @@ export class InfoFlowTransport {
     this.socket.on('error', () => { if (!this.stopped) { status('error'); this.report('InfoFlow connection error; SDK reconnect is active') } })
     this.socket.on('disconnected', () => { if (!this.stopped) status('connecting') })
     this.socket.on('connected', () => { status('connected'); this.attempt = 0; if (this.retry) clearTimeout(this.retry); this.retry = undefined })
-    for (const event of ['private.text', 'private.markdown', 'group.text', 'group.markdown', 'group.mixed']) {
+    for (const event of ['private.text', 'private.markdown', 'private.image', 'private.file', 'private.voice', 'group.text', 'group.markdown', 'group.mixed', 'group.image', 'group.file', 'group.voice']) {
       this.socket.on(event, (envelope) => {
         if (this.stopped) return
         const input = decodeMessage(event, envelope, config.accountId, config.robotId, config.robotIds?.())
         if (!input) return
-        const task = receive(input, mentionedRobots(envelope)).then(() => {}, () => { this.report('InfoFlow input could not be persisted; the sender has not received an acceptance receipt') })
+        if (input.hasMedia && !config.allowMedia?.(input)) return
+        const task = (async () => {
+          const { hasMedia, ...message } = input
+          const ready = hasMedia ? await receiveMedia(this.client.im as InfoFlowMediaApi, message, config.upload!) : message
+          await receive(ready, mentionedRobots(envelope))
+        })().then(() => {}, () => { this.report('InfoFlow input or attachment could not be persisted; check media permissions and storage') })
         this.handlers.add(task)
         return task.finally(() => { this.handlers.delete(task) })
       })
@@ -135,7 +144,7 @@ export class InfoFlowTransport {
       ? this.client.im.message.sendToUser(delivery.conversation.id, delivery.text, 'md')
       : this.client.im.message.sendToGroupWithOptions({ groupId: delivery.conversation.id, msgtype: groupType,
         // MD messages accept only one AT block; separate human/robot blocks fail with 40067.
-        body: [{ type: 'AT', atall: false, atuserids: [delivery.user], ...(agents.length ? { atagentids: agents } : {}) },
+        body: [...(delivery.user || agents.length ? [{ type: 'AT', atall: false, atuserids: delivery.user ? [delivery.user] : [], ...(agents.length ? { atagentids: agents } : {}) }] : []),
           { type: groupType, content: delivery.text }] })
     let timer: ReturnType<typeof setTimeout> | undefined
     try {

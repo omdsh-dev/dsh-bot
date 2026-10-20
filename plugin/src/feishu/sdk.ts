@@ -6,6 +6,8 @@ import { PermanentChatError } from '../external-errors.ts'
 import type { Delivery } from '../infoflow/domain.ts'
 import type { Incoming } from '../infoflow/messages.ts'
 import type { Brand, FeishuBindingView } from './types.ts'
+import type { ChatAttachment, UploadRequest } from '../types.ts'
+import { imageMime } from '../media.ts'
 const logger = { error() {}, warn() {}, info() {}, debug() {}, trace() {} }
 const domain = (brand: Brand) => brand === 'lark' ? 'https://open.larksuite.com' : 'https://open.feishu.cn'
 export interface RegistrationOptions {
@@ -14,7 +16,9 @@ export interface RegistrationOptions {
 }
 export interface RegistrationResult { client_id: string; client_secret: string; user_info?: { open_id?: string; tenant_brand?: Brand } }
 export interface Identity { openId: string; name: string }
-interface Api { request(options: Record<string, unknown>): Promise<unknown> }
+interface Api { request(options: Record<string, unknown>): Promise<unknown>
+  im?: { messageResource: { get(payload: { params: { type: string }; path: { message_id: string; file_key: string } }): Promise<{ getReadableStream(): AsyncIterable<Uint8Array> }> } }
+}
 export interface Sdk {
   defaultHttpInstance?: { defaults: { timeout: number } }
   Client: new (options: Record<string, unknown>) => Api
@@ -108,22 +112,35 @@ export async function qrImage(url: string): Promise<string> {
   const qr = require('qrcode') as { toDataURL(value: string, options: Record<string, unknown>): Promise<string> }
   return qr.toDataURL(url, { width: 280, margin: 2, errorCorrectionLevel: 'M' })
 }
-/** Text-only ingress, explicit human sender and exact bot mentions. */
-export function decodeMessage(event: unknown, appId: string, botOpenId: string): Incoming | null {
+/** Text and media ingress, explicit human sender and exact bot mentions. */
+interface MediaResource { key: string; type: 'image' | 'file' | 'audio'; name: string }
+interface FeishuIncoming extends Incoming { resources?: MediaResource[] }
+export function decodeMessage(event: unknown, appId: string, botOpenId: string): FeishuIncoming | null {
   const body = object(event), sender = object(body.sender), msg = object(body.message)
   const senderId = text(object(sender.sender_id).open_id), messageId = text(msg.message_id), chatId = text(msg.chat_id)
-  if (sender.sender_type !== 'user' || !senderId || senderId === botOpenId || !messageId || !chatId || msg.message_type !== 'text') return null
+  if (sender.sender_type !== 'user' || !senderId || senderId === botOpenId || !messageId || !chatId || !['text', 'post', 'image', 'file', 'audio'].includes(text(msg.message_type))) return null
   if (msg.chat_type !== 'p2p' && msg.chat_type !== 'group') return null
   const mentions = Array.isArray(msg.mentions) ? msg.mentions.map(object) : []
   const ownMentions = mentions.filter(mention => object(mention.id).open_id === botOpenId)
   if (msg.chat_type === 'group' && !ownMentions.length) return null
-  let content: string
-  try { content = text(object(JSON.parse(text(msg.content))).text) } catch { return null }
+  let content: string, payload: Record<string, unknown>
+  try { payload = object(JSON.parse(text(msg.content))); content = text(payload.text) } catch { return null }
+  const resources: MediaResource[] = []
+  if (msg.message_type === 'image') resources.push({ key: text(payload.image_key), type: 'image', name: 'image' })
+  if (msg.message_type === 'file' || msg.message_type === 'audio') resources.push({ key: text(payload.file_key), type: msg.message_type, name: text(payload.file_name) || text(msg.message_type) })
+  if (msg.message_type === 'post') {
+    const post = Array.isArray(payload.content) ? payload : Object.values(payload).map(object).find(value => Array.isArray(value.content))
+    if (post) {
+      const blocks = (post.content as unknown[]).flatMap(row => Array.isArray(row) ? row.map(object) : [])
+      content = [text(post.title), ...blocks.filter(block => block.tag === 'text' || block.tag === 'a').map(block => text(block.text))].join('\n')
+      for (const block of blocks) if (block.tag === 'img') resources.push({ key: text(block.image_key), type: 'image', name: 'image' })
+    }
+  }
   for (const mention of msg.chat_type === 'group' ? mentions : ownMentions) { const key = text(mention.key); if (key) content = content.split(key).join('') }
   content = content.trim()
-  if (!content) return null
+  if (!content && !resources.length || resources.length > 8 || resources.some(resource => !resource.key || resource.key.length > 512)) return null
   return { conversation: { provider: 'feishu', accountId: appId, kind: msg.chat_type === 'p2p' ? 'private' : 'group', id: chatId },
-    message: { id: messageId, sender: { id: senderId, name: senderId } }, text: content }
+    message: { id: messageId, sender: { id: senderId, name: senderId } }, text: content || '[附件]', ...(resources.length ? { resources } : {}) }
 }
 export class FeishuTransport {
   private readonly client: Api
@@ -131,8 +148,8 @@ export class FeishuTransport {
   private stopped = false
   private connection: Promise<void> | undefined
   private readonly handlers = new Set<Promise<void>>()
-  constructor(sdk: Sdk, private readonly config: { appId: string; appSecret: string; brand: Brand; botOpenId: string; timeoutMs: number }, receive: (input: Incoming) => Promise<unknown>,
-    status: (status: FeishuBindingView['status']) => void, private readonly report: () => void) {
+  constructor(sdk: Sdk, private readonly config: { appId: string; appSecret: string; brand: Brand; botOpenId: string; timeoutMs: number; allowUsers?: string[]; allowGroups?: string[]; allowAllGroups?: boolean | undefined }, receive: (input: Incoming) => Promise<unknown>,
+    status: (status: FeishuBindingView['status']) => void, private readonly report: () => void, upload?: (request: UploadRequest) => Promise<ChatAttachment>) {
     const common = { appId: config.appId, appSecret: config.appSecret, domain: domain(config.brand), logger, cache: tokenCache() }
     this.client = new sdk.Client(common)
     this.socket = new sdk.WSClient({ ...common, handshakeTimeoutMs: config.timeoutMs,
@@ -142,7 +159,28 @@ export class FeishuTransport {
       if (this.stopped) return
       const input = decodeMessage(event, config.appId, config.botOpenId)
       if (!input) return
-      const task = receive(input).then(() => {}, () => { this.report(); throw new Error('DSH could not persist this message') })
+      if (input.conversation.kind === 'private' ? config.allowUsers && !config.allowUsers.includes(input.message.sender.id)
+        : config.allowGroups && !config.allowAllGroups && !config.allowGroups.includes(input.conversation.id)) return
+      const task = (async () => {
+        const { resources, ...message } = input
+        if (resources?.length) {
+          if (!upload || !this.client.im) throw new Error('Native media support is unavailable')
+          message.attachments = []
+          let total = 0
+          for (const resource of resources) {
+            const response = await this.client.im.messageResource.get({ params: { type: resource.type === 'image' ? 'image' : 'file' }, path: { message_id: input.message.id, file_key: resource.key } })
+            const chunks: Buffer[] = []
+            for await (const chunk of response.getReadableStream()) {
+              total += chunk.byteLength
+              if (total > 20 * 1024 * 1024) throw new Error('Media exceeds 20 MiB')
+              chunks.push(Buffer.from(chunk))
+            }
+            const bytes = Buffer.concat(chunks)
+            message.attachments.push(await upload({ name: resource.name, base64: bytes.toString('base64'), mediaType: imageMime(bytes) ?? 'application/octet-stream', transcribe: resource.type === 'audio' }))
+          }
+        }
+        await receive(message)
+      })().then(() => {}, () => { this.report(); throw new Error('DSH could not persist this message or attachment; check media permissions and providers') })
       this.handlers.add(task)
       try { await task } finally { this.handlers.delete(task) }
     } })

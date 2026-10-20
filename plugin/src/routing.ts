@@ -22,12 +22,14 @@ export function route(state: BotState, room: Room, request: SendRequest): BotId[
   let targets: BotId[]
   if (request.targets !== undefined) targets = request.targets
   else if (room.kind === 'dm') targets = [room.defaultBot]
-  else if (mentions.includes('all') || mentions.includes('everyone')) targets = room.members.map(member => member.botId)
+  else if (mentions.includes('all') || mentions.includes('everyone')) targets = room.members.filter(member => state.bots.some(bot => bot.id === member.botId && !bot.archived)).map(member => member.botId)
   else {
     targets = state.bots.filter(bot => mentions.includes(bot.id)).map(bot => bot.id)
     if (targets.length === 0) {
       const reply = request.replyTo === undefined ? undefined : findMessage(room, request.replyTo)
-      targets = [reply?.botId ?? room.defaultBot]
+      const defaultBot = state.bots.some(bot => bot.id === room.defaultBot && !bot.archived) ? room.defaultBot
+        : room.members.find(member => state.bots.some(bot => bot.id === member.botId && !bot.archived))?.botId
+      targets = reply?.botId ? [reply.botId] : defaultBot ? [defaultBot] : []
     }
   }
   targets = [...new Set(targets)]
