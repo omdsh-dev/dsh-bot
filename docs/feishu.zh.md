@@ -1,6 +1,6 @@
 # 飞书机器人接入
 
-DSH Bot 0.8.0 的「IM 接入 → 飞书」配置面板支持为每个 Bot 单独创建并绑定一个飞书机器人，也可以绑定已有应用。如流入口、凭据和会话继续保留。飞书插件是独立可选包 `@zzzpyyy/dsh-bot-feishu@0.4.0`，搭配 DSH `0.2.0-rc.2` 和 `@zzzpyyy/dsh-bot@0.8.0`。
+DSH Bot 0.8.1 的「IM 接入 → 飞书」配置面板支持为每个 Bot 单独创建并绑定一个飞书机器人，也可以绑定已有应用。如流入口、凭据和会话继续保留。飞书插件是独立可选包 `@zzzpyyy/dsh-bot-feishu@0.4.1`，搭配 DSH `0.2.0-rc.2` 和 `@zzzpyyy/dsh-bot@0.8.1`。
 
 同一个 DSH Bot 可以同时启用飞书和如流绑定。在「IM 接入」的两个平台页分别选择同一个 Bot 并完成配置即可，不需要复制 Bot。两边的凭据、准入名单和启停开关独立；停用一个平台不影响另一个平台。消息记录、模型对话上下文和回复目的地按平台及具体聊天隔离，不自动同步或转发；私聊与群聊也分别保存。同名群不会跨平台合并。共用的是 Bot 指令、模型和工具配置；工具可访问的文件、外部服务及主动写入的记忆仍由部署配置决定，不属于会话隔离。
 
@@ -82,8 +82,8 @@ Web 对应 `$DSH_HOME/profiles/web/pnpm-workspace.yaml`，Desktop 对应 `$DSH_H
 在兼容的 DSH `0.2.0-rc.2` Web profile 中，先安装主包，再安装飞书插件：
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot@0.8.0
-dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.4.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot@0.8.1
+dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.4.1
 ```
 
 Desktop 可在插件管理器中按相同顺序安装这两个精确版本。包使用 `next` 标签；使用与现有服务相同的 profile 和数据目录。升级前备份数据并停止 Host，升级后重启，再从「IM 接入 → 飞书」检查连接状态。

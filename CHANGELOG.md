@@ -1,6 +1,8 @@
 # Release notes
 
-## Unreleased reliability fixes
+## 0.8.1 — 2026-10-20
+
+Bot `0.8.1`, Feishu `0.4.1`, and InfoFlow `0.5.1`, released under the experimental `next` tag. Upgrade the base and installed companions together to receive the execution, queue and SDK fixes.
 
 - Skip unchanged Bot/bridge writes; recheck cancellation immediately before submitting a turn; release in-memory running state if settlement persistence fails.
 - Keep human input in user messages, preserve unread running siblings, and close storage on startup failure.
