@@ -100,6 +100,8 @@ it('requires the exact robot AT and lossless IDs, and ignores forwarded group tr
   expect(decodeMessage('group.text', envelope('robot', 'MESSAGE_RECEIVE', 9223372036854775807), 'app', 'robot')).toBeNull()
   const echo = envelope('robot'); Object.assign(echo.data.raw.message.header, { role: 'robot' })
   expect(decodeMessage('group.text', echo, 'app', 'robot')).toBeNull()
+  const peer = envelope('robot'); peer.data.raw.message.header.fromuserid = 'peer'
+  expect(decodeMessage('group.text', peer, 'app', 'robot', ['peer'])).toBeNull()
   expect(splitMessage('你好😀世界', 3)).toEqual(['你好😀', '世界'])
 })
 
@@ -240,6 +242,7 @@ it('recovers a committed Bot receipt after the connector loses its submitted-sta
     await real(state)
   })
   await b.bridge.receive(input('1')); await b.bridge.wake(); await b.bridge.close()
+  await new Promise(resolve => setTimeout(resolve, 5))
   const next = b.create(); await next.wake()
   expect(b.submitted).toHaveLength(1)
   expect(b.state().pending[0]?.submitted).toBeDefined()
@@ -365,6 +368,74 @@ it('persists new arrivals while a network send is stalled', async () => {
   release(); await b.bridge.wake(); await b.bridge.close()
 })
 
+it('quarantines an exhausted delivery and lets later replies in the same conversation pass', async () => {
+  const b = bench(), clock = vi.spyOn(Date, 'now').mockReturnValue(1000)
+  try {
+    b.send.mockRejectedValue(new Error('unavailable bot'))
+    await b.bridge.receive(input('bad', '/help')); await b.bridge.wake()
+    for (let i = 0; i < 12; i++) { clock.mockReturnValue(2000 + i); await b.bridge.wake() }
+    expect(b.send.mock.calls.length).toBeLessThanOrEqual(8)
+    expect(b.state().outbox).toHaveLength(0)
+    expect(Reflect.get(b.state(), 'failed')).toHaveLength(1)
+    b.send.mockImplementation(async delivery => { b.sent.push(delivery) })
+    await b.bridge.receive(input('good', '/status')); await b.bridge.wake()
+    expect(b.sent.length).toBeGreaterThan(0)
+  } finally { clock.mockRestore(); await b.bridge.close() }
+})
+
+it('recognizes permanent admission errors from a separately bundled owner', async () => {
+  const b = bench()
+  vi.spyOn(b.bots, 'ensureExternalRoom').mockRejectedValueOnce(Object.assign(new Error('invalid roster'), { code: 'DSH_EXTERNAL_PERMANENT' }))
+  await b.bridge.receive(input('invalid')); await b.bridge.wake()
+  expect(b.state().pending).toHaveLength(0)
+  expect(b.state().failed?.[0]?.reason).toBe('permanent')
+  await b.bridge.receive(input('next')); await b.bridge.wake()
+  expect(b.submitted).toHaveLength(1)
+  await b.bridge.close()
+})
+
+it('backs off admission failures, bounds retries and admits the next request', async () => {
+  const b = bench(), clock = vi.spyOn(Date, 'now').mockReturnValue(1000)
+  const ensure = vi.spyOn(b.bots, 'ensureExternalRoom').mockRejectedValue(new Error('invalid configuration'))
+  try {
+    await b.bridge.receive(input('bad')); await b.bridge.wake()
+    const calls = ensure.mock.calls.length
+    for (let i = 0; i < 5; i++) await b.bridge.wake()
+    expect(ensure).toHaveBeenCalledTimes(calls)
+    for (let i = 0; i < 12; i++) { clock.mockReturnValue(2000 + i); await b.bridge.wake() }
+    expect(b.state().pending).toHaveLength(0)
+    expect(Reflect.get(b.state(), 'failed')).toHaveLength(1)
+    expect(ensure.mock.calls.length).toBeLessThanOrEqual(8)
+    ensure.mockRestore()
+    await b.bridge.receive(input('good')); await b.bridge.wake()
+    expect(b.submitted).toHaveLength(1)
+  } finally { clock.mockRestore(); await b.bridge.close() }
+})
+
+it('accepts another conversation while a stop waits for the agent to settle', async () => {
+  const b = bench()
+  let release!: () => void, started!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  const stopping = new Promise<void>(resolve => { started = resolve })
+  await b.bridge.receive(input('first')); await b.bridge.wake()
+  b.stop.mockImplementationOnce(async () => { started(); await gate; b.complete(); return true })
+  await b.bridge.receive(input('stop', '/stop')); await stopping
+  let accepted = false
+  const arrival = b.bridge.receive(input('second', 'hello', 'bob')).then(() => { accepted = true })
+  try {
+    for (let i = 0; i < 30; i++) await Promise.resolve()
+    expect(accepted).toBe(true)
+  } finally { release(); await arrival; await b.bridge.close() }
+})
+
+it('rolls bounded receipt and notice windows without refusing all future input', async () => {
+  const b = bench(), bridge = b.create({ maxReceipts: 2 })
+  for (const id of ['1', '2', '3']) { await bridge.receive(input(id, '/help')); await bridge.wake() }
+  expect(b.state().receipts).toHaveLength(2)
+  expect(await bridge.receive(input('3', '/help'))).toBe('duplicate')
+  await bridge.close(); await b.bridge.close()
+})
+
 it('stops already committed work even when the connector lost its submission acknowledgement', async () => {
   const b = bench()
   const real = b.save.getMockImplementation()!
@@ -376,6 +447,7 @@ it('stops already committed work even when the connector lost its submission ack
   expect(b.state().pending[0]?.submitted).toBeUndefined()
   expect(b.submitted).toHaveLength(1)
   b.save.mockImplementation(real)
+  await new Promise(resolve => setTimeout(resolve, 5))
   await b.bridge.receive(input('2', '/stop')); await b.bridge.wake(); await b.bridge.wake()
   expect(b.stop).toHaveBeenCalledTimes(1)
   expect(b.submitted).toHaveLength(1)

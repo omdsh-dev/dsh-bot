@@ -14,6 +14,7 @@ function bench(initial: Settings = { bindings: [], groups: [] }) {
   const link = vi.fn(async group => ({ id: brandString<RoomId>(`room-${group.groupId}`), title: group.title, kind: 'group', defaultBot: group.defaultBot,
     members: [], messages: [], external: { provider: 'infoflow', accountId: `group:${group.groupId}`, kind: 'group', id: group.groupId } } satisfies Room))
   const runtime: ManagerRuntime = {
+    unset: async ref => { secrets.delete(ref) },
     bots: () => [a, b], resolve: async ref => secrets.get(ref), set: async (ref, value) => { secrets.set(ref, value) },
     start: vi.fn(async () => {}), stop: vi.fn(async () => {}), link,
     api: (_binding, values) => ({ identity: async () => {
@@ -25,6 +26,18 @@ function bench(initial: Settings = { bindings: [], groups: [] }) {
   return { manager: new InfoFlowManager(store, runtime), runtime, secrets, create, testMessage, link, store, state: () => state }
 }
 function binding(botId: BotId): SaveInfoFlowBindingRequest { return { botId, appKey: botId === a ? 'key-a' : 'key-b', appSecret: 'private-secret', allowUsers: ['alice@baidu.com'], allowGroups: [], admins: ['alice'] } }
+it('cleans superseded and uncommitted credential references while keeping the active binding usable', async () => {
+  const f = bench()
+  await f.manager.save(binding(a)); await f.manager.save(binding(a))
+  expect(f.secrets.size).toBe(2)
+  const previous = f.state()
+  f.store.set.mockRejectedValueOnce(new Error('disk full'))
+  await expect(f.manager.save({ ...binding(a), appSecret: 'replacement' })).rejects.toThrow('disk full')
+  expect(f.state()).toEqual(previous)
+  expect(f.secrets.size).toBe(2)
+  expect(f.secrets.get(previous.bindings[0]!.appSecretRef)).toBe('private-secret')
+  await f.manager.close()
+})
 const group = { requestId: 'request-12345', title: 'Project', botIds: [a, b], defaultBot: a, owner: 'alice', members: ['bob'] }
 async function configured() {
   const fixture = bench(); await fixture.manager.init()

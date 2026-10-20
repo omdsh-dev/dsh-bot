@@ -4,10 +4,12 @@ import { join } from 'node:path'
 import { copyHostEntry } from './pack-host-entry.mjs'
 import { compatibility, hostPeers, releaseCompatibility } from './compatibility.mjs'
 import { writePackageReadme } from './pack-readme.mjs'
+import { assertReleaseBuild } from './release-build.mjs'
 import { root, runtime, pin, pluginPath, run, requireNode, assertPinnedRuntime } from './common.mjs'
 
 requireNode()
 assertPinnedRuntime()
+const provenance = assertReleaseBuild()
 const release = JSON.parse(readFileSync(join(root, 'feishu/release.json'), 'utf8'))
 const base = JSON.parse(readFileSync(join(root, 'release.json'), 'utf8'))
 const source = join(runtime, pluginPath, 'lib/feishu.js')
@@ -27,7 +29,7 @@ const manifest = { ...release, type: 'module', license: 'MIT', description: 'Opt
   dependencies: { '@larksuiteoapi/node-sdk': '1.75.0', qrcode: '1.5.4', zod: '4.4.3' }, peerDependencies }
 writeFileSync(join(destination, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 writeFileSync(join(destination, 'cordis.patch.yml'), '- insert:\n    - id: bot-feishu\n      name: ./feishu.js\n')
-writeFileSync(join(destination, 'compatibility.json'), `${JSON.stringify(releaseCompatibility({ botMode: { name: base.name, version: compatibility.bot }, feishu: release }), null, 2)}\n`)
+writeFileSync(join(destination, 'compatibility.json'), `${JSON.stringify(releaseCompatibility({ provenance, botMode: { name: base.name, version: compatibility.bot }, feishu: release }), null, 2)}\n`)
 writePackageReadme('docs/feishu.zh.md', join(destination, 'README.md'))
 for (const [from, to] of [['feishu/cordis.patch.example.yml', 'cordis.patch.example.yml'], ['LICENSE', 'LICENSE']]) cpSync(join(root, from), join(destination, to))
 const packed = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', join(root, 'dist')], { cwd: destination, stdio: 'pipe' }))[0]

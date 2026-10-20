@@ -147,6 +147,7 @@ npm start -- --patch /absolute/path/bot-settings.patch.yml
 
 ```sh
 npm run check
+npm run build:plugin
 npm test
 npm run pack
 npm run pack:feishu
@@ -158,6 +159,9 @@ npm run test:infoflow-managed-package
 npm run test:im-isolation-package
 npm run test:im-delegation-package
 ```
+
+正式打包要求工作区干净且已提交，并检查构建与源码一致、包含 DSH 0.1 所需的 schema getter。`setup` 会自动执行兼容构建。仅在本地验证未提交改动时，可给每个 pack 命令追加 `-- --allow-dirty`；测试包的 `compatibility.json` 会记录 commit、dirty 标记和源码哈希，不应发布。
+
 
 测试在准备好的 DSH 工作区中运行，覆盖消息路由、原生 UI 插槽和交互、持久化、停止与进程重启。`pack` 在 `dist/` 中生成编译包与校验和；`test:package` 将该压缩包解压到隔离 profile，验证 DSH 兼容性检查、Desktop / Web Host 认证、资源加载与重启恢复。桌面 Host 测试无需 Electron 或显示器。仅测试使用确定性模拟模型，无需 API Key。GitHub Actions 会从干净环境执行安装、构建和相同测试，并保留安装包作为 CI 附件，不自动发布 npm。`npm run test:install` 通过 DSH 统一插件管理器验证本地主包和飞书包；发布后可单独运行 `npm run test:registry` 验证 npm 线上安装；该检查需要访问公共 registry，不属于 CI。
 

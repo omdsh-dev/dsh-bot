@@ -60,7 +60,7 @@ npm start -- --no-open
 <a id="implementation"></a>
 ## 实现
 
-Host 服务 `ctx.botMode` 管理 Bot 身份、固定私聊、成员、公开历史和显式路由，通过生成的 `bots` Remote 命名空间提供 `snapshot`、`createBot`、`createGroup`、`setMembers`、`send`、`stop`、`retry` 和 `follow`。开始模型执行之前，一次串行存储提交会同时预留用户消息和所有回复尝试。只有人的显式发送和重试会调度 Bot；模型文本不会唤起其他 Bot。
+Host 服务 `ctx.botMode` 管理 Bot 身份、固定私聊、成员、公开历史和显式路由，通过生成的 `bots` Remote 命名空间提供 `snapshot`、`createBot`、`createGroup`、`setMembers`、`send`、`stop`、`retry` 和 `follow`。开始模型执行之前，一次串行存储提交会同时预留用户消息和所有回复尝试。人的显式发送和重试会调度 Bot；启用派活的外部群还会将已完成回复中的独立 `@handle 任务` 行转换为同群子任务。每个 Bot 最多执行三次，每个人类请求最多十二次派活；平台推送的机器人消息仍被忽略。
 
 `sessionController.create` 使用成员稳定的 Session id 和预设创建或恢复会话。作用域内的系统提示贡献应用 Bot 身份，直接从 DSH 打开该 Session 时也会生效。每个回复观察自己的持久化输入回执和 Turn，并等待 Agent 静止后发布最终公开文本。原生界面中后续 Turn 的输入不会归属到该回复。每个成员的游标用于补充未读公开消息，不复制私聊记录。
 

@@ -11,6 +11,7 @@ it('recognizes standalone task lines by handle or unambiguous display name, once
 })
 it('does not dispatch quoted/code/prose/broadcast/email/unknown/empty mentions', () => {
   expect(handoffs('讨论 @engineer 的方案\n> @review 引用\n```\n@engineer 代码\n```\n~~~\n@review 代码\n~~~\n`@engineer 行内代码`\na@review.com\n@all 全体\n@outsider 外人\n@review\n@engineer-too 名称前缀', bots)).toEqual([])
+  expect(handoffs('    @engineer 缩进代码\n\t@review 制表符代码', bots)).toEqual([])
   expect(handoffs('@工程 Bot 做事', [...bots, { ...bots[1]!, name: '工程 Bot' }])).toEqual([])
 })
 it('dispatches the bold/table assignments and semicolon follow-ups seen in real group replies', () => {

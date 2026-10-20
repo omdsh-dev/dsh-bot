@@ -1,4 +1,5 @@
 /** Optional Feishu companion, with one independently owned robot per DSH Bot. */
+import { PermanentChatError } from './external-errors.ts'
 import Schema from '@deepseek-ai/schemastery'
 import type { BridgeConfig } from './infoflow/bridge.ts'
 import { checkIM } from './compatibility.ts'
@@ -38,6 +39,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       return ctx.botMode.ensureExternalRoom({ conversation: { provider: 'feishu', accountId: `group:${group.chatId}`, kind: 'group', id: group.chatId },
         title: group.title, botIds: bindings.map(binding => binding.botId), defaultBot: group.creatorBot })
     },
+    unset: ref => ctx.credentials.unset(credentialRef(ref)),
     resolve, set: (ref, value) => ctx.credentials.set(credentialRef(ref), value), stop,
     identity: (appId, secret, brand) => identity(loadSdk(config.endpointTimeoutMs), appId, secret, brand, config.endpointTimeoutMs),
     register: options => register(loadSdk(config.endpointTimeoutMs), options), qrImage,
@@ -55,7 +57,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           status => { manager.connection(binding.botId, status, status === 'error' ? '长连接异常，请检查事件订阅、应用发布状态和网络后重新启用' : null) }, report)
         bridge = new InfoFlowBridge(ctx.botMode, queue.global, { send: async delivery => {
           const target = connections.get(delivery.botId ?? binding.botId)
-          if (!target) throw new Error('Replying robot is disabled; retain its outbox')
+          if (!target) throw new PermanentChatError('Replying robot is disabled')
           await target.transport.send(delivery)
         } }, { ...config, allowDelegation: true, mentionId: botId => manager.snapshot().bindings.find(binding => binding.botId === botId)?.botOpenId,
           groupBotIds: chatId => manager.snapshot().bindings.filter(peer => peer.enabled && peer.brand === binding.brand

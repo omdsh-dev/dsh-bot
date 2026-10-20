@@ -21,6 +21,7 @@ test(`all three archives accept DSH ${target.version} without exact host pins`, 
       assert.ok(satisfies(actual, range), `${name}: ${peer}@${actual} must satisfy ${range}`)
     }
     assert.equal(manifest.peerDependencies['@deepseek-ai/dsh'], compatibility.dsh)
+    for (const version of ['0.2.1-rc.1', '0.3.0-rc.1']) assert.ok(satisfies(version, manifest.peerDependencies['@deepseek-ai/dsh']))
     for (const version of ['0.1.6', '0.2.1', '0.3.0-rc.1', '1.0.0', '2.0.0']) {
       // Newer DSH's admission check includes prereleases; acceptance is not qualification.
       assert.ok(satisfies(version, manifest.peerDependencies['@deepseek-ai/dsh'], { includePrerelease: true }))

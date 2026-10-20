@@ -36,5 +36,6 @@ console.log(`Prepared DSH ${pin.version} (${pin.commit.slice(0, 12)}).`)
 if (!prepareOnly) {
   run('pnpm', ['install', '--frozen-lockfile'], { cwd: runtime })
   run('pnpm', ['run', 'build'], { cwd: runtime })
+  run(process.execPath, ['scripts/build-plugin.mjs'], { cwd: root })
   console.log('\nDSH Bot is ready. Run: npm start')
 }

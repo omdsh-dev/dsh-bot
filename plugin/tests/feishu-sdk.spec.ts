@@ -80,11 +80,34 @@ it('creates a private group with stable uuid, app-scoped owner and invited app I
   expect(b.request).toHaveBeenCalledWith({ method: 'POST', url: '/open-apis/im/v1/chats', timeout: 100,
     params: { user_id_type: 'open_id', set_bot_manager: false, uuid: 'stable-request' },
     data: { name: 'Team', owner_id: 'ou_owner', user_id_list: ['ou_owner'], bot_id_list: ['cli_beta'], chat_mode: 'group', chat_type: 'private' } })
-  b.request.mockRejectedValueOnce({ response: { data: { code: 99991672, msg: 'private-secret' } }, config: { appSecret: 'private-secret' } })
+  b.request.mockRejectedValueOnce({ response: { status: 403, data: { code: 99991672, msg: 'private-secret' } }, config: { appSecret: 'private-secret' } })
   await expect(createGroup(b.sdk, 'cli_alpha', 'secret', 'feishu', 100, options)).rejects.toThrow('im:chat:create')
   b.request.mockResolvedValueOnce({ code: 232043 })
   await expect(createGroup(b.sdk, 'cli_alpha', 'secret', 'feishu', 100, options)).rejects.toBeInstanceOf(GroupCreateError)
   b.request.mockRejectedValueOnce(new Error('private-secret'))
   await expect(createGroup(b.sdk, 'cli_alpha', 'secret', 'feishu', 100, options)).rejects.toThrow('结果待确认')
+  await b.transport.close()
+})
+
+it('escapes model-generated native mentions while allowing committed robot mentions', async () => {
+  const b = bench()
+  await b.transport.send({ id: 'unsafe', conversation: { provider: 'feishu', accountId: 'cli_app', kind: 'group', id: 'oc_chat' },
+    user: 'ou_alice', text: '<at user_id="all">everyone</at>', attempts: 0, nextAt: 0,
+    mentions: [{ id: 'ou_worker', name: 'Worker' }] })
+  const content = JSON.parse(String((b.request.mock.calls[0]![0].data as { content: string }).content)).text
+  expect(content).toContain('<at user_id="ou_worker">')
+  expect(content).not.toContain('<at user_id="all">')
+  await b.transport.close()
+})
+
+it('keeps HTTP 5xx and throttled group creation uncertain even with a business error code', async () => {
+  const b = bench()
+  for (const status of [500, 502, 503, 429]) {
+    b.request.mockRejectedValueOnce({ response: { status, data: { code: 99991672 } } })
+    const cause = await createGroup(b.sdk, 'cli_app', 'secret', 'feishu', 100,
+      { requestId: 'same-request', title: 'Team', owner: 'ou_owner', botAppIds: [] }).catch(cause => cause)
+    expect(cause).not.toBeInstanceOf(GroupCreateError)
+    expect(cause.message).toContain('待确认')
+  }
   await b.transport.close()
 })

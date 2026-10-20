@@ -2,6 +2,7 @@
 import { createRequire } from 'node:module'
 import { z } from 'zod'
 import { createHash } from 'node:crypto'
+import { PermanentChatError } from '../external-errors.ts'
 import type { Delivery } from '../infoflow/domain.ts'
 import type { Incoming } from '../infoflow/messages.ts'
 import type { Brand, FeishuBindingView } from './types.ts'
@@ -39,11 +40,27 @@ function object(value: unknown): Record<string, unknown> { return record.safePar
 function text(value: unknown): string { return typeof value === 'string' ? value : '' }
 function checked(value: unknown): Record<string, unknown> {
   const result = object(value)
+  // Documented authorization/recipient errors; unknown codes keep bounded retries.
+  if ([99991672, 230002, 230003, 230006, 230013].includes(Number(result.code))) throw new PermanentChatError('飞书接口未成功，请检查机器人权限、发布状态和群成员')
   if (result.code !== 0) throw new Error('飞书接口未成功，请检查机器人权限、发布状态和网络')
   return result
 }
+/** Token caches must never cross credentials, even for the same app ID. */
+function tokenCache() {
+  const entries = new Map<string | symbol, { value: unknown; expires?: number | undefined }>()
+  const keyFor = (key: string | symbol, options?: { namespace?: string }) => options?.namespace ? `${options.namespace}/${String(key)}` : key
+  return {
+    async get(key: string | symbol, options?: { namespace?: string }) {
+      const entry = entries.get(keyFor(key, options))
+      return entry && (!entry.expires || entry.expires > Date.now()) ? entry.value : undefined
+    },
+    async set(key: string | symbol, value: unknown, expires?: number, options?: { namespace?: string }) {
+      entries.set(keyFor(key, options), { value, expires }); return true
+    },
+  }
+}
 export async function identity(sdk: Sdk, appId: string, appSecret: string, brand: Brand, timeoutMs: number): Promise<Identity> {
-  const client = new sdk.Client({ appId, appSecret, domain: domain(brand), logger })
+  const client = new sdk.Client({ appId, appSecret, domain: domain(brand), logger, cache: tokenCache() })
   const result = checked(await client.request({ method: 'GET', url: '/open-apis/bot/v3/info', timeout: timeoutMs }))
   const bot = object(result.bot ?? object(result.data).bot)
   const openId = text(bot.open_id), name = text(bot.app_name)
@@ -55,7 +72,7 @@ export class GroupCreateError extends Error {}
 export interface GroupOptions { requestId: string; title: string; owner: string; botAppIds: string[] }
 /** Create a private group; Feishu deduplicates the same uuid + owner for ten hours. */
 export async function createGroup(sdk: Sdk, appId: string, appSecret: string, brand: Brand, timeoutMs: number, options: GroupOptions): Promise<string> {
-  const client = new sdk.Client({ appId, appSecret, domain: domain(brand), logger })
+  const client = new sdk.Client({ appId, appSecret, domain: domain(brand), logger, cache: tokenCache() })
   let response: unknown
   try { response = await client.request({ method: 'POST', url: '/open-apis/im/v1/chats', timeout: timeoutMs,
     params: { user_id_type: 'open_id', set_bot_manager: false, uuid: options.requestId },
@@ -64,7 +81,8 @@ export async function createGroup(sdk: Sdk, appId: string, appSecret: string, br
   catch (cause) {
     // The SDK rejects HTTP 4xx with an Axios response. Never expose its credential-bearing config.
     const error = object(cause), wire = object(error.response)
-    if (typeof object(wire.data).code !== 'number') throw new Error('建群结果待确认，请使用同一请求继续，勿重复新建')
+    if (typeof wire.status !== 'number' || wire.status < 400 || wire.status >= 500 || wire.status === 429 || wire.status === 408
+      || typeof object(wire.data).code !== 'number') throw new Error('建群结果待确认，请使用同一请求继续，勿重复新建')
     response = wire.data
   }
   const result = object(response)
@@ -115,7 +133,7 @@ export class FeishuTransport {
   private readonly handlers = new Set<Promise<void>>()
   constructor(sdk: Sdk, private readonly config: { appId: string; appSecret: string; brand: Brand; botOpenId: string; timeoutMs: number }, receive: (input: Incoming) => Promise<unknown>,
     status: (status: FeishuBindingView['status']) => void, private readonly report: () => void) {
-    const common = { appId: config.appId, appSecret: config.appSecret, domain: domain(config.brand), logger }
+    const common = { appId: config.appId, appSecret: config.appSecret, domain: domain(config.brand), logger, cache: tokenCache() }
     this.client = new sdk.Client(common)
     this.socket = new sdk.WSClient({ ...common, handshakeTimeoutMs: config.timeoutMs,
       onReady: () => { if (!this.stopped) status('connected') }, onReconnected: () => { if (!this.stopped) status('connected') },
@@ -141,7 +159,7 @@ export class FeishuTransport {
     const mentions = delivery.conversation.kind === 'group' ? (delivery.mentions ?? [])
       .filter(mention => /^ou_[\w-]+$/.test(mention.id) && mention.id !== this.config.botOpenId)
       .map(mention => `<at user_id="${mention.id}">${escape(mention.name)}</at>`).join(' ') : ''
-    const content = mentions ? `${mentions}\n${delivery.text}` : delivery.text
+    const content = mentions ? `${mentions}\n${escape(delivery.text)}` : escape(delivery.text)
     // Feishu honors uuid deduplication for a bounded window; retries retain it.
     checked(await this.client.request({ method: 'POST', url: '/open-apis/im/v1/messages', params: { receive_id_type: 'chat_id' }, timeout: this.config.timeoutMs,
       data: { receive_id: delivery.conversation.id, msg_type: 'text', content: JSON.stringify({ text: content }),

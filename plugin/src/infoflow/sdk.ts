@@ -1,4 +1,5 @@
 /** Optional SDK transport. Loading Bot Mode alone never resolves the private SDK. */
+import { PermanentChatError } from '../external-errors.ts'
 import { createRequire } from 'node:module'
 import { EventEmitter } from 'node:events'
 import type { Delivery } from './domain.ts'
@@ -40,6 +41,7 @@ export interface Sdk {
 }
 /** Deployment options and resolved secrets, never persisted in the bridge domain. */
 export interface TransportConfig {
+  robotIds?: () => string[]
   accountId: string; robotId: string; appKey: string; appSecret: string
   baseUrl: string; wsGateway: string; wsConnectDomain: string
   endpointTimeoutMs: number; sendTimeoutMs: number; connectRetryMs: number; maxConnectRetryMs: number
@@ -89,7 +91,7 @@ export class InfoFlowTransport {
     for (const event of ['private.text', 'private.markdown', 'group.text', 'group.markdown', 'group.mixed']) {
       this.socket.on(event, (envelope) => {
         if (this.stopped) return
-        const input = decodeMessage(event, envelope, config.accountId, config.robotId)
+        const input = decodeMessage(event, envelope, config.accountId, config.robotId, config.robotIds?.())
         if (!input) return
         const task = receive(input, mentionedRobots(envelope)).then(() => {}, () => { this.report('InfoFlow input could not be persisted; the sender has not received an acceptance receipt') })
         this.handlers.add(task)
@@ -141,6 +143,9 @@ export class InfoFlowTransport {
         timer = setTimeout(() => { reject(new Error('InfoFlow delivery confirmation timed out')) }, this.config.sendTimeoutMs)
         timer.unref()
       })])
+    } catch (cause) {
+      if (cause instanceof Error && /errcode:\s*(?:40068|40070)\b/.test(cause.message)) throw new PermanentChatError('InfoFlow rejected the recipient or message')
+      throw cause
     } finally { if (timer) clearTimeout(timer) }
   }
 

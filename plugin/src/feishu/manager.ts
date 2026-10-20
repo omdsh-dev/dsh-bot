@@ -12,6 +12,7 @@ export interface ManagerRuntime {
   register(options: RegistrationOptions): Promise<RegistrationResult>
   qrImage(url: string): Promise<string>
   resolve(ref: string): Promise<string | undefined>
+  unset(ref: string): Promise<void>
   set(ref: string, secret: string): Promise<void>
   start(binding: Binding): Promise<void>
   stop(botId: BotId): Promise<void>
@@ -113,6 +114,7 @@ export class FeishuManager implements FeishuControl {
   }
   private async finishGroup(saved: FeishuGroupView, firstSubmission = false): Promise<Room> {
     const group = structuredClone(saved)
+    if (group.status === 'failed') throw new Error('此建群请求已失败，请编辑配置并提交新请求')
     const bindings = this.groupBindings(group), creator = this.get(group.creatorBot)
     if (group.status === 'ready' && group.chatId) return this.runtime.linkGroup(group, bindings)
     const persist = async () => { await this.change(state => { state.groups = state.groups.map(item => item.requestId === group.requestId ? structuredClone(group) : item) }) }
@@ -161,8 +163,14 @@ export class FeishuManager implements FeishuControl {
       secretRef: `DSH_FEISHU_${randomUUID().replaceAll('-', '').toUpperCase()}_SECRET`, allowUsers: ids(request.allowUsers, 'ou_'), allowGroups: ids(request.allowGroups, 'oc_'),
       allowAllGroups: request.allowAllGroups ?? previous?.allowAllGroups ?? false, admins: ids(request.admins, 'ou_') }
     const binding = await this.checked(base, secret)
-    await this.runtime.set(binding.secretRef, secret)
-    await this.change(state => { state.bindings = [...state.bindings.filter(item => item.botId !== request.botId), binding] })
+    try {
+      await this.runtime.set(binding.secretRef, secret)
+      await this.change(state => { state.bindings = [...state.bindings.filter(item => item.botId !== request.botId), binding] })
+    } catch (cause) {
+      await this.runtime.unset(binding.secretRef).catch(() => {})
+      throw cause
+    }
+    if (previous) await this.runtime.unset(previous.secretRef).catch(() => {})
     await this.runtime.stop(binding.botId)
     if (binding.enabled) await this.activate(binding); else this.connection(binding.botId, 'disabled')
     return this.view(binding)

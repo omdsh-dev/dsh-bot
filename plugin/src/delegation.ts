@@ -31,7 +31,7 @@ export function handoffs(text: string, bots: Bot[]): { botId: BotId; task: strin
       else if (marker[0] === fence[0] && marker.length >= fence.length) fence = ''
       continue
     }
-    if (fence || raw.trimStart().startsWith('>')) continue
+    if (fence || /^(?: {4}|\t)/.test(raw) || raw.trimStart().startsWith('>')) continue
     // Models use Markdown for both the handle and the whole task. Keep inline code opaque.
     let line = raw.trim().replace(/^(?:[-*+]\s+|\d+[.)、]\s*)/, '')
     line = line.replace(/(`+)([^`]*?)\1|\*\*([^*]+)\*\*|__([^_]+)__/g, (all, code, _body, bold, strong) => code ? all : bold ?? strong)

@@ -5,9 +5,11 @@ import { join } from 'node:path'
 import { root, runtime, pin, pluginPath, run, requireNode, assertPinnedRuntime } from './common.mjs'
 import { hostPeers, releaseCompatibility } from './compatibility.mjs'
 import { writePackageReadme } from './pack-readme.mjs'
+import { assertReleaseBuild } from './release-build.mjs'
 
 requireNode()
 assertPinnedRuntime()
+const provenance = assertReleaseBuild()
 const release = JSON.parse(readFileSync(join(root, 'release.json'), 'utf8'))
 if (!/^@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/.test(release.name)) throw new Error('release.json must name a scoped npm package.')
 if (release.version !== JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version) throw new Error('Release and source versions must match.')
@@ -47,7 +49,7 @@ const manifest = {
 }
 writeFileSync(join(destination, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 writeFileSync(join(destination, 'cordis.patch.yml'), '- insert:\n    - id: bot-mode\n      name: ./implementation/lib/index.js\n')
-writeFileSync(join(destination, 'compatibility.json'), `${JSON.stringify(releaseCompatibility({ package: release }), null, 2)}\n`)
+writeFileSync(join(destination, 'compatibility.json'), `${JSON.stringify(releaseCompatibility({ package: release, provenance }), null, 2)}\n`)
 writePackageReadme('README.md', join(destination, 'README.md'))
 for (const file of ['LICENSE', 'NOTICE']) cpSync(join(root, file), join(destination, file))
 const packed = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', join(root, 'dist')], { cwd: destination, stdio: 'pipe' }))[0]

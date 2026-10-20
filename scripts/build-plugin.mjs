@@ -1,12 +1,15 @@
 /** Incremental plugin build against an already installed pinned workspace, including generated Remote codecs. */
-import { writeFileSync } from 'node:fs'
+import { readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { root, runtime, pluginPath, run, runTool, requireNode, assertPinnedRuntime } from './common.mjs'
+import { provenance } from './release-build.mjs'
 
 requireNode()
 assertPinnedRuntime()
 run(process.execPath, ['scripts/setup.mjs', '--prepare-only'], { cwd: root })
+// Delete only this plugin's generated output, including incremental build metadata.
+rmSync(join(runtime, pluginPath, 'lib'), { recursive: true, force: true })
 runTool('tsc', ['-b', `${pluginPath}/tsconfig.host.json`])
 runTool('tsdown', ['--env.DSH_BUILD_FACE', 'host', '--filter', pluginPath, '--logLevel', 'warn'])
 const { WorkspaceTypertGenerator } = await import(pathToFileURL(join(runtime, 'packages/typert/generator/lib/types/index.js')).href)
@@ -27,4 +30,18 @@ for (const artifact of generator.generate(['@deepseek-ai/dsh-experimental-bot-mo
 }
 runTool('tsc', ['-b', `${pluginPath}/tsconfig.client.json`])
 runTool('tsdown', ['--env.DSH_BUILD_FACE', 'client', '--filter', pluginPath, '--logLevel', 'warn'])
+// Bundler region comments can include absolute virtual CSS module paths.
+const clean = folder => {
+  for (const entry of readdirSync(folder, { withFileTypes: true })) {
+    const path = join(folder, entry.name)
+    if (entry.isDirectory()) clean(path)
+    else if (/\.(?:js|d\.ts)$/.test(path)) {
+      const code = readFileSync(path, 'utf8').replace(/^\s*\/\/#(?:region|endregion).*$/gm, '')
+      if (code.includes(root) || /\/Users\/|\/home\/|[A-Z]:\\Users\\/i.test(code)) throw new Error(`Non-portable path in ${entry.name}`)
+      writeFileSync(path, code)
+    }
+  }
+}
+clean(join(runtime, pluginPath, 'lib'))
+writeFileSync(join(runtime, pluginPath, 'lib/build-info.json'), JSON.stringify(provenance(), null, 2))
 console.log('Bot Mode and optional InfoFlow/Feishu Host plugins built; Remote codecs refreshed.')

@@ -5,6 +5,8 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import { conversationKey, splitMessage, type Incoming } from './messages.ts'
 import type { BridgeState, Delivery, Pending, RobotMention } from './domain.ts'
 import { humanRequest, responseTree } from '../delegation.ts'
+import { isDeepStrictEqual } from 'node:util'
+import { isPermanentChatError } from '../external-errors.ts'
 
 /** All deployment-varying queue and routing limits. */
 export interface BridgeConfig {
@@ -44,6 +46,9 @@ export class InfoFlowBridge {
     const operation = this.tail.then(async () => {
       const draft = structuredClone(this.state)
       const result = action(draft)
+      draft.notices = draft.notices.slice(-this.config.maxReceipts)
+      if (draft.failed) draft.failed = draft.failed.slice(-Math.min(this.config.maxReceipts, 1000))
+      if (isDeepStrictEqual(draft, this.state)) return result
       await this.store.set(draft)
       this.state = draft
       return result
@@ -90,9 +95,9 @@ export class InfoFlowBridge {
     if (conversation.kind === 'private' ? !this.config.allowUsers.includes(message.sender.id) : this.config.allowAllGroups !== true && !this.config.allowGroups.includes(conversation.id)) return 'ignored'
     const key = JSON.stringify([conversationKey(conversation), message.id])
     const outcome = await this.change((state) => {
-      if (state.receipts.includes(key)) return 'duplicate' as const
-      if (state.receipts.length >= this.config.maxReceipts) throw new Error('External chat receipt capacity reached; raise maxReceipts before continuing')
+      if (state.receipts.includes(key) || state.pending.some(item => item.key === key)) return 'duplicate' as const
       state.receipts.push(key)
+      state.receipts = state.receipts.slice(-this.config.maxReceipts)
       const room = this.room(input)
       const command = text.trim().split(/\s+/)[0]!
       if (text.length > 32000) { this.enqueue(state, key, input, '消息过长，请缩短到 32000 字符以内。'); return 'accepted' as const }
@@ -102,7 +107,8 @@ export class InfoFlowBridge {
         else if (command === '/status') {
           const pending = state.pending.filter(item => conversationKey(item.input.conversation) === conversationKey(conversation))
           const active = room?.messages.filter(item => item.status === 'running') ?? []
-          this.enqueue(state, key, input, `排队：${pending.filter(item => !item.submitted && !item.stop).length}；执行中：${active.length}。\n${active.length ? '执行进度与人工审批请在 DSH 的对应外部聊天中打开执行会话查看。' : '当前没有正在执行的 Bot。'}`)
+          const failed = (state.failed ?? []).filter(item => conversationKey(item.delivery?.conversation ?? item.pending!.input.conversation) === conversationKey(conversation)).length
+          this.enqueue(state, key, input, `排队：${pending.filter(item => !item.submitted && !item.stop).length}；执行中：${active.length}；投递或准入失败：${failed}。\n${active.length ? '执行进度与人工审批请在 DSH 的对应外部聊天中打开执行会话查看。' : '当前没有正在执行的 Bot。'}`)
         } else if (command === '/stop') {
           const admin = this.config.admins.includes(message.sender.id)
           const mayStop = (sender: string) => admin || sender === message.sender.id
@@ -151,6 +157,8 @@ export class InfoFlowBridge {
   private async work(): Promise<void> {
     while (this.dirty && !this.closed) {
       this.dirty = false
+      // Stop may await tools finishing. New arrivals must still acquire the admission lock.
+      try { await this.stopPending() } catch { this.report('External chat stop failed; request retained') }
       try { await this.exclusive(() => this.dispatch()) } catch { this.report('External chat processing failed; durable work is retained for the next retry') }
       // A full outbox must still drain, and slow network sends must not hold the admission lock.
       try { await this.deliver() } catch { this.report('External chat delivery settlement failed; durable replies are retained') }
@@ -163,7 +171,7 @@ export class InfoFlowBridge {
       state.pending = state.pending.filter(current => current.key !== item.key)
     })
   }
-  private async dispatch(): Promise<void> {
+  private async stopPending(): Promise<void> {
     // Stop commands bypass the busy room queue and only target IDs captured at admission.
     for (const item of [...this.state.pending].filter(item => item.stop)) {
       if (this.closed) return
@@ -172,6 +180,8 @@ export class InfoFlowBridge {
         ...(this.config.allowDelegation ? { cascade: true } : {}) })
       await this.finish(item, '已处理停止请求，请在 DSH 中查看执行记录。')
     }
+  }
+  private async dispatch(): Promise<void> {
     const blocked = new Set<string>()
     for (const item of [...this.state.pending].filter(item => !item.stop)) {
       if (this.closed) return
@@ -218,23 +228,42 @@ export class InfoFlowBridge {
       const key = conversationKey(item.input.conversation)
       if (blocked.has(key)) continue
       blocked.add(key)
+      if ((item.nextAt ?? 0) > Date.now()) continue
       const active = this.bots.snapshot().rooms.filter(room => room.external && room.messages.some(message => message.status === 'running')).length
       if (active >= this.config.maxConcurrentRooms) continue
       // Membership errors are actionable and terminal; storage failures remain retryable.
       const known = this.bots.snapshot().bots.map(bot => bot.id)
       if (item.binding.botIds.some(id => !known.includes(id))) { await this.finish(item, '配置的 Bot 不存在，请部署者检查机器人配置。'); continue }
+      let committed = false
       try {
         const room = await this.bots.ensureExternalRoom(item.binding)
         const accepted = await this.bots.submitExternalMessage({ roomId: room.id, text: item.input.text, external: item.input.message, sourceAccountId: item.input.conversation.accountId,
           ...(this.config.allowDelegation ? { allowDelegation: true } : {}), ...(item.input.targets ? { targets: item.input.targets } : {}) })
         if (accepted.status === 'rejected') { await this.finish(item, accepted.reason === 'room-full' ? '该聊天的历史容量已满，请部署者调整 DSH Bot 的 maxMessages 配置。' : '消息无法提交，请检查文字和 @Bot 是否属于当前聊天。'); continue }
-        if (accepted.status === 'accepted') await this.change((state) => {
-          const current = state.pending.find(current => current.key === item.key)
-          if (current) current.submitted = { roomId: room.id, attemptIds: accepted.attemptIds }
-        })
-      } catch {
+        if (accepted.status === 'accepted') {
+          committed = true
+          await this.change((state) => {
+            const current = state.pending.find(current => current.key === item.key)
+            if (current) current.submitted = { roomId: room.id, attemptIds: accepted.attemptIds }
+          })
+        }
+      } catch (cause) {
+        // Accepted work already owns a native receipt. Never abandon its response tree
+        // because the connector failed to save the acknowledgement in its own domain.
+        if (committed) throw cause
         this.report('External chat admission failed; check Bot configuration/storage and retained queue')
         await this.change((state) => {
+          const current = state.pending.find(pending => pending.key === item.key)
+          if (!current) return
+          current.attempts = (current.attempts ?? 0) + 1
+          const terminal = isPermanentChatError(cause) || current.attempts >= 8
+          if (terminal) {
+            (state.failed ??= []).push({ time: Date.now(), reason: isPermanentChatError(cause) ? 'permanent' : 'exhausted', pending: current })
+            state.pending = state.pending.filter(pending => pending.key !== item.key)
+            this.enqueue(state, `${item.key}:admission-failed`, item.input, '请求未能提交，已停止重试。请部署者检查 Bot 配置或存储后重新发送。')
+            return
+          }
+          current.nextAt = this.retryAt(current.attempts)
           const notice = `${item.key}:admission-error`
           if (state.notices.includes(notice)) return
           this.enqueue(state, notice, item.input, '请求暂未提交，请部署者检查 Bot 配置或存储。消息已保留，系统会重试。')
@@ -264,17 +293,27 @@ export class InfoFlowBridge {
       if (blockedRecipients.has(key)) continue
       if (delivery.nextAt > Date.now()) { blockedRecipients.add(key); continue }
       try { await this.sender.send(delivery) }
-      catch {
-        blockedRecipients.add(key)
+      catch (cause) {
+        const terminal = isPermanentChatError(cause) || delivery.attempts + 1 >= 8
+        if (!terminal) blockedRecipients.add(key)
         await this.change((state) => {
           const current = state.outbox.find(item => item.id === delivery.id)
-          if (current) { current.attempts++; current.nextAt = Date.now() + Math.min(this.config.maxRetryMs, this.config.retryMs * 2 ** Math.min(current.attempts - 1, 20)) }
+          if (!current) return
+          current.attempts++
+          if (terminal) {
+            (state.failed ??= []).push({ time: Date.now(), reason: isPermanentChatError(cause) ? 'permanent' : 'exhausted', delivery: current })
+            state.outbox = state.outbox.filter(item => item.id !== delivery.id)
+          } else current.nextAt = this.retryAt(current.attempts)
         })
-        this.report('External chat send failed; the reply remains queued')
+        this.report(terminal ? 'External chat send stopped; failed delivery retained for inspection' : 'External chat send failed; the reply remains queued')
         continue
       }
       await this.change((state) => { state.outbox = state.outbox.filter(item => item.id !== delivery.id) })
     }
+  }
+
+  private retryAt(attempts: number): number {
+    return Date.now() + Math.min(this.config.maxRetryMs, this.config.retryMs * 2 ** Math.min(attempts - 1, 20))
   }
 
   /** Notify the original destination about native human interaction without answering it.

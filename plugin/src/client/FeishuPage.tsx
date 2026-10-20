@@ -37,7 +37,7 @@ export function FeishuPage({ bots, api, t, createGroup, openRoom, selectRoom }: 
       {snapshot.groups.map(group => <div className={css.integrationNotice} key={group.requestId}><strong>{group.title}</strong>
         <p>{t(group.status === 'ready' ? 'fsGroupReady' : group.status === 'linking' ? 'fsGroupLinking' : group.status === 'failed' ? 'fsGroupFailed' : 'fsGroupPending')}</p>
         {group.chatId && <p>Chat ID: {group.chatId}</p>}{group.error && <p>{group.error}</p>}
-        {group.status === 'ready' && group.roomId ? <Button onClick={() => { selectRoom(group.roomId!) }}>{t('fsGroupHistory')}</Button> : <Button disabled={resuming} onClick={() => {
+        {group.status === 'ready' && group.roomId ? <Button onClick={() => { selectRoom(group.roomId!) }}>{t('fsGroupHistory')}</Button> : group.status !== 'failed' && <Button disabled={resuming} onClick={() => {
           setResuming(true); setGroupError(null)
           void api!.resumeGroup(group.requestId).then(openRoom).catch(cause => { setGroupError(cause instanceof Error ? cause.message : String(cause)) }).finally(() => { setResuming(false); void refresh().catch(() => { setGroupError(t('fsRefreshFailed')) }) })
         }}>{t('fsGroupResume')}</Button>}

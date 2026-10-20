@@ -1,5 +1,14 @@
 # Release notes
 
+## Unreleased reliability fixes
+
+- Skip unchanged Bot/bridge writes; recheck cancellation immediately before submitting a turn; release in-memory running state if settlement persistence fails.
+- Keep human input in user messages, preserve unread running siblings, and close storage on startup failure.
+- Bound admission/delivery retries, quarantine failed work, release the ingress lock during stops, and bound receipt/notice retention.
+- Isolate Feishu token caches, escape generated mentions, retain uncertain group UUIDs on HTTP 5xx, and reject resuming terminal group requests.
+- Ignore all bound InfoFlow robots and indented-code handoffs; clean replaced credential references.
+- Clean builds, verify compatible codecs/source hashes, and require committed release inputs; local test archives explicitly record dirty provenance.
+
 ## 0.8.0 — 2026-10-18
 
 Bot `0.8.0`, Feishu `0.4.0`, and InfoFlow `0.5.0`. Upgrade the relevant companion with the base package to enable group handoffs; new companions require Bot `>=0.8.0 <1.0.0`.

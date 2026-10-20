@@ -1,4 +1,5 @@
 /** Cordis-owned multi-robot runtime: independent connections, shared group receipts and native credentials. */
+import { PermanentChatError } from '../external-errors.ts'
 import { createHash } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
@@ -34,7 +35,7 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
       const domain = await ctx.storageDomain.open(bridgeDomain(queueName(accountId)))
       const bridge = new InfoFlowBridge(ctx.botMode, domain.global, { send: async delivery => {
         const target = connections.get(delivery.botId ?? group.defaultBot)
-        if (!target) throw new Error('Replying robot is disabled; retain its outbox')
+        if (!target) throw new PermanentChatError('Replying robot is disabled')
         await target.transport.send(delivery)
       } }, { ...config, allowDelegation: true, mentionId: botId => manager.snapshot().bindings.find(binding => binding.botId === botId)?.agentId,
         accountId, botIds: group.botIds, defaultBot: group.defaultBot,
@@ -47,6 +48,7 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
   }
   const manager = new InfoFlowManager(settings.global, {
     bots: () => ctx.botMode.snapshot().bots.map(bot => bot.id), resolve,
+    unset: ref => ctx.credentials.unset(credentialRef(ref)),
     set: (ref, value) => ctx.credentials.set(credentialRef(ref), value), stop, link,
     api: (binding, secrets) => robotApi(loadSdk(), { ...secrets, agentId: binding.agentId, timeout: config.endpointTimeoutMs, ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}) }),
     start: async binding => {
@@ -60,7 +62,8 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
       let bridge: InfoFlowBridge | undefined
       let transport: InfoFlowTransport | undefined
       try {
-        const connection = new InfoFlowTransport(loadSdk(), { ...config, accountId: binding.agentId, robotId: binding.robotId, appKey, appSecret }, async (input, mentions) => {
+        const connection = new InfoFlowTransport(loadSdk(), { ...config, accountId: binding.agentId, robotId: binding.robotId, appKey, appSecret,
+          robotIds: () => manager.snapshot().bindings.flatMap(peer => [peer.robotId, peer.agentId]) }, async (input, mentions) => {
           const state = manager.snapshot()
           const group = input.conversation.kind === 'group' ? state.groups.find(item => item.groupId === input.conversation.id) : undefined
           if (group) {
@@ -75,7 +78,7 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
         transport = connection
         const owner = new InfoFlowBridge(ctx.botMode, domain.global, { send: async delivery => {
           const target = connections.get(delivery.botId ?? binding.botId)
-          if (!target) throw new Error('Replying robot is disabled; retain its outbox')
+          if (!target) throw new PermanentChatError('Replying robot is disabled')
           await target.transport.send(delivery)
         } }, { ...config, accountId: binding.agentId, allowDelegation: true,
           mentionId: botId => manager.snapshot().bindings.find(item => item.botId === botId)?.agentId,

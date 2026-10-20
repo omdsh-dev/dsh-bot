@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
       - name: Install pinned package manager
@@ -19,6 +19,8 @@ jobs:
       - run: npm run check
       - run: npm run setup
       - run: npm test
+      - run: npm install --prefix .runtime/feishu-sdk --ignore-scripts --no-package-lock @larksuiteoapi/node-sdk@1.75.0
+      - run: node --test scripts/feishu-sdk.test.mjs
       - run: npm run pack
       - run: npm run pack:infoflow
       - run: npm run pack:feishu
@@ -31,7 +33,7 @@ jobs:
       - run: npm run test:feishu-package
       - run: npm run test:im-isolation-package
       - run: npm run test:im-delegation-package
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dsh-bot-package
           path: |
@@ -46,12 +48,12 @@ jobs:
     env:
       DSH_BOT_TEST_VERSION: 0.1.5-rc.2
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
       - run: npm install --global pnpm@11.7.0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: dsh-bot-package
           path: dist
@@ -64,3 +66,25 @@ jobs:
       - run: npm run test:feishu-package
       - run: npm run test:im-isolation-package
       - run: npm run test:im-delegation-package
+
+  node-22:
+    needs: build-and-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: npm install --global pnpm@11.7.0
+      - run: npm run setup
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: dsh-bot-package
+          path: dist
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - run: npm run test:package
+      - run: npm run test:feishu-package
+      - run: npm run test:infoflow-managed-package

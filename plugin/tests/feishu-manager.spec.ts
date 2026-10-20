@@ -17,6 +17,7 @@ function bench(initial: Settings = { bindings: [], registrations: [], groups: []
     options.signal.addEventListener('abort', () => fail(new Error('aborted')), { once: true })
   }))
   const runtime: ManagerRuntime = {
+    unset: async ref => { secrets.delete(ref) },
     createGroup: vi.fn(async () => 'oc_created'),
     linkGroup: vi.fn<ManagerRuntime['linkGroup']>(async group => ({ id: brandString<RoomId>('room_created'), title: group.title, kind: 'group', members: [], messages: [], defaultBot: group.creatorBot })),
     bots: () => [alpha, beta].map(id => ({ id, name: id, instructions: 'test', preset: 'standard' } satisfies Bot)),
@@ -30,6 +31,18 @@ function bench(initial: Settings = { bindings: [], registrations: [], groups: []
     reject: () => reject(new Error('error with secret payload')) }
 }
 const manual = (botId: BotId, appId = `cli_${botId}`) => ({ botId, appId, appSecret: 'private-manual-secret', brand: 'feishu' as const, allowUsers: ['ou_owner'], allowGroups: [], admins: ['ou_owner'] })
+it('cleans superseded and uncommitted secrets without replacing the active credential on storage failure', async () => {
+  const f = bench()
+  await f.manager.save(manual(alpha)); await f.manager.save(manual(alpha))
+  expect(f.secrets.size).toBe(1)
+  const previous = f.state()
+  f.store.set.mockRejectedValueOnce(new Error('disk full'))
+  await expect(f.manager.save({ ...manual(alpha), appSecret: 'replacement' })).rejects.toThrow('disk full')
+  expect(f.state()).toEqual(previous)
+  expect(f.secrets.size).toBe(1)
+  expect(f.secrets.get(previous.bindings[0]!.secretRef)).toBe('private-manual-secret')
+  await f.manager.close()
+})
 it('persists explicit all-group access through restart and preserves it when older clients omit the option', async () => {
   const f = bench()
   expect(await f.manager.save(manual(alpha))).toMatchObject({ allowAllGroups: false })
@@ -153,14 +166,16 @@ it('reuses uuid and owner after a lost response and blocks retries outside the d
   expect(resumed.runtime.createGroup).not.toHaveBeenCalled()
   await resumed.manager.close(); await f.manager.close()
 })
-it('retains permission failures for retry and does not call the API if intent cannot be saved', async () => {
+it('retains terminal permission failures for inspection and does not call the API if intent cannot be saved', async () => {
   const f = await groupBench()
   f.store.set.mockRejectedValueOnce(new Error('disk full'))
   await expect(f.manager.createGroup(groupRequest)).rejects.toThrow('disk full'); expect(f.runtime.createGroup).not.toHaveBeenCalled()
   vi.mocked(f.runtime.createGroup).mockRejectedValueOnce(new GroupCreateError('缺少 im:chat:create'))
   await expect(f.manager.createGroup(groupRequest)).rejects.toThrow('im:chat:create')
   expect(f.state().groups[0]?.status).toBe('failed'); expect(f.runtime.linkGroup).not.toHaveBeenCalled()
-  await f.manager.resumeGroup(groupRequest.requestId); expect(f.state().groups[0]?.status).toBe('ready')
+  await expect(f.manager.resumeGroup(groupRequest.requestId)).rejects.toThrow('已失败')
+  await expect(f.manager.createGroup(groupRequest)).rejects.toThrow('已失败')
+  expect(f.runtime.createGroup).toHaveBeenCalledTimes(1)
   await f.manager.close()
 })
 it('keeps an earlier unknown creation outcome uncertain when a retry is rejected', async () => {

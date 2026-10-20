@@ -7,7 +7,7 @@ kind: "package-reference"
 
 English | [中文](plugin-reference.zh.md)
 
-The optional connector uses Host-only `ensureExternalRoom` and `submitExternalMessage`; neither is a Remote method. External receipts and response attempts commit atomically. Human identity is logged as JSON user data. See the [InfoFlow guide](infoflow.md).
+The optional connector uses Host-only `ensureExternalRoom` and `submitExternalMessage`; neither is a Remote method. Within `bot_mode`, external message IDs and response attempts commit atomically. Connector admission and outbox records belong to separate domains; cross-domain recovery uses idempotent message IDs, not a distributed transaction. Human identity is logged as JSON user data. See the [InfoFlow guide](infoflow.md).
 
 ## Summary
 

@@ -26,7 +26,8 @@
     "src/feishu/manager.ts",
     "src/feishu/sdk.ts",
     "src/external-rooms.ts",
-    "src/compatibility.ts"
+    "src/compatibility.ts",
+    "src/external-errors.ts"
   ],
   "references": [
     {

@@ -147,6 +147,7 @@ After setup:
 
 ```sh
 npm run check
+npm run build:plugin
 npm test
 npm run pack
 npm run pack:feishu
@@ -162,6 +163,8 @@ npm run test:im-delegation-package
 Tests run inside the prepared DSH workspace and cover routing, native slots and UI interactions, persistence, stop, and process restart. `pack` creates the compiled archive and checksums in `dist/`; `test:package` unpacks that archive into isolated profiles and checks DSH's compatibility gate, Desktop/Web Host authentication, asset loading and restart continuity. The Desktop Host test does not require Electron or a display. Only tests substitute a deterministic model; no API key is needed. GitHub Actions performs a clean setup/build and the same tests, then retains the archive as a CI artifact. It does not publish to npm. `npm run test:install` verifies both local base and Feishu archives through DSH's shared plugin manager. After publication, `npm run test:registry` checks installation from npm; it requires public registry access and is not part of CI.
 
 See the [architecture](docs/architecture.md), [full plugin reference](docs/plugin-reference.md), and [release notes](CHANGELOG.md). When changing the DSH pin, update the integration patch and validate a fresh installation rather than assuming compatibility with pre-stable APIs.
+
+Release archives require a clean committed checkout and a fresh build with DSH 0.1 schema getters. `setup` runs the compatibility build automatically. For local verification of uncommitted changes only, append `-- --allow-dirty` to each pack command; these archives record the commit, dirty flag and source hash in `compatibility.json`. Do not publish these test archives.
 
 ## License
 

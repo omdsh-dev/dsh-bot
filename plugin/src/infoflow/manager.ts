@@ -9,6 +9,7 @@ export interface ManagerRuntime {
   bots(): BotId[]
   api(binding: Binding, credentials: { appKey: string; appSecret: string }): RobotApi
   resolve(ref: string): Promise<string | undefined>
+  unset(ref: string): Promise<void>
   set(ref: string, value: string): Promise<void>
   start(binding: Binding): Promise<void>
   stop(botId: BotId): Promise<void>
@@ -102,8 +103,14 @@ export class InfoFlowManager implements InfoFlowControl {
       const suffix = createHash('sha256').update(`${request.botId}:${randomUUID()}`).digest('hex').slice(0, 24).toUpperCase()
       const binding: Binding = { ...verified, ...list, enabled: request.connect === true || verified.enabled,
         allowAllGroups: request.allowAllGroups ?? base.allowAllGroups ?? false, appKeyRef: `DSH_BOT_${suffix}_KEY`, appSecretRef: `DSH_BOT_${suffix}_SECRET` }
-      await this.runtime.set(binding.appKeyRef, secrets.appKey); await this.runtime.set(binding.appSecretRef, secrets.appSecret)
-      await this.change(state => { state.bindings = [...state.bindings.filter(item => item.botId !== request.botId), binding] })
+      try {
+        await this.runtime.set(binding.appKeyRef, secrets.appKey); await this.runtime.set(binding.appSecretRef, secrets.appSecret)
+        await this.change(state => { state.bindings = [...state.bindings.filter(item => item.botId !== request.botId), binding] })
+      } catch (cause) {
+        await Promise.allSettled([binding.appKeyRef, binding.appSecretRef].map(ref => this.runtime.unset(ref)))
+        throw cause
+      }
+      if (previous) await Promise.allSettled([previous.appKeyRef, previous.appSecretRef].map(ref => this.runtime.unset(ref)))
       await this.runtime.stop(binding.botId)
       if (binding.enabled) await this.activate(binding); else this.connection(binding.botId, 'disabled')
       return this.view(binding)
