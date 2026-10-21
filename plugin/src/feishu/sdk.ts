@@ -42,10 +42,19 @@ export function loadSdk(timeoutMs: number): Sdk {
 const record = z.looseObject({})
 function object(value: unknown): Record<string, unknown> { return record.safeParse(value).data ?? {} }
 function text(value: unknown): string { return typeof value === 'string' ? value : '' }
+const permanentCodes = [99991672, 230002, 230003, 230006, 230013]
+/** Axios rejects non-2xx responses before the SDK returns a business envelope. */
+function transportError(cause: unknown): never {
+  const response = object(object(cause).response), status = Number(response.status)
+  if (status >= 400 && status < 500 && status !== 429 && permanentCodes.includes(Number(object(response.data).code))) {
+    throw new PermanentChatError('飞书拒绝了请求，请检查应用权限（附件需要 im:resource）、发布状态和群成员')
+  }
+  throw cause
+}
 function checked(value: unknown): Record<string, unknown> {
   const result = object(value)
   // Documented authorization/recipient errors; unknown codes keep bounded retries.
-  if ([99991672, 230002, 230003, 230006, 230013].includes(Number(result.code))) throw new PermanentChatError('飞书接口未成功，请检查机器人权限、发布状态和群成员')
+  if (permanentCodes.includes(Number(result.code))) throw new PermanentChatError('飞书接口未成功，请检查机器人权限、发布状态和群成员')
   if (result.code !== 0) throw new Error('飞书接口未成功，请检查机器人权限、发布状态和网络')
   return result
 }
@@ -177,6 +186,9 @@ export class FeishuTransport {
   private readonly begin: () => void
   start(): void { if (!this.stopped && !this.connection) this.begin() }
   async prepare(input: Incoming): Promise<Incoming> {
+    try { return await this.prepareOnce(input) } catch (cause) { return transportError(cause) }
+  }
+  private async prepareOnce(input: Incoming): Promise<Incoming> {
     if (!input.media) return input
     if (!this.upload || !this.client.im) throw new Error('Native media support is unavailable')
     const attachments: ChatAttachment[] = []; let total = 0
@@ -193,6 +205,9 @@ export class FeishuTransport {
     return { ...input, attachments }
   }
   async send(delivery: Delivery): Promise<void> {
+    try { await this.sendOnce(delivery) } catch (cause) { transportError(cause) }
+  }
+  private async sendOnce(delivery: Delivery): Promise<void> {
     if (this.stopped) throw new Error('Feishu is stopping')
     const escape = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
     const mentions = delivery.conversation.kind === 'group' ? (delivery.mentions ?? [])

@@ -1,8 +1,8 @@
 # 如流机器人接入
 
-本次版本为 DSH Bot 0.9.0，配套插件为 `@zzzpyyy/dsh-bot-infoflow@0.6.0`，最低要求 DSH `0.1.5-rc.2`，同一安装包已验证 `0.1.5-rc.2` 和 `0.2.0-rc.2`；后续版本按[兼容策略](compatibility.md)检查接口。如流插件作为同一 Host 的可选 Cordis 插件运行；基础 Bot 包不依赖如流 SDK。安装配套包不会自动连接机器人，必须先配置并启用。
+本次版本为 DSH Bot 0.9.1，配套插件为 `@zzzpyyy/dsh-bot-infoflow@0.6.0`，最低要求 DSH `0.1.5-rc.2`，同一安装包已验证 `0.1.5-rc.2` 和 `0.2.0-rc.2`；后续版本按[兼容策略](compatibility.md)检查接口。如流插件作为同一 Host 的可选 Cordis 插件运行；基础 Bot 包不依赖如流 SDK。安装配套包不会自动连接机器人，必须先配置并启用。
 
-本说明适用于主包 `0.9.0`、如流配套包 `0.6.0`。新版本支持图片/文件/语音入站、失败队列恢复、定时通知，以及在 DSH 中显式勾选后同步本条群消息；默认仍不转发 Web 消息。配置方式和运行条件见[功能使用说明](capabilities.md)。以下命令固定本次发布版本，发布与实机验收状态见[完成记录](feature-completion.md)。
+本说明适用于主包 `0.9.1`、如流配套包 `0.6.0`。新版本支持图片/文件/语音入站、失败队列恢复、定时通知，以及在 DSH 中显式勾选后同步本条群消息；默认仍不转发 Web 消息。配置方式和运行条件见[功能使用说明](capabilities.md)。以下命令固定本次发布版本，发布与实机验收状态见[完成记录](feature-completion.md)。
 
 ## 能力与会话
 
@@ -23,7 +23,7 @@
 已有匹配版本 DSH CLI 时，先配置组织授权的 `@baidu` registry，再将以下包安装到当前服务使用的 Web profile：
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot@0.9.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot@0.9.1
 dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.6.0
 ```
 
@@ -37,12 +37,12 @@ npm run pack
 npm run pack:infoflow
 ```
 
-首次安装源码仍使用 `npm run setup`。上述增量构建要求工作区及依赖已安装，会重新生成 Remote 编解码器。当前源码产物分别是 `dist/zzzpyyy-dsh-bot-0.9.0.tgz` 和 `dist/zzzpyyy-dsh-bot-infoflow-0.6.0.tgz`。
+首次安装源码仍使用 `npm run setup`。上述增量构建要求工作区及依赖已安装，会重新生成 Remote 编解码器。当前源码产物分别是 `dist/zzzpyyy-dsh-bot-0.9.1.tgz` 和 `dist/zzzpyyy-dsh-bot-infoflow-0.6.0.tgz`。
 
 对于已有匹配版本 DSH CLI 的 Web profile，可从本仓库目录执行以下命令；使用你实际的 `DSH_HOME`，并先配置好组织授权的 SDK registry：
 
 ```sh
-dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-0.9.0.tgz
+dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-0.9.1.tgz
 dsh plugin --profile web add ./dist/zzzpyyy-dsh-bot-infoflow-0.6.0.tgz
 ```
 

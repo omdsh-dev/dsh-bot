@@ -1,6 +1,12 @@
 # Release notes
 
-## 0.9.0 — unreleased
+## 0.9.1 — unreleased
+
+- Fix real Cordis optional-service access for attachments, speech transcription, model/tool catalogs, pending questions and per-Bot policies.
+- Add native-profile regression checks that upload/read a real attachment and load the catalog without an Agent.
+- Feishu 0.5.1 treats SDK-thrown HTTP permission/recipient rejections as permanent, including media uploads/downloads, while retaining retries for throttling and server failures. InfoFlow 0.6.0 remains compatible and unchanged.
+
+## 0.9.0 — 2026-10-21
 
 Bot `0.9.0`, Feishu `0.5.0`, InfoFlow `0.6.0`; the new companions require Bot `>=0.9.0 <1.0.0` for queue recovery and media ingress.
 

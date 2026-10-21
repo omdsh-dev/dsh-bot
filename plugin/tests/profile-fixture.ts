@@ -78,6 +78,11 @@ export async function apply(ctx: Context): Promise<void> {
       assert.ok(requests.every(request => JSON.stringify(request.messages).includes('first public question')))
       assert.ok(requests.every(request => !JSON.stringify(request.messages).includes('PRIVATE_SECRET')))
     } else {
+      const bytes = Buffer.from('native attachment service access')
+      const file = await service.upload({ name: 'native-service-check.txt', mediaType: 'text/plain', base64: bytes.toString('base64') })
+      const downloaded = await service.readAttachment(file)
+      assert.equal(Buffer.from(downloaded.base64, 'base64').toString(), bytes.toString(), 'Media crosses the real Cordis service boundary')
+      assert.ok((await service.catalog()).providers.some(provider => provider.id === 'bot-fixture'), 'Catalog reads optional native services without an Agent')
       assert.equal(service.snapshot().infoflowVisible, false, 'New profiles hide enterprise-only entry points')
       const unused = async (): Promise<never> => { throw new Error('Visibility must not call the connector') }
       const legacyControl = {

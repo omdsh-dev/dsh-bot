@@ -77,3 +77,24 @@ test('real SDK uploads native image/file bytes and sends returned keys with stab
   assert.notEqual(sends[0].uuid, sends[2].uuid)
   await transport.close()
 })
+
+test('real SDK HTTP permission failures stop media delivery while server and throttling failures remain retryable', async () => {
+  const { FeishuTransport } = await import(pathToFileURL(join(runtime, pluginPath, 'lib/types/feishu/sdk.js')))
+  let status = 400
+  const httpInstance = {
+    async post() { return { tenant_access_token: 'fixture-token', expire: 7200 } },
+    async request() { throw { response: { status, data: { code: 99991672, msg: 'sensitive response' } } } },
+  }
+  const real = { ...sdk, Client: class extends sdk.Client { constructor(options) { super({ ...options, httpInstance, logger: silent }) } }, WSClient: class { async start() {} close() {} } }
+  const transport = new FeishuTransport(real, { appId: 'cli_permission', appSecret: 'correct', brand: 'feishu', botOpenId: 'ou_bot', timeoutMs: 100 }, async () => {}, () => {}, () => {}, undefined,
+    async () => ({ name: 'check.png', mediaType: 'image/png', base64: 'aGVsbG8=' }))
+  const base = { id: 'permission', conversation: { provider: 'feishu', accountId: 'cli_permission', kind: 'group', id: 'oc_group' }, text: 'check', user: '', attempts: 0, nextAt: 0 }
+  try {
+    for (status of [400, 403, 429, 500, 503]) for (const media of [false, true]) {
+      const delivery = { ...base, ...(media ? { attachment: { type: 'image', attachment: { attachmentId: 'sha256:' + 'a'.repeat(64), name: 'check.png', bytes: 5 } } } : {}) }
+      const cause = await transport.send(delivery).catch(cause => cause)
+      assert.equal(cause?.code === 'DSH_EXTERNAL_PERMANENT', status === 400 || status === 403)
+      if (status === 400 || status === 403) assert.ok(!cause.message.includes('sensitive response'))
+    }
+  } finally { await transport.close() }
+})

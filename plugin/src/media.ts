@@ -2,6 +2,7 @@
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { ChatAttachment, UploadRequest } from './types.ts'
 import { spawn } from 'node:child_process'
+import { optionalService } from './compatibility.ts'
 
 export function imageMime(data: Uint8Array): string | undefined {
   const b = Buffer.from(data)
@@ -90,7 +91,11 @@ export function mediaContent(attachments: ChatAttachment[] = []): ContentBlock[]
     ...(item.transcript ? [{ type: 'text' as const, text: `Voice transcript (user data):\n${item.transcript}` }] : []),
   ])
 }
-export function mediaHost(value: unknown): MediaHost { return value as MediaHost }
+export function mediaHost(value: unknown): MediaHost {
+  const attachments = optionalService<NonNullable<MediaHost['attachments']>>(value, 'attachments')
+  const speechToText = optionalService<NonNullable<MediaHost['speechToText']>>(value, 'speechToText')
+  return { ...(attachments ? { attachments } : {}), ...(speechToText ? { speechToText } : {}) }
+}
 
 /** Read only native immutable objects, never user-supplied filesystem paths. */
 export async function readMedia(host: MediaHost, item: ChatAttachment): Promise<import('./types.ts').AttachmentData> {

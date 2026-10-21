@@ -13,7 +13,7 @@ import { assembleContextFor, type Agent } from '@deepseek-ai/dsh-agent'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-system-prompt'
-import { checkHost, checkAgent } from './compatibility.ts'
+import { checkHost, checkAgent, optionalService } from './compatibility.ts'
 import { botDomain } from './domain.ts'
 import { isExternalGroup, mergeExternalRooms } from './external-rooms.ts'
 import { findMessage, route } from './routing.ts'
@@ -293,7 +293,7 @@ export class BotMode extends TypertRemoteService {
       if (!original?.botId || !question) throw new Error('Question is no longer pending')
       this.validateAnswers(question, request.answer)
       const agent = this.ctx.agents.get(this.member(room, original.botId).sessionId)
-      const projections = Reflect.get(this.ctx, 'sessionProjections') as { stateOf(session: Agent['session'], name: string): { questions?: { active: { callId: string; state: string }[] } } | undefined } | undefined
+      const projections = optionalService<{ stateOf(session: Agent['session'], name: string): { questions?: { active: { callId: string; state: string }[] } } | undefined }>(this.ctx, 'sessionProjections')
       if (agent && projections && !projections.stateOf(agent.session, 'userQuestions')?.questions?.active.some(item => item.callId === question.callId && item.state === 'continued')) throw new Error('Question was already settled in the native Session')
       const queued = room.messages.some(message => message.status === 'running' || message.status === 'queued')
       const batch = this.append(state, room, { roomId: room.id, text: JSON.stringify({ kind: 'answer_to_pending_question', tool: 'ask_user_question', callId: question.callId, questions: question.questions, answers: request.answer.answers }), targets: [original.botId] })
@@ -313,8 +313,8 @@ export class BotMode extends TypertRemoteService {
     }
     const agent = member && this.ctx.agents.get(member.sessionId)
     const host = agent?.ctx ?? this.ctx
-    const llm = Reflect.get(host, 'llm') as { listProviders?(): { id: string }[]; listModels?(id: string): Promise<{ id: string; name: string }[]> } | undefined
-    const tools = Reflect.get(host, 'tools') as { schemas?(scope?: Agent): { name: string; description: string }[] } | undefined
+    const llm = optionalService<{ listProviders?(): { id: string }[]; listModels?(id: string): Promise<{ id: string; name: string }[]> }>(host, 'llm')
+    const tools = optionalService<{ schemas?(scope?: Agent): { name: string; description: string }[] }>(host, 'tools')
     const providers = await Promise.all((llm?.listProviders?.() ?? []).map(async provider => {
       try { return { id: provider.id, models: await llm!.listModels?.(provider.id) ?? [] } }
       catch { return { id: provider.id, models: [], error: 'Model discovery unavailable; enter an ID manually' } }
@@ -907,7 +907,7 @@ export class BotMode extends TypertRemoteService {
       if (this.canceled(run)) return
       if (agent.status !== 'idle' || agent.inbox.nextTurn.length || agent.inbox.nextStep.length) throw new Error('This Bot Session is busy; finish its native conversation first')
       if (bot.policy?.fileMode && bot.policy.fileMode !== 'inherit') {
-        const sandbox = Reflect.get(agent.ctx, 'sandboxPolicy') as { resolve(request: { session: Agent['session'] }): { mode: 'read-only' | 'workspace-write' | 'danger-full-access' } } | undefined
+        const sandbox = optionalService<{ resolve(request: { session: Agent['session'] }): { mode: 'read-only' | 'workspace-write' | 'danger-full-access' } }>(agent.ctx, 'sandboxPolicy')
         if (!sandbox) throw new Error('Enable DSH sandbox policy and enforcing filesystem/shell backends before setting a Bot file policy')
         const old = sandbox.resolve({ session: agent.session }).mode
         const rank = { 'read-only': 0, 'workspace-write': 1, 'danger-full-access': 2 }
@@ -936,7 +936,7 @@ export class BotMode extends TypertRemoteService {
       cleanup.push(() => clearInterval(timer))
       // Guard every actual dispatch, including scoped tools and nested PTC calls.
       if (bot.policy?.toolMode && bot.policy.toolMode !== 'inherit') {
-        const tools = Reflect.get(agent.ctx, 'tools') as { guard?: (guard: (exec: { name: string }) => string | undefined) => () => void } | undefined
+        const tools = optionalService<{ guard?: (guard: (exec: { name: string }) => string | undefined) => () => void }>(agent.ctx, 'tools')
         if (typeof tools?.guard !== 'function') throw new Error('This DSH version cannot enforce per-Bot tool restrictions')
         cleanup.push(tools.guard(exec => bot.policy?.toolMode === 'none' || !bot.policy?.tools?.includes(exec.name) ? 'Blocked by this Bot’s tool policy' : undefined))
       }

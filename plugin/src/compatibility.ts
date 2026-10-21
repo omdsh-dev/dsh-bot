@@ -1,4 +1,11 @@
 /** Check the capabilities we use before creating durable state or delivering input. */
+export function optionalService<T>(context: unknown, name: string): T | undefined {
+  if (!context || typeof context !== 'object') return undefined
+  const get = Reflect.get(context, 'get')
+  // Cordis property access requires inject; get() is its native optional-service lookup.
+  return (typeof get === 'function' ? get.call(context, name) : Reflect.get(context, name)) as T | undefined
+}
+
 export function requireMethods(owner: string, value: unknown, paths: readonly string[]): void {
   const missing = paths.filter(path => {
     let current: unknown = value

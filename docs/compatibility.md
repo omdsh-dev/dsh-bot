@@ -1,6 +1,6 @@
 # Compatibility policy / 兼容策略
 
-DSH Bot separates the revision used to **build** from the versions allowed to **run**. One set of Bot `0.9.0`, Feishu `0.5.0` and InfoFlow `0.6.0` archives is tested on DSH `0.1.5-rc.2` and `0.2.0-rc.2`. A routine DSH update does not require a new Bot release.
+DSH Bot separates the revision used to **build** from the versions allowed to **run**. One set of Bot `0.9.1`, Feishu `0.5.1` and InfoFlow `0.6.0` archives is tested on DSH `0.1.5-rc.2` and `0.2.0-rc.2`. A routine DSH update does not require a new Bot release.
 
 构建版本固定在 [dsh-version.json](../dsh-version.json)，用于复现编译结果；安装范围集中在 [compatibility.json](../compatibility.json)，不再由构建版本生成精确依赖。三个安装包使用同一份兼容策略。
 
@@ -11,7 +11,7 @@ DSH Bot separates the revision used to **build** from the versions allowed to **
 | IM 插件依赖的 DSH Bot | `>=0.9.0 <1.0.0`；新连接器使用媒体和失败队列接口 |
 | 已验证的 DSH | `0.1.5-rc.2`、`0.2.0-rc.2` 的固定提交 |
 
-上表对应飞书 `0.5.0` 和如流 `0.6.0`；旧版飞书 `0.4.1`、如流 `0.5.1` 的主包依赖范围为 `>=0.8.0 <1.0.0`。安装时应先升级主包，再升级连接器；发布与实机验收状态见[完成记录](feature-completion.md)。
+上表对应飞书 `0.5.1` 和如流 `0.6.0`；旧版飞书 `0.4.1`、如流 `0.5.1` 的主包依赖范围为 `>=0.8.0 <1.0.0`。安装时应先升级主包，再升级连接器；发布与实机验收状态见[完成记录](feature-completion.md)。
 
 DSH 范围显式列出 0.2.0、0.2.1 和 0.3.0 的预发布基线，普通 npm semver 校验也会接受 `0.2.1-rc.1`。semver 不会自动接受所有未知版本的预发布；增加新的预发布基线时需要更新范围并验证，新版 DSH 启用 includePrerelease 的加载检查不受此限制。允许安装与已验证兼容是不同含义。没有任何机制能够保证未来被删除的模块、改变语义的事件或协议继续兼容。
 

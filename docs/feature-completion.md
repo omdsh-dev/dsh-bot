@@ -1,6 +1,6 @@
 # Bot capability completion
 
-Release set: Bot 0.9.0, Feishu 0.5.0, InfoFlow 0.6.0.
+Release set: Bot 0.9.1, Feishu 0.5.1, InfoFlow 0.6.0.
 This ledger describes implemented source and verification scope; publication is a separate step.
 
 - [x] Bot/room edit, archive, restore, delete; queued Web messages and bounded group handoffs.
@@ -12,10 +12,10 @@ This ledger describes implemented source and verification scope; publication is 
 - [x] One-shot/interval schedules, IANA time zones, weekday calendar rules, DST handling and dedicated paginated run history.
 - [x] Explicit external notifications and Web message/attachment synchronization; uncertain InfoFlow groups can be attached after owner/member verification without another create call.
 - [x] Permission/setup guidance and source regression coverage, including storage failures, restart recovery, native SDK media formats and cancellation.
-- [ ] Live tenant acceptance: Feishu/InfoFlow media permissions, delivered content, reconnect and notifications. No test destination has been supplied; no live IM message or group has been created for this acceptance run.
-- [x] Publish Bot 0.9.0 and InfoFlow 0.6.0 to npm `next`; verify registry integrity and tags against the clean local archives.
-- [ ] Publish Feishu 0.5.0: the final archive is ready; npm security-key verification is still pending.
-- [ ] After Feishu publication, verify all three downloaded npm archives and run the real registry installer on both DSH revisions.
+- [x] Publish Bot 0.9.0, Feishu 0.5.0 and InfoFlow 0.6.0 to npm `next`; download all three registry archives and verify byte integrity and tags against clean local archives.
+- [x] Install the published Bot 0.9.0 and Feishu 0.5.0 through both DSH revisions' real plugin manager and start Desktop. The DSH 0.2 check passed after retrying a transient npm connection reset.
+- [ ] Publish Bot 0.9.1 and Feishu 0.5.1 follow-ups. Live tests exposed undeclared direct access to optional Cordis services and SDK-thrown HTTP permission errors; both are corrected with native-profile and real-SDK regressions. The source suite passes; final archives and registry checks are in progress.
+- [ ] Live tenant acceptance: the existing dedicated test groups received test requests. All ten configured Bot connections reconnected after local restart. Native uploads, downloaded-byte hashes, real-model replies and one-shot schedule execution passed; temporary schedules were deleted. Feishu media delivery is blocked by platform permission error 99991672 (im:resource). InfoFlow text/image sending succeeded, while the BOS file-upload gateway returned 40900; its reason is under investigation. External reply/notification delivery and inbound tenant-media acceptance remain to be verified.
 
 Operational limits are explicit in the [capability guide](capabilities.md): budgets are estimates and an individual call can exceed its reservation; native catalogs do not publish token prices; history still hydrates in memory; unreferenced history chunks and native attachments require deployment-level retention management. InfoFlow file links expire after 24 hours. Plugin upgrades must preserve every storage domain and must not be downgraded to a version that ignores archive manifests.
 
