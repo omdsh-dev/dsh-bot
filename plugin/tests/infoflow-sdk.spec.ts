@@ -99,7 +99,7 @@ it('sends a fixed test and translates visibility errors without exposing SDK det
 })
 
 it('sends small native images as base64 and files as expiring links using the pinned SDK formats', async () => {
-  const b = bench(), upload = vi.fn(async () => ({ url: 'https://bucket.bcebos.com/fixture?signature=ephemeral' }))
+  const b = bench(), upload = vi.fn(async (_request: unknown) => ({ url: 'https://bucket.bcebos.com/fixture?signature=ephemeral' }))
   const client = Reflect.get(b.transport, 'client')
   client.im.file = { upload }
   const native = Reflect.get(b.transport, 'config')

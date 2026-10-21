@@ -73,9 +73,9 @@ it('searches older server history and saves an explicit budget from the controls
   const b = await bench({ capabilities })
   fireEvent.click(screen.getByRole('button', { name: 'Chat & execution controls' }))
   fireEvent.change(screen.getByRole('textbox', { name: 'Search message text' }), { target: { value: 'needle' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Search', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }))
   await waitFor(() => expect(history).toHaveBeenCalledWith({ roomId: b.room.id, query: 'needle', limit: 50 }))
-  fireEvent.click(screen.getByRole('button', { name: 'Budget', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: 'Budget' }))
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Total token limit (0 unlimited)' }), { target: { value: '50000' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save budget' }))
   await waitFor(() => expect(configureBudget).toHaveBeenCalledWith(expect.objectContaining({ tokenLimit: 50000, costLimit: 0, currency: 'USD' })))
@@ -292,7 +292,7 @@ it('edits a Bot identity from chat info without changing its handle or preset', 
 
 it('hides InfoFlow and its group option by default, and remembers explicit visibility across panel navigation', async () => {
   const infoflow = { snapshot: vi.fn(async () => ({ available: false, bindings: [], groups: [] })),
-    save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), testMessage: vi.fn(), createGroup: vi.fn(), resumeGroup: vi.fn() }
+    save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), testMessage: vi.fn(), createGroup: vi.fn(), resumeGroup: vi.fn(), attachGroup: vi.fn() }
   const { face } = await bench({ infoflow })
   fireEvent.click(screen.getByRole('button', { name: en.newGroup }))
   expect(screen.queryByLabelText(en.ifCreateGroup)).toBeNull()
@@ -335,7 +335,7 @@ it('configures each Bot through the InfoFlow page and never displays stored secr
     status: 'disabled' as const, error: null, credentialsConfigured: true, allowUsers: ['alice'], allowGroups: [], admins: ['alice'] }
   const infoflow = { snapshot: vi.fn(async () => ({ available: true, bindings: [saved], groups: [] })),
     save: vi.fn(async () => saved), verify: vi.fn(async () => saved), toggle: vi.fn(async () => saved), testMessage: vi.fn(),
-    createGroup: vi.fn(), resumeGroup: vi.fn() }
+    createGroup: vi.fn(), resumeGroup: vi.fn(), attachGroup: vi.fn() }
   await bench({ infoflow }, true)
   fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
   fireEvent.click(screen.getByRole('tab', { name: en.infoflow }))
@@ -351,7 +351,7 @@ it('configures each Bot through the InfoFlow page and never displays stored secr
 })
 
 it('makes platform group creation optional and sends the owner and selected Bots only when selected', async () => {
-  const infoflow = { snapshot: vi.fn(), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), testMessage: vi.fn(), createGroup: vi.fn(), resumeGroup: vi.fn() }
+  const infoflow = { snapshot: vi.fn(), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), testMessage: vi.fn(), createGroup: vi.fn(), resumeGroup: vi.fn(), attachGroup: vi.fn() }
   const f = await bench({ infoflow }, true); infoflow.createGroup.mockResolvedValue(f.room)
   fireEvent.click(screen.getByRole('button', { name: 'New group' }))
   const option = screen.getByLabelText('Also create an InfoFlow group')
@@ -513,7 +513,7 @@ it('pastes InfoFlow credentials locally, saves and connects, and sends a test on
   const saved = { botId: 'sage' as BotId, agentId: '11', robotId: '111', robotName: 'Sage robot', enabled: true,
     status: 'connecting' as const, error: null, credentialsConfigured: true, allowUsers: ['alice'], allowGroups: [], allowAllGroups: true, admins: [] }
   const infoflow = { snapshot: vi.fn(async () => ({ available: true, bindings, groups: [] })),
-    save: vi.fn(async () => { bindings = [saved]; return saved }), verify: vi.fn(), toggle: vi.fn(), testMessage: vi.fn(async () => {}), createGroup: vi.fn(), resumeGroup: vi.fn() }
+    save: vi.fn(async () => { bindings = [saved]; return saved }), verify: vi.fn(), toggle: vi.fn(), testMessage: vi.fn(async () => {}), createGroup: vi.fn(), resumeGroup: vi.fn(), attachGroup: vi.fn() }
   await bench({ infoflow }, true); fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
   fireEvent.click(screen.getByRole('tab', { name: en.infoflow }))
   const paste = await screen.findByLabelText(en.ifPasteCredentials)
@@ -557,7 +557,7 @@ it('saves a weekly calendar rule with an explicit zone and opens dedicated run h
   const b = await bench({ capabilities })
   b.model.replace({ bots: b.bots, rooms: b.rooms, schedules: [{ id: 'scheduled', roomId: b.room.id, name: 'Existing', text: 'Check', targets: [b.room.defaultBot], enabled: false, nextAt: 1, intervalMinutes: 0, allowDelegation: false, notify: false }] })
   fireEvent.click(screen.getByRole('button', { name: 'Chat & execution controls' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Schedules', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: 'Schedules' }))
   fireEvent.click(screen.getByRole('button', { name: 'Run history' }))
   expect(await screen.findByText('Scheduled result')).toBeDefined()
   fireEvent.click(screen.getByRole('checkbox', { name: 'Calendar recurrence' }))

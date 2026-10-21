@@ -29,7 +29,7 @@ function bench() {
     ctx: { systemPrompt: { assemble, variable, section } }, followup, whenIdle: vi.fn(async () => {}), cancel: vi.fn() }
   const ctx = { storageDomain: { open: async () => ({ global: { get: () => state, set }, close }) },
     agents: { get: () => agent }, sessionController: { create: vi.fn(async () => {}) }, sessions: { flush: vi.fn(async () => {}) },
-    on: vi.fn(() => () => {}), effect: vi.fn((action: () => unknown) => action()), logger: { error: vi.fn() } }
+    on: vi.fn((_event: string, _listener: (...args: unknown[]) => void) => () => {}), effect: vi.fn((action: () => unknown) => action()), logger: { error: vi.fn() } }
   // Bypass Cordis registration only; all methods under test are the actual service implementation.
   const service: BotMode = Object.create(BotMode.prototype)
   Object.assign(service, { ctx, state, config: { cwd: '.', historyMessages: 80, maxBots: 8, maxMessages: 1000 },
@@ -166,11 +166,11 @@ it('paginates and searches full history while the browser feed stays bounded, an
   const page = b.service.history({ roomId: room.id, limit: 10, query: 'needle' })
   expect(page.total).toBe(15); expect(page.messages[0]!.text).toBe('needle 50')
   expect(b.service.history({ roomId: room.id, query: 'needle', before: page.before!, limit: 10 }).messages).toHaveLength(5)
-  const controller = new AbortController(), feed = b.service.follow(controller.signal)
+  const controller = new AbortController(), feed = b.service.follow(controller.signal)[Symbol.asyncIterator]()
   const frame = await feed.next()
   expect(frame.value.value.rooms[0].messages).toHaveLength(50)
   expect(b.service.exportChat({ roomId: room.id, format: 'json' })).toContain('needle 0')
-  controller.abort(); await feed.return()
+  controller.abort(); await feed.return?.()
 })
 
 it('archives without destroying history and blocks new external work until restored', async () => {
@@ -227,7 +227,7 @@ it('does not execute a scheduled occurrence when its atomic reservation fails', 
 it('enforces model selection, tool restrictions and exhausted budgets at native execution seams', async () => {
   const b = bench(), agent = b.ctx.agents.get()
   b.state.bots[0]!.policy = { provider: 'fixture', model: 'selected', toolMode: 'allow', tools: ['read_file'] }
-  const listeners = new Map<string, Function>(), guard = vi.fn(() => () => {})
+  const listeners = new Map<string, Function>(), guard = vi.fn((_guard: (exec: { name: string }) => string | undefined) => () => {})
   Object.assign(agent.ctx, { tools: { guard }, on: (event: string, listener: Function) => { listeners.set(event, listener); return () => {} } })
   b.followup.mockImplementation(() => {})
   await b.execute()

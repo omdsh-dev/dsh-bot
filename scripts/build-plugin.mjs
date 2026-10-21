@@ -30,6 +30,8 @@ for (const artifact of generator.generate(['@deepseek-ai/dsh-experimental-bot-mo
 }
 runTool('tsc', ['-b', `${pluginPath}/tsconfig.client.json`])
 runTool('tsdown', ['--env.DSH_BUILD_FACE', 'client', '--filter', pluginPath, '--logLevel', 'warn'])
+// Full setup also type-checks tests. Keep incremental local builds on the same gate.
+runTool('tsc', ['-b', 'tsconfig.host.json', 'tsconfig.client.json'])
 // Bundler region comments can include absolute virtual CSS module paths.
 const clean = folder => {
   for (const entry of readdirSync(folder, { withFileTypes: true })) {

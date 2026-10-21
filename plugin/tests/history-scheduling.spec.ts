@@ -29,7 +29,7 @@ it('migrates full history, preserves indexed receipts and edits old chunks witho
   const documents = new Map<string, unknown>(); let chunkWrites = 0
   const archive = () => new HistoryStore(async spec => ({ global: {
     get: () => spec.global.schema.parse(documents.get(spec.name) ?? []),
-    set: async value => { documents.set(spec.name, spec.global.schema.parse(value)); chunkWrites++ },
+    set: async (value: unknown) => { documents.set(spec.name, spec.global.schema.parse(value)); chunkWrites++ },
   }, close: async () => {} }) as never)
   const state = botDomain.global.schema.parse({ bots: [], rooms: [{ id: 'r', title: 'History', kind: 'group', defaultBot: 'b', members: [{ botId: 'b', sessionId: 's', cursor: 550 }], messages:
     Array.from({ length: 600 }, (_, i) => ({ text: 'message ' + i, id: 'm' + i, botId: null, replyTo: null, status: 'complete', error: null, time: i, ...(i === 10 ? { external: { id: 'receipt', sender: { id: 'u', name: 'User' } } } : {}) })) }] })
@@ -61,7 +61,7 @@ it('segments dedup windows and evicts old receipts without rewriting the retaine
   const chunks = new Map<string, string[]>(); let writes = 0
   const load = () => BridgeArchive.load({ get: () => raw, set: async state => { raw = bridgeSchema.parse(state) } }, async spec => ({ global: {
     get: () => spec.global.schema.parse(chunks.get(spec.name) ?? []),
-    set: async value => { chunks.set(spec.name, spec.global.schema.parse(value)); writes++ },
+    set: async (value: unknown) => { chunks.set(spec.name, spec.global.schema.parse(value)); writes++ },
   }, close: async () => {} }) as never)
   const store = await load(), state = { receipts: Array.from({ length: 1000 }, (_, i) => 'receipt-' + i), notices: [], pending: [], outbox: [] }
   await store.set(state)
@@ -75,7 +75,7 @@ it('segments dedup windows and evicts old receipts without rewriting the retaine
   const persisted = structuredClone(raw)
   const failing = await BridgeArchive.load({ get: () => raw, set: async () => { throw new Error('disk full') } }, async spec => ({ global: {
     get: () => spec.global.schema.parse(chunks.get(spec.name) ?? []),
-    set: async value => { chunks.set(spec.name, spec.global.schema.parse(value)) },
+    set: async (value: unknown) => { chunks.set(spec.name, spec.global.schema.parse(value)) },
   }, close: async () => {} }) as never)
   await expect(failing.set({ ...state, receipts: [...state.receipts, 'uncommitted'] })).rejects.toThrow('disk full')
   expect(failing.get().receipts).toEqual(state.receipts)

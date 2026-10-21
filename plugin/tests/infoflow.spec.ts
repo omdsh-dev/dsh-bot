@@ -521,7 +521,7 @@ it.each(['infoflow', 'feishu'] as const)('opens unlisted %s groups only after an
 it('persists media descriptors before fetch and retries a retained media failure without replaying accepted work', async () => {
   const b = bench()
   const { PermanentChatError } = await import('../src/external-errors.ts')
-  const prepare = vi.fn(async (incoming: Incoming) => {
+  const prepare = vi.fn(async (_incoming: Incoming) => {
     expect(b.state().pending[0]!.input.media).toEqual({ accountId: 'app' })
     throw new PermanentChatError('missing media permission')
   })

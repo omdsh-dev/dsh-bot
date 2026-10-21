@@ -37,6 +37,6 @@ it('allows concrete rework but explains duplicate, unavailable, busy and exhaust
   expect(plan().rejected[0]).toContain('正在执行')
   earlier.status = 'complete'
   expect(planHandoffs(room, response as unknown as ChatMessage, bots, []).rejected[0]).toContain('未接入当前群')
-  room.messages.push({ ...room.messages[1]!, id: brandString('second') }, { ...room.messages[1]!, id: brandString('third') })
+  room.messages.push({ ...room.messages[1]!, id: brandString<ChatMessage['id']>('second') }, { ...room.messages[1]!, id: brandString<ChatMessage['id']>('third') })
   expect(plan().rejected[0]).toContain('已达上限')
 })
