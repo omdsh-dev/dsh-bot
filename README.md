@@ -49,7 +49,7 @@ This release uses the experimental `next` tag on npm.
 | --- | --- | --- |
 | [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.9.1` | Required base: Web chats and the IM configuration panel |
 | [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.5.1` | Optional Feishu connection and group creation |
-| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.6.0` | Optional InfoFlow connection; requires enterprise SDK access |
+| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.6.1` | Optional InfoFlow connection; requires enterprise SDK access |
 
 **Specify a version or `@next` when installing.** The examples below pin this release. To install the version currently tagged `next`, use `@zzzpyyy/dsh-bot@next`, `@zzzpyyy/dsh-bot-feishu@next`, or `@zzzpyyy/dsh-bot-infoflow@next`. Installing a bare package name uses `latest`, which points to older releases as of **2026-10-21**.
 
@@ -70,7 +70,7 @@ dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.5.1
 InfoFlow additionally requires `@baidu/infoflow-sdk-nodejs@2026.8.28` from your authorized enterprise registry. Configure `@baidu` registry access in the target profile's package-manager environment before installing its companion; the public package does not bundle the private SDK or credentials:
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.6.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.6.1
 ```
 
 Use the same `DSH_HOME` and profile as your running installation. For upgrades, back up that data directory, let active replies finish, stop the Host, update the base and installed companions to the versions in the table, then restart. Saved Bot identities, bindings and conversation history remain in the same data directory. Installing a companion exposes its configuration page; it does not create robots or enable unconfigured connections. See the [Feishu guide](docs/feishu.zh.md) and [InfoFlow guide](docs/infoflow.md) for permissions and setup.

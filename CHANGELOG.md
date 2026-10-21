@@ -4,7 +4,8 @@
 
 - Fix real Cordis optional-service access for attachments, speech transcription, model/tool catalogs, pending questions and per-Bot policies.
 - Add native-profile regression checks that upload/read a real attachment and load the catalog without an Agent.
-- Feishu 0.5.1 treats SDK-thrown HTTP permission/recipient rejections as permanent, including media uploads/downloads, while retaining retries for throttling and server failures. InfoFlow 0.6.0 remains compatible and unchanged.
+- Feishu 0.5.1 treats SDK-thrown HTTP permission/recipient rejections as permanent, including media uploads/downloads, while retaining retries for throttling and server failures.
+- InfoFlow 0.6.1 recovers the same BOS object after an upload succeeded but URL lookup or delivery failed, avoiding permanent 40900 overwrite conflicts on retries. Official BOS HTTP download links are upgraded to HTTPS while retaining their signed path and query.
 
 ## 0.9.0 — 2026-10-21
 

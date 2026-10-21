@@ -40,7 +40,7 @@ export interface Sdk {
   Client: new (options: Record<string, unknown>) => { im: { message: {
     sendToUser(user: string, text: unknown, type: string): Promise<unknown>
     sendToGroupWithOptions(options: Record<string, unknown>): Promise<unknown>
-  }; file?: { upload(request: { file: Buffer; fileName: string; objectKey: string; expirationSeconds: number }): Promise<{ url: string }> }; group?: { getMembers?(id: string): Promise<{ type?: string; agentId?: number }[]>; getGroupInfo?(id: string): Promise<{ groupId: string | number; masterUserId: string }>; create(options: Record<string, unknown>): Promise<GroupResult> } }; robot?: { getInfo(): Promise<RobotIdentity> } }
+  }; file?: { upload(request: { file: Buffer; fileName: string; objectKey: string; expirationSeconds: number }): Promise<{ url: string }>; getBosFileUrl?(request: { objectKey: string; expirationSeconds: number }): Promise<{ url: string }> }; group?: { getMembers?(id: string): Promise<{ type?: string; agentId?: number }[]>; getGroupInfo?(id: string): Promise<{ groupId: string | number; masterUserId: string }>; create(options: Record<string, unknown>): Promise<GroupResult> } }; robot?: { getInfo(): Promise<RobotIdentity> } }
   WSClient: new (options: Record<string, unknown>) => {
     on(event: string, callback: (event: unknown) => void): unknown
     connect(): Promise<void>; disconnect(): void; eventDispatcher?: unknown
@@ -160,13 +160,25 @@ export class InfoFlowTransport {
         if (delivery.conversation.kind === 'private') await this.client.im.message.sendToUser(delivery.conversation.id, { content: data.base64 }, 'image')
         else await this.client.im.message.sendToGroupWithOptions({ groupId: delivery.conversation.id, msgtype: 'IMAGE', body: [{ type: 'IMAGE', content: data.base64 }] })
       } else {
-        const uploaded = await this.client.im.file.upload({ file: Buffer.from(data.base64, 'base64'), fileName: data.name.replace(/[\r\n]/g, '_'),
-          objectKey: `dsh-bot/${createHash('sha256').update(delivery.id).digest('hex')}`, expirationSeconds: 86400 })
+        const file = this.client.im.file, objectKey = `dsh-bot/${createHash('sha256').update(delivery.id).digest('hex')}`
+        let uploaded: { url: string }
+        try {
+          uploaded = await file.upload({ file: Buffer.from(data.base64, 'base64'), fileName: data.name.replace(/[\r\n]/g, '_'), objectKey, expirationSeconds: 86400 })
+        } catch (cause) {
+          // Upload can commit before URL lookup or message delivery fails. Reuse this
+          // immutable delivery's object; changing the key would leak another copy on every retry.
+          const raw = (cause as { details?: { rawResponse?: { code?: unknown } } } | null)?.details?.rawResponse
+          if (raw?.code !== 40900 || !file.getBosFileUrl) throw cause
+          uploaded = await file.getBosFileUrl({ objectKey, expirationSeconds: 86400 })
+        }
         const url = new URL(uploaded.url)
-        if (url.protocol !== 'https:') throw new Error('Invalid uploaded media URL')
+        // The official BOS gateway may return HTTP download links. BOS supports
+        // the same signed path/query over TLS; never downgrade or upgrade other hosts.
+        if (url.protocol === 'http:' && url.hostname.endsWith('.bcebos.com') && !url.port) url.protocol = 'https:'
+        if (url.protocol !== 'https:' || url.username || url.password) throw new PermanentChatError('Invalid uploaded media URL')
         const label = `${data.name}（链接有效期 24 小时）`
-        if (delivery.conversation.kind === 'private') await this.client.im.message.sendToUser(delivery.conversation.id, { content: [{ type: 'text', text: label }, { type: 'a', label: '下载', href: uploaded.url }] }, 'richtext')
-        else await this.client.im.message.sendToGroupWithOptions({ groupId: delivery.conversation.id, msgtype: 'TEXT', body: [{ type: 'TEXT', content: label }, { type: 'LINK', href: uploaded.url }] })
+        if (delivery.conversation.kind === 'private') await this.client.im.message.sendToUser(delivery.conversation.id, { content: [{ type: 'text', text: label }, { type: 'a', label: '下载', href: url.href }] }, 'richtext')
+        else await this.client.im.message.sendToGroupWithOptions({ groupId: delivery.conversation.id, msgtype: 'TEXT', body: [{ type: 'TEXT', content: label }, { type: 'LINK', href: url.href }] })
       }
       return
     }
