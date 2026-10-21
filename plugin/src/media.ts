@@ -45,7 +45,7 @@ interface MediaHost {
   attachments?: {
     saveImage(input: { data: Uint8Array; mediaType: string; name: string }): Promise<ChatAttachment['attachment']>
     saveFile(input: { data: Uint8Array; name: string }): Promise<ChatAttachment['attachment']>
-    readImage(ref: ChatAttachment['attachment']): Promise<unknown>
+    readImage(ref: ChatAttachment['attachment']): Promise<{ data: Uint8Array }>
     readFileStream(ref: ChatAttachment['attachment']): AsyncIterable<Uint8Array>
   }
   speechToText?: {
@@ -91,3 +91,30 @@ export function mediaContent(attachments: ChatAttachment[] = []): ContentBlock[]
   ])
 }
 export function mediaHost(value: unknown): MediaHost { return value as MediaHost }
+
+/** Read only native immutable objects, never user-supplied filesystem paths. */
+export async function readMedia(host: MediaHost, item: ChatAttachment): Promise<import('./types.ts').AttachmentData> {
+  if (!host.attachments) throw new Error('Native attachment provider unavailable')
+  if (!/^sha256:[a-f0-9]{64}$/.test(item.attachment.attachmentId) || item.attachment.bytes > 20 * 1024 * 1024) throw new Error('Invalid attachment reference')
+  const chunks: Uint8Array[] = []; let total = 0
+  if (item.type === 'image') chunks.push((await host.attachments.readImage(item.attachment)).data)
+  else for await (const chunk of host.attachments.readFileStream(item.attachment)) {
+    total += chunk.byteLength; if (total > 20 * 1024 * 1024) throw new Error('Attachment exceeds 20 MiB')
+    chunks.push(chunk)
+  }
+  const data = Buffer.concat(chunks)
+  if (data.length > 20 * 1024 * 1024) throw new Error('Attachment exceeds 20 MiB')
+  return { name: item.attachment.name, mediaType: imageMime(data) ?? 'application/octet-stream', base64: data.toString('base64') }
+}
+
+/** Only typed native output blocks are deliverable; paths and model prose are never read. */
+export function outputMedia(blocks: readonly unknown[]): ChatAttachment[] {
+  return blocks.flatMap(block => {
+    if (!block || typeof block !== 'object') return []
+    const value = block as Partial<ChatAttachment>
+    if (!['image', 'file'].includes(value.type ?? '') || !value.attachment || !/^sha256:[a-f0-9]{64}$/.test(value.attachment.attachmentId)
+      || typeof value.attachment.name !== 'string' || value.attachment.bytes < 0
+      || !Number.isSafeInteger(value.attachment.bytes) || value.attachment.bytes > 20 * 1024 * 1024) return []
+    return [{ type: value.type!, attachment: structuredClone(value.attachment) }]
+  })
+}

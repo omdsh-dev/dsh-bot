@@ -183,6 +183,19 @@ export class InfoFlowManager implements InfoFlowControl {
     await this.change(state => { const item = state.groups.find(item => item.requestId === group.requestId)!; item.roomId = room.id; item.status = 'ready' })
     return room
   }
+  attachGroup(request: { requestId: string; groupId: string }): Promise<Room> { return this.exclusive(async () => {
+    const group = this.state.groups.find(item => item.requestId === request.requestId)
+    if (!group || group.status !== 'uncertain' || group.groupId) throw new Error('Only an uncertain request without a saved group ID can be attached')
+    if (!/^[1-9]\d*$/.test(request.groupId) || !Number.isSafeInteger(Number(request.groupId))) throw new Error('Invalid InfoFlow group ID')
+    if (this.state.groups.some(item => item.groupId === request.groupId)) throw new Error('This group is already linked')
+    const binding = this.binding(group.defaultBot), api = this.runtime.api(binding, await this.secrets(binding))
+    if (!api.groupInfo) throw new Error('Update the InfoFlow SDK to verify group ownership')
+    const info = await api.groupInfo(request.groupId)
+    if (String(info.groupId) !== request.groupId || users([info.masterUserId])[0] !== group.owner) throw new Error('Group identity or owner does not match the original request')
+    if (group.botIds.some(id => !info.agentIds.includes(this.binding(id).agentId))) throw new Error('Add every selected robot to this group before attaching it')
+    await this.change(state => { const item = state.groups.find(item => item.requestId === request.requestId)!; item.groupId = request.groupId; item.status = 'linking'; item.warning = null })
+    return this.finishGroup(this.state.groups.find(item => item.requestId === request.requestId)!)
+  }) }
   resumeGroup(requestId: string): Promise<Room> { return this.exclusive(async () => {
     const group = this.state.groups.find(item => item.requestId === requestId)
     if (!group) throw new Error('建群记录不存在')

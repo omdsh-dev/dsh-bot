@@ -1,5 +1,9 @@
-import type { BotId, Room, Budget, ChatAttachment, ConfigureBudget, FailureAction, FailureView, HistoryPage, HistoryRequest, LifecycleRequest, RoomId, SaveScheduleRequest, Schedule, UploadRequest } from '../types.ts'
+import type { AttachmentRequest, AttachmentData, CapabilityCatalog, QuestionAnswer, ScheduleRun, BotId, Room, Budget, ChatAttachment, ConfigureBudget, FailureAction, FailureView, HistoryPage, HistoryRequest, LifecycleRequest, RoomId, SaveScheduleRequest, Schedule, UploadRequest } from '../types.ts'
 export interface CapabilityFace {
+  attachment(request: AttachmentRequest): Promise<AttachmentData>
+  answerQuestion(request: { roomId: RoomId; id: string; answer: QuestionAnswer }): Promise<void>
+  catalog(botId?: BotId): Promise<CapabilityCatalog>
+  scheduleRuns(request: { id: string; before?: number; limit?: number }): Promise<ScheduleRun[]>
   openDirect(botId: BotId): Promise<Room>
   history(request: HistoryRequest): Promise<HistoryPage>
   exportChat(request: { roomId: RoomId; format: 'json' | 'markdown' }): Promise<string>

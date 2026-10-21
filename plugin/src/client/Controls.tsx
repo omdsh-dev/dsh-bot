@@ -1,7 +1,7 @@
 /** Explicit controls for lifecycle, execution policy, automation and retained delivery failures. */
 import { useEffect, useState } from 'react'
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { BotId, BotState, FailureView, HistoryPage, Room, Schedule, UpdateBotRequest } from '../types.ts'
+import type { CapabilityCatalog, ScheduleRun, BotId, BotState, FailureView, HistoryPage, Room, Schedule, UpdateBotRequest } from '../types.ts'
 import type { CapabilityFace } from './capability-face.ts'
 import css from './Panel.module.css'
 
@@ -30,6 +30,22 @@ export function Controls({ state, room, face, updateBot, english, openRoom }: {
   const [name, setName] = useState(''), [prompt, setPrompt] = useState(''), [interval, setInterval] = useState('60')
   const [date, setDate] = useState(new Date(Date.now() + 60000).toISOString().slice(0, 16))
   const [notify, setNotify] = useState(false), [delegate, setDelegate] = useState(false), [editing, setEditing] = useState<string>()
+  const [catalog, setCatalog] = useState<CapabilityCatalog>({ providers: [], tools: [] })
+  const [budgetScope, setBudgetScope] = useState('*'), [period, setPeriod] = useState<'never' | 'day' | 'month'>('never')
+  const [reserveTokens, setReserveTokens] = useState('8192'), [reserveCost, setReserveCost] = useState('0')
+  const selectedBudget = budgetScope === '*' ? state.budget : state.botBudgets?.[budgetScope]
+  const [calendar, setCalendar] = useState(false), [zone, setZone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone)
+  const [wallTime, setWallTime] = useState('09:00'), [days, setDays] = useState([1, 2, 3, 4, 5])
+  const [runs, setRuns] = useState<ScheduleRun[]>([]), [runSchedule, setRunSchedule] = useState('')
+  useEffect(() => {
+    let active = true
+    void face.catalog(botId).then(value => { if (active) setCatalog(value) }).catch(cause => { if (active) setError(String(cause)) })
+    return () => { active = false }
+  }, [face, botId])
+  useEffect(() => {
+    setTokenLimit(String(selectedBudget?.tokenLimit ?? 0)); setCostLimit(String(selectedBudget?.costLimit ?? 0)); setCurrency(selectedBudget?.currency ?? 'USD')
+    setPeriod(selectedBudget?.period ?? 'never'); setReserveTokens(String(selectedBudget?.reservationTokens ?? 8192)); setReserveCost(String(selectedBudget?.reservationCost ?? 0))
+  }, [budgetScope])
   const [confirm, setConfirm] = useState('')
   useEffect(() => {
     setProvider(bot?.policy?.provider ?? ''); setModel(bot?.policy?.model ?? ''); setTools(bot?.policy?.tools?.join('\n') ?? '')
@@ -40,6 +56,7 @@ export function Controls({ state, room, face, updateBot, english, openRoom }: {
     bot?.policy?.toolMode, bot?.policy?.fileMode, bot?.policy?.inputPrice, bot?.policy?.outputPrice])
   const act = async (fn: () => Promise<unknown>) => { setBusy(true); setError(''); try { await fn() } catch (cause) { setError(String(cause instanceof Error ? cause.message : cause)) } finally { setBusy(false) } }
   const editSchedule = (schedule: Schedule) => {
+    setCalendar(!!schedule.calendar); setZone(schedule.calendar?.timeZone ?? zone); setWallTime(schedule.calendar?.time ?? '09:00'); setDays(schedule.calendar?.weekdays ?? [1, 2, 3, 4, 5])
     setEditing(schedule.id); setName(schedule.name); setPrompt(schedule.text); setInterval(String(schedule.intervalMinutes))
     setDate(new Date(schedule.nextAt).toISOString().slice(0, 16)); setNotify(schedule.notify); setDelegate(schedule.allowDelegation); setBotId(schedule.targets[0] ?? room?.defaultBot)
   }
@@ -57,8 +74,12 @@ export function Controls({ state, room, face, updateBot, english, openRoom }: {
     </section>}
     {tab === 'policy' && <section>
       <label>Bot<select value={botId} onChange={event => setBotId(event.target.value as BotId)}>{state.bots.map(bot => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select></label>
-      <label>{l('模型提供方（留空继承 DSH）', 'Provider (blank inherits DSH)')}<Input value={provider} onChange={event => setProvider(event.target.value)}/></label>
-      <label>{l('模型 ID', 'Model ID')}<Input value={model} onChange={event => setModel(event.target.value)}/></label>
+      <label>{l('模型提供方（留空继承 DSH）', 'Provider (blank inherits DSH)')}<Input list="bot-providers" value={provider} onChange={event => setProvider(event.target.value)}/></label>
+      <label>{l('模型 ID', 'Model ID')}<Input list="bot-models" value={model} onChange={event => setModel(event.target.value)}/></label>
+      <datalist id="bot-providers">{catalog.providers.map(p => <option key={p.id} value={p.id}/>)}</datalist>
+      <datalist id="bot-models">{catalog.providers.find(p => p.id === provider)?.models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</datalist>
+      {catalog.providers.find(p => p.id === provider)?.error && <p>{catalog.providers.find(p => p.id === provider)!.error}</p>}
+      {toolMode === 'allow' && <details><summary>{l('选择已发现的工具', 'Choose discovered tools')}</summary>{catalog.tools.map(tool => <label key={tool.name} style={{ display: 'block' }} title={tool.description}><input type="checkbox" checked={tools.split(/[\n,]/).includes(tool.name)} onChange={event => setTools(list => event.target.checked ? [...new Set([...list.split(/[\n,]/).filter(Boolean), tool.name])].join('\n') : list.split(/[\n,]/).filter(name => name !== tool.name).join('\n'))}/>{tool.name}</label>)}</details>}
       <label>{l('工具权限', 'Tool permissions')}<select value={toolMode} onChange={event => setToolMode(event.target.value as typeof toolMode)}>
         <option value="inherit">{l('继承部署权限', 'Inherit deployment policy')}</option><option value="none">{l('禁止所有工具', 'No tools')}</option><option value="allow">{l('仅允许列出的工具', 'Allow listed tools only')}</option>
       </select></label>
@@ -74,22 +95,34 @@ export function Controls({ state, room, face, updateBot, english, openRoom }: {
       } })) }}>{l('保存', 'Save')}</Button>
     </section>}
     {tab === 'budget' && <section>
-      <p>{l('已用', 'Used')}: {state.budget?.used.input ?? 0} input + {state.budget?.used.output ?? 0} output · {(state.budget?.used.cost ?? 0).toFixed(6)} {state.budget?.currency ?? 'USD'}</p>
+      <label>{l('预算范围', 'Budget scope')}<select value={budgetScope} onChange={event => setBudgetScope(event.target.value)}><option value="*">{l('全部 Bot', 'All Bots')}</option>{state.bots.map(bot => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select></label>
+      <label>{l('自动清零周期（UTC）', 'Reset period (UTC)')}<select value={period} onChange={event => setPeriod(event.target.value as typeof period)}><option value="never">{l('不自动重置', 'Never')}</option><option value="day">{l('每日', 'Daily')}</option><option value="month">{l('每月', 'Monthly')}</option></select></label>
+      <label>{l('每次调用预留 token', 'Reserved tokens per call')}<Input type="number" min="1" value={reserveTokens} onChange={event => setReserveTokens(event.target.value)}/></label>
+      <label>{l('每次调用预留费用', 'Reserved cost per call')}<Input type="number" min="0" step="any" value={reserveCost} onChange={event => setReserveCost(event.target.value)}/></label>
+      <p>{l('已用', 'Used')}: {selectedBudget?.used.input ?? 0} input + {selectedBudget?.used.output ?? 0} output · {(selectedBudget?.used.cost ?? 0).toFixed(6)} {selectedBudget?.currency ?? 'USD'}</p>
       <label>{l('总 token 上限（0 不限）', 'Total token limit (0 unlimited)')}<Input type="number" min="0" value={tokenLimit} onChange={event => setTokenLimit(event.target.value)}/></label>
       <label>{l('估算费用上限（0 不限）', 'Estimated cost limit (0 unlimited)')}<Input type="number" min="0" value={costLimit} onChange={event => setCostLimit(event.target.value)}/></label>
       <label>{l('币种', 'Currency')}<Input value={currency} onChange={event => setCurrency(event.target.value)}/></label>
-      <p>{l('费用按各 Bot 配置的单价估算，在下一次模型调用前拦截；已经发出的调用可能超出剩余额度。', 'Cost uses each Bot’s configured rates. Limits block the next model call; calls already in flight can exceed the remaining budget.')}</p>
-      <Button disabled={busy} onClick={() => { void act(() => face.configureBudget({ tokenLimit: Number(tokenLimit), costLimit: Number(costLimit), currency })) }}>{l('保存预算', 'Save budget')}</Button>
-      <Button disabled={busy} onClick={() => { if (window.confirm(l('清零累计用量？', 'Reset accumulated usage?'))) void act(() => face.configureBudget({ tokenLimit: Number(tokenLimit), costLimit: Number(costLimit), currency, reset: true })) }}>{l('重置用量', 'Reset usage')}</Button>
+      <p>{l('费用按 Bot 单价估算。并发调用先占用预留额度，结算后换成实际用量；实际调用超过预留时仍可能超限，后续调用会暂停。', 'Concurrent calls reserve quota before dispatch. Reported usage replaces the reservation; actual calls can exceed a reservation and block subsequent calls.')}</p>
+      <Button disabled={busy} onClick={() => { void act(() => face.configureBudget({ tokenLimit: Number(tokenLimit), costLimit: Number(costLimit), currency, period, reservationTokens: Number(reserveTokens), reservationCost: Number(reserveCost), ...(budgetScope === '*' ? {} : { botId: budgetScope as BotId }) })) }}>{l('保存预算', 'Save budget')}</Button>
+      <Button disabled={busy} onClick={() => { if (window.confirm(l('清零累计用量？', 'Reset accumulated usage?'))) void act(() => face.configureBudget({ tokenLimit: Number(tokenLimit), costLimit: Number(costLimit), currency, period, reservationTokens: Number(reserveTokens), reservationCost: Number(reserveCost), ...(budgetScope === '*' ? {} : { botId: budgetScope as BotId }), reset: true })) }}>{l('重置用量', 'Reset usage')}</Button>
     </section>}
     {tab === 'schedules' && room && <section>
       {(state.schedules ?? []).filter(item => item.roomId === room.id).map(schedule => <article key={schedule.id}>
         <strong>{schedule.name}</strong> · {schedule.enabled ? new Date(schedule.nextAt).toLocaleString() : l('已暂停', 'Paused')}
         {schedule.error && <p role="alert">{schedule.error}</p>}
+        <Button disabled={busy} onClick={() => { void act(async () => { setRunSchedule(schedule.id); setRuns(await face.scheduleRuns({ id: schedule.id })) }) }}>{l('运行记录', 'Run history')}</Button>
         <Button disabled={busy} onClick={() => editSchedule(schedule)}>{l('编辑', 'Edit')}</Button>
         <Button disabled={busy} onClick={() => { void act(() => face.saveSchedule({ ...schedule, enabled: !schedule.enabled })) }}>{schedule.enabled ? l('暂停', 'Pause') : l('启用', 'Enable')}</Button>
         <Button disabled={busy} onClick={() => { void act(() => face.deleteSchedule(schedule.id)) }}>{l('删除', 'Delete')}</Button>
       </article>)}
+      {runSchedule && <section aria-label={l('运行记录', 'Run history')}><h4>{l('运行记录', 'Run history')}</h4>{runs.map(run => <details key={run.messageId}><summary>{new Date(run.time).toLocaleString()} · {run.status}</summary>{run.replies.map((reply, i) => <article key={i}><strong>{reply.botId} · {reply.status}</strong><pre>{reply.text}</pre>{reply.error && <p>{reply.error}</p>}</article>)}</details>)}
+        {!!runs.length && <Button disabled={busy} onClick={() => { void act(async () => { const earlier = await face.scheduleRuns({ id: runSchedule, before: runs.at(-1)!.time }); setRuns(current => current.concat(earlier)) }) }}>{l('更早的记录', 'Earlier runs')}</Button>}
+      </section>}
+      <label><input type="checkbox" checked={calendar} onChange={event => setCalendar(event.target.checked)}/>{l('按日历重复', 'Calendar recurrence')}</label>
+      {calendar && <><label>{l('时区', 'Time zone')}<Input list="schedule-zones" value={zone} onChange={event => setZone(event.target.value)}/></label><datalist id="schedule-zones">{['Asia/Shanghai', 'Asia/Tokyo', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'UTC'].map(z => <option key={z} value={z}/>)}</datalist>
+        <label>{l('当地时间', 'Local time')}<Input type="time" value={wallTime} onChange={event => setWallTime(event.target.value)}/></label>
+        <div>{[1, 2, 3, 4, 5, 6, 7].map(day => <label key={day}><input type="checkbox" checked={days.includes(day)} onChange={event => setDays(old => event.target.checked ? [...old, day] : old.filter(d => d !== day))}/>{english ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][day - 1] : `周${['一', '二', '三', '四', '五', '六', '日'][day - 1]}`}</label>)}</div></>}
       <label>{l('任务名称', 'Task name')}<Input value={name} onChange={event => setName(event.target.value)}/></label>
       <label>{l('任务要求', 'Prompt')}<textarea value={prompt} onChange={event => setPrompt(event.target.value)}/></label>
       <label>Bot<select value={botId} onChange={event => setBotId(event.target.value as BotId)}>{state.bots.filter(bot => room.members.some(member => member.botId === bot.id)).map(bot => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select></label>
@@ -98,12 +131,12 @@ export function Controls({ state, room, face, updateBot, english, openRoom }: {
       <label><input type="checkbox" checked={delegate} onChange={event => setDelegate(event.target.checked)}/>{l('允许群内派活', 'Allow group handoffs')}</label>
       {room.external && <label><input type="checkbox" checked={notify} onChange={event => setNotify(event.target.checked)}/>{l('将任务回复发送到此 IM 会话', 'Send results to this IM chat')}</label>}
       <Button disabled={busy || !name.trim() || !prompt.trim()} onClick={() => { void act(async () => {
-        await face.saveSchedule({ ...(editing ? { id: editing } : {}), roomId: room.id, name, text: prompt, targets: botId ? [botId] : [room.defaultBot], nextAt: new Date(date + 'Z').getTime(), intervalMinutes: Number(interval), enabled: true, allowDelegation: delegate, notify })
+        await face.saveSchedule({ ...(editing ? { id: editing } : {}), roomId: room.id, name, text: prompt, targets: botId ? [botId] : [room.defaultBot], nextAt: new Date(date + 'Z').getTime(), intervalMinutes: Number(interval), ...(calendar ? { calendar: { timeZone: zone, time: wallTime, weekdays: days } } : {}), enabled: true, allowDelegation: delegate, notify })
         setEditing(undefined); setName(''); setPrompt('')
       }) }}>{l('保存并启用', 'Save and enable')}</Button>
     </section>}
     {tab === 'failures' && <section>
-      <p>{l('列出已连接机器人保留的失败项。已停用机器人请重新连接后查看。补发只重试选中项；平台未确认送达的消息仍有重复风险。', 'Retained failures for connected robots. Reconnect disabled robots to inspect their queues. Resend retries only the selected item; unconfirmed deliveries may duplicate.')}</p>
+      <p>{l('包含已停用机器人的失败项；停用时重试会放回队列，启用后再处理。补发只重试选中项；平台未确认送达的消息仍有重复风险。', 'Includes disabled robots. Retrying while disabled restores work to the queue for the next connection. Resend retries only the selected item; unconfirmed deliveries may duplicate.')}</p>
       <Button disabled={busy} onClick={() => { void act(async () => setFailures(await face.failures())) }}>{l('刷新', 'Refresh')}</Button>
       {failures.map(item => <article key={item.queue + item.id}><strong>{item.provider} · {item.destination} · {item.kind} · {item.reason} ({item.attempts})</strong><pre>{item.text}</pre>
         <Button disabled={busy} onClick={() => { void act(async () => { await face.resolveFailure({ ...item, action: 'retry' }); setFailures(await face.failures()) }) }}>{l('重试此项', 'Retry item')}</Button>

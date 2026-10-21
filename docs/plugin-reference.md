@@ -92,7 +92,7 @@ The same member Session preserves the prior request prefix across turns. New pub
 - Fixed complete-prompt presets such as `minimal` cannot host the extra Bot identity and are rejected before delivery. Use `standard` or an extensible custom preset.
 - Group messages and Session logs use separate durable stores. A crash between commits can leave a completed DSH Turn marked interrupted publicly; inspect the execution log before retrying. No exactly-once external-tool guarantee is claimed.
 - Removing a member preserves public history; rejoining creates a new member Session. Existing removed Sessions remain accessible through DSH.
-- Browser snapshots contain a bounded recent window and active work; older history is paginated. Durable Bot and connector domains still rewrite whole snapshots. Migration from the Python prototype is unsupported.
+- Browser snapshots contain a bounded recent window and active work; older history is paginated. Chat history and connector receipt/notice windows use immutable segments with atomic manifests; complete history still hydrates in memory. Backups must include these segments. Migration from the Python prototype is unsupported.
 
 <a id="dev-note"></a>
 ### Dev Note

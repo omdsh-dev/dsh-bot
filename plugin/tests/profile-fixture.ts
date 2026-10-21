@@ -61,6 +61,12 @@ export async function apply(ctx: Context): Promise<void> {
         { provider: 'bot-selected-fixture', model: 'selected-fixture-model', toolMode: 'none', tools: [] })
       assert.equal(service.snapshot().schedules?.find(item => item.name === 'Restart reservation')?.enabled, false, 'Paused schedule configuration survives native storage reload')
       assert.equal(service.snapshot().budget?.currency, 'CNY', 'Budget settings survive native storage reload')
+      const historyRoom = service.snapshot().rooms.find(room => room.title === 'History segmentation fixture')!
+      assert.equal(historyRoom.messages.length, 600, 'Archive manifest is hydrated after restart')
+      assert.equal(service.history({ roomId: historyRoom.id, query: 'ARCHIVE_010', limit: 50 }).total, 1)
+      const duplicate = await service.submitExternalMessage({ roomId: historyRoom.id, text: 'ARCHIVE_010', external: { id: 'receipt-10', sender: { id: 'history-user', name: 'History User' } } })
+      assert.equal(duplicate.status, 'accepted', 'Archived receipts still prevent replay')
+      assert.equal(requests.length, 0)
       const before = service.snapshot().rooms.find(room => room.kind === 'group')!
       assert.equal(before.messages.length, 8)
       const ids = before.members.map(member => member.sessionId)
@@ -78,7 +84,7 @@ export async function apply(ctx: Context): Promise<void> {
         snapshot: () => ({ available: true, groups: [], bindings: [{ botId: 'legacy' as import('../src/types.ts').BotId,
           agentId: 'fixture', robotId: 'fixture', robotName: 'Existing robot', enabled: false, status: 'disabled' as const,
           error: null, allowUsers: [], allowGroups: [], admins: [], credentialsConfigured: true }] }),
-        save: unused, verify: unused, toggle: unused, testMessage: unused, createGroup: unused, resumeGroup: unused,
+        save: unused, verify: unused, toggle: unused, testMessage: unused, createGroup: unused, resumeGroup: unused, attachGroup: unused,
       }
       const detach = service.attachInfoFlow(legacyControl)
       assert.equal(service.snapshot().infoflowVisible, true, 'Upgrades retain access to saved bindings')
@@ -133,7 +139,7 @@ export async function apply(ctx: Context): Promise<void> {
       const controlled = service.snapshot().rooms.find(item => item.kind === 'dm' && item.defaultBot === critic.id)!
       await service.updateBot({ id: critic.id, name: critic.name, instructions: critic.instructions,
         policy: { provider: 'bot-selected-fixture', model: 'selected-fixture-model', toolMode: 'none', inputPrice: 1, outputPrice: 2 } })
-      await service.configureBudget({ tokenLimit: 5, costLimit: 0, currency: 'USD', reset: true })
+      await service.configureBudget({ tokenLimit: 5, reservationTokens: 5, costLimit: 0, currency: 'USD', reset: true })
       await service.send({ roomId: controlled.id, text: 'CONTROLLED_MODEL' })
       const controlledResult = await settled(controlled.id)
       assert.equal(controlledResult.messages.at(-1)!.status, 'complete', JSON.stringify(controlledResult.messages.at(-1)))
@@ -155,6 +161,14 @@ export async function apply(ctx: Context): Promise<void> {
       await service.saveSchedule({ roomId: controlled.id, name: 'Restart reservation', text: 'not enabled',
         targets: [critic.id], nextAt: Date.now() + 3600000, intervalMinutes: 60, enabled: false, allowDelegation: false, notify: false })
       await service.configureBudget({ tokenLimit: 0, costLimit: 0, currency: 'CNY' })
+      const historyRoom = await service.ensureExternalRoom({ conversation: { provider: 'infoflow', accountId: 'history-fixture', kind: 'private', id: 'history-user' }, title: 'History segmentation fixture', botIds: [architect.id], defaultBot: architect.id })
+      await Reflect.get(service, 'change').call(service, (state: import('../src/types.ts').BotState) => {
+        const room = state.rooms.find(room => room.id === historyRoom.id)!
+        room.messages = Array.from({ length: 600 }, (_, i) => ({ id: ('history-' + i) as import('../src/types.ts').ChatMessageId, botId: null,
+          text: 'ARCHIVE_' + String(i).padStart(3, '0'), replyTo: null, status: 'complete', error: null, time: i,
+          external: { id: 'receipt-' + i, sender: { id: 'history-user', name: 'History User' } } }))
+      })
+      assert.ok(Reflect.get(service, 'domain').global.get().rooms.find((room: import('../src/types.ts').Room) => room.id === historyRoom.id).messages.length <= 256, 'Native storage commits only the archive manifest and bounded tail')
     }
     if (process.env.BOT_TEST_INFOFLOW === '1') await (await import('./infoflow-profile.ts')).exerciseInfoflow(ctx, requests, settled)
     await writeFile(process.env.BOT_TEST_RESULT!, JSON.stringify({ ok: true, requests: requests.length, state: service.snapshot() }))

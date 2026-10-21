@@ -5,12 +5,12 @@ import { EventEmitter } from 'node:events'
 import type { Delivery } from './domain.ts'
 import { decodeMessage, mentionedRobots, type Incoming } from './messages.ts'
 import { receiveMedia, type InfoFlowMediaApi } from './media.ts'
-import type { ChatAttachment, UploadRequest } from '../types.ts'
+import type { ChatAttachment, AttachmentData, UploadRequest } from '../types.ts'
 
 /** SDK management results are validated before they become saved configuration. */
 export interface RobotIdentity { agentId: number | string; imId?: number | string; name: string }
 export interface GroupResult { groupId: number | string; failList?: string[]; failRobotIds?: number[] }
-export interface RobotApi { identity(): Promise<RobotIdentity>; testMessage(user: string): Promise<void>; createGroup(options: Record<string, unknown>): Promise<GroupResult> }
+export interface RobotApi { identity(): Promise<RobotIdentity>; testMessage(user: string): Promise<void>; createGroup(options: Record<string, unknown>): Promise<GroupResult>; groupInfo?(id: string): Promise<{ groupId: string | number; masterUserId: string; agentIds: string[] }> }
 /** Suppress SDK payload/credential logging; the owner reports operation categories only. */
 const logger = { error() {}, warn() {}, info() {}, debug() {}, trace() {} }
 /** Read identity or create a user-requested group through the installed SDK. */
@@ -26,6 +26,11 @@ export function robotApi(sdk: Sdk, config: { appKey: string; appSecret: string; 
         throw new Error('测试消息未确认送达，请检查网络、消息发送权限及可见范围；请先查看如流再重试，避免重复消息。')
       }
     },
+    groupInfo: async id => {
+      if (!client.im.group?.getGroupInfo || !client.im.group.getMembers) throw new Error('SDK group lookup unavailable')
+      const [info, members] = await Promise.all([client.im.group.getGroupInfo(id), client.im.group.getMembers(id)])
+      return { ...info, agentIds: members.filter(member => member.type === 'agent').map(member => String(member.agentId)) }
+    },
     createGroup: async options => { if (!client.im.group) throw new Error('SDK group API unavailable'); return client.im.group.create(options) },
   }
 }
@@ -33,9 +38,9 @@ export function robotApi(sdk: Sdk, config: { appKey: string; appSecret: string; 
 /** Pinned SDK surface used by this adapter; unrelated SDK objects stay opaque. */
 export interface Sdk {
   Client: new (options: Record<string, unknown>) => { im: { message: {
-    sendToUser(user: string, text: string, type: string): Promise<unknown>
+    sendToUser(user: string, text: unknown, type: string): Promise<unknown>
     sendToGroupWithOptions(options: Record<string, unknown>): Promise<unknown>
-  }; group?: { create(options: Record<string, unknown>): Promise<GroupResult> } }; robot?: { getInfo(): Promise<RobotIdentity> } }
+  }; file?: { upload(request: { file: Buffer; fileName: string; objectKey: string; expirationSeconds: number }): Promise<{ url: string }> }; group?: { getMembers?(id: string): Promise<{ type?: string; agentId?: number }[]>; getGroupInfo?(id: string): Promise<{ groupId: string | number; masterUserId: string }>; create(options: Record<string, unknown>): Promise<GroupResult> } }; robot?: { getInfo(): Promise<RobotIdentity> } }
   WSClient: new (options: Record<string, unknown>) => {
     on(event: string, callback: (event: unknown) => void): unknown
     connect(): Promise<void>; disconnect(): void; eventDispatcher?: unknown
@@ -45,6 +50,7 @@ export interface Sdk {
 export interface TransportConfig {
   allowMedia?: (input: Incoming) => boolean
   upload?: (request: UploadRequest) => Promise<ChatAttachment>
+  read?: (item: ChatAttachment) => Promise<AttachmentData>
   robotIds?: () => string[]
   accountId: string; robotId: string; appKey: string; appSecret: string
   baseUrl: string; wsGateway: string; wsConnectDomain: string
@@ -100,14 +106,16 @@ export class InfoFlowTransport {
         if (input.hasMedia && !config.allowMedia?.(input)) return
         const task = (async () => {
           const { hasMedia, ...message } = input
-          const ready = hasMedia ? await receiveMedia(this.client.im as InfoFlowMediaApi, message, config.upload!) : message
-          await receive(ready, mentionedRobots(envelope))
+          if (hasMedia) message.media = { accountId: config.accountId }
+          await receive(message, mentionedRobots(envelope))
         })().then(() => {}, () => { this.report('InfoFlow input or attachment could not be persisted; check media permissions and storage') })
         this.handlers.add(task)
         return task.finally(() => { this.handlers.delete(task) })
       })
     }
   }
+
+  get accountId(): string { return this.config.accountId }
 
   /** Connect without blocking Host startup; initial failures use bounded exponential backoff. */
   start(): void {
@@ -131,11 +139,37 @@ export class InfoFlowTransport {
     }).finally(() => { if (timer) clearTimeout(timer); this.connection = undefined; if (this.stopped) this.socket.disconnect() })
   }
 
+  async prepare(input: Incoming): Promise<Incoming> {
+    if (!input.media) return input
+    if (!this.config.upload) throw new PermanentChatError('Media upload provider unavailable')
+    const result = await receiveMedia(this.client.im as unknown as InfoFlowMediaApi, { ...input, conversation: { ...input.conversation, accountId: input.media.accountId } }, this.config.upload)
+    return { ...result, conversation: input.conversation }
+  }
+
   /** Send one recorded chunk. A timeout is uncertain delivery and may duplicate on retry.
    * @param delivery - immutable recipient and content from the durable outbox.
    */
   async send(delivery: Delivery): Promise<void> {
     if (this.stopped) throw new Error('InfoFlow transport is stopping')
+    if (delivery.attachment) {
+      if (!this.client.im.file || !this.config.read) throw new PermanentChatError('Media delivery is unavailable')
+      const data = await this.config.read(delivery.attachment)
+      const { createHash } = await import('node:crypto')
+      const inlineImage = delivery.attachment.type === 'image' && ['image/png', 'image/jpeg'].includes(data.mediaType) && Buffer.byteLength(data.base64, 'base64') < 1024 * 1024
+      if (inlineImage) {
+        if (delivery.conversation.kind === 'private') await this.client.im.message.sendToUser(delivery.conversation.id, { content: data.base64 }, 'image')
+        else await this.client.im.message.sendToGroupWithOptions({ groupId: delivery.conversation.id, msgtype: 'IMAGE', body: [{ type: 'IMAGE', content: data.base64 }] })
+      } else {
+        const uploaded = await this.client.im.file.upload({ file: Buffer.from(data.base64, 'base64'), fileName: data.name.replace(/[\r\n]/g, '_'),
+          objectKey: `dsh-bot/${createHash('sha256').update(delivery.id).digest('hex')}`, expirationSeconds: 86400 })
+        const url = new URL(uploaded.url)
+        if (url.protocol !== 'https:') throw new Error('Invalid uploaded media URL')
+        const label = `${data.name}（链接有效期 24 小时）`
+        if (delivery.conversation.kind === 'private') await this.client.im.message.sendToUser(delivery.conversation.id, { content: [{ type: 'text', text: label }, { type: 'a', label: '下载', href: uploaded.url }] }, 'richtext')
+        else await this.client.im.message.sendToGroupWithOptions({ groupId: delivery.conversation.id, msgtype: 'TEXT', body: [{ type: 'TEXT', content: label }, { type: 'LINK', href: uploaded.url }] })
+      }
+      return
+    }
     const agents = (delivery.mentions ?? []).map(mention => Number(mention.id))
       .filter(id => Number.isSafeInteger(id) && id > 0 && String(id) !== this.config.accountId)
     // InfoFlow's Markdown renderer hides AT tokens. Native text renders clickable robot mentions.

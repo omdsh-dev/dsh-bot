@@ -16,12 +16,22 @@ export const attachmentSchema = z.object({ type: z.enum(['image', 'file']), atta
   attachmentId: z.string(), name: z.string(), bytes: z.number().int().nonnegative(),
   mediaType: z.string().optional(), width: z.number().optional(), height: z.number().optional(),
 }), transcript: z.string().optional() })
+const questionItem = z.object({ id: z.string(), question: z.string(), detail: z.string().optional(), header: z.string().optional(), options: z.array(z.object({ label: z.string(), description: z.string().optional() })).optional(), multiSelect: z.boolean().optional() })
+const answerSchema = z.object({ answers: z.array(z.object({ id: z.string(), selected: z.array(z.string()), custom: z.string().optional() })) })
+export const messageSchema = z.object({ id: messageId, botId: botId.nullable(), text: z.string(),
+      replyTo: messageId.nullable(), status: z.enum(['complete', 'queued', 'running', 'failed', 'canceled', 'interrupted']),
+      error: z.string().nullable(), time: z.number(), external: externalMessage.optional(), allowDelegation: z.boolean().optional(),
+      delegation: z.object({ rootId: messageId, task: z.string() }).optional(), localOnly: z.boolean().optional(),
+      attachments: z.array(attachmentSchema).max(8).optional(), questions: z.array(z.object({ id: z.string(), callId: z.string(), questions: z.array(questionItem) })).optional(), questionReply: z.object({ callId: z.string(), questions: z.array(questionItem), answer: answerSchema }).optional(), toolDetails: z.array(z.object({ name: z.string(), arguments: z.string(), result: z.string().optional() })).optional(), usage: usage.optional(), scheduleId: z.string().optional(), publishExternal: z.boolean().optional(), notifyBot: botId.optional() })
+const budgetSchema = z.object({ tokenLimit: z.number().nonnegative(), costLimit: z.number().nonnegative(), currency: z.string(), used: usage, since: z.number(), period: z.enum(['never', 'day', 'month']).optional(), reservationTokens: z.number().nonnegative().optional(), reservationCost: z.number().nonnegative().optional() })
 const schema: z.ZodType<BotState> = z.object({
   infoflowVisible: z.boolean().optional(),
   retiredBotIds: z.array(botId).optional(),
-  budget: z.object({ tokenLimit: z.number().nonnegative(), costLimit: z.number().nonnegative(), currency: z.string(), used: usage, since: z.number() }).optional(),
+  budget: budgetSchema.optional(),
+  botBudgets: z.record(z.string(), budgetSchema).optional(),
+  budgetReservations: z.record(z.string(), z.array(z.object({ scope: z.string(), tokens: z.number(), cost: z.number() }))).optional(),
   schedules: z.array(z.object({ id: z.string(), roomId: z.string().transform(brandString<RoomId>), name: z.string(), text: z.string(),
-    targets: z.array(botId), nextAt: z.number(), intervalMinutes: z.number().nonnegative(), enabled: z.boolean(),
+    calendar: z.object({ timeZone: z.string(), time: z.string(), weekdays: z.array(z.number()) }).optional(), targets: z.array(botId), nextAt: z.number(), intervalMinutes: z.number().nonnegative(), enabled: z.boolean(),
     allowDelegation: z.boolean(), notify: z.boolean(), lastAt: z.number().optional(), lastMessageId: messageId.optional(), error: z.string().optional() })).optional(),
   bots: z.array(z.object({ id: botId, name: z.string(), instructions: z.string(), preset: z.string(), archived: z.boolean().optional(),
     policy: z.object({ provider: z.string().optional(), model: z.string().optional(), fileMode: z.enum(['inherit', 'read-only', 'workspace-write']).optional(), toolMode: z.enum(['inherit', 'none', 'allow']).optional(),
@@ -33,11 +43,8 @@ const schema: z.ZodType<BotState> = z.object({
     aliases: z.array(z.string().transform(brandString<RoomId>)).optional(),
     archived: z.boolean().optional(), deleted: z.boolean().optional(),
     members: z.array(z.object({ botId, sessionId: z.string().transform(SessionId), cursor: z.number().int().nonnegative() })),
-    messages: z.array(z.object({ id: messageId, botId: botId.nullable(), text: z.string(),
-      replyTo: messageId.nullable(), status: z.enum(['complete', 'queued', 'running', 'failed', 'canceled', 'interrupted']),
-      error: z.string().nullable(), time: z.number(), external: externalMessage.optional(), allowDelegation: z.boolean().optional(),
-      delegation: z.object({ rootId: messageId, task: z.string() }).optional(), localOnly: z.boolean().optional(),
-      attachments: z.array(attachmentSchema).max(8).optional(), usage: usage.optional(), scheduleId: z.string().optional(), publishExternal: z.boolean().optional(), notifyBot: botId.optional() })),
+    historyChunks: z.array(z.string()).optional(),
+    messages: z.array(messageSchema),
   })),
 })
 /** Additive v1 upgrade: missing external fields mean local data; existing IDs are retained. */

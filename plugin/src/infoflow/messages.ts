@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { BotId, ExternalConversation, ExternalMessage, ChatAttachment } from '../types.ts'
 
 /** Normalized text event; the SDK connection supplies the trusted account identity. */
-export interface Incoming { conversation: ExternalConversation; message: ExternalMessage; text: string; targets?: BotId[] | undefined; attachments?: ChatAttachment[] | undefined }
+export interface Incoming { conversation: ExternalConversation; message: ExternalMessage; text: string; targets?: BotId[] | undefined; attachments?: ChatAttachment[] | undefined; media?: { accountId: string; resources?: { key: string; type: 'image' | 'file' | 'audio'; name: string }[] | undefined } | undefined }
 const record = z.record(z.string(), z.unknown())
 function object(value: unknown): Record<string, unknown> { return record.safeParse(value).data ?? {} }
 function id(value: unknown): string | undefined {

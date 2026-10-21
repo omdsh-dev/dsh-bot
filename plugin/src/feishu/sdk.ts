@@ -6,7 +6,7 @@ import { PermanentChatError } from '../external-errors.ts'
 import type { Delivery } from '../infoflow/domain.ts'
 import type { Incoming } from '../infoflow/messages.ts'
 import type { Brand, FeishuBindingView } from './types.ts'
-import type { ChatAttachment, UploadRequest } from '../types.ts'
+import type { ChatAttachment, AttachmentData, UploadRequest } from '../types.ts'
 import { imageMime } from '../media.ts'
 const logger = { error() {}, warn() {}, info() {}, debug() {}, trace() {} }
 const domain = (brand: Brand) => brand === 'lark' ? 'https://open.larksuite.com' : 'https://open.feishu.cn'
@@ -17,7 +17,7 @@ export interface RegistrationOptions {
 export interface RegistrationResult { client_id: string; client_secret: string; user_info?: { open_id?: string; tenant_brand?: Brand } }
 export interface Identity { openId: string; name: string }
 interface Api { request(options: Record<string, unknown>): Promise<unknown>
-  im?: { messageResource: { get(payload: { params: { type: string }; path: { message_id: string; file_key: string } }): Promise<{ getReadableStream(): AsyncIterable<Uint8Array> }> } }
+  im?: { image?: { create(payload: { data: { image_type: 'message'; image: Buffer } }): Promise<unknown> }; file?: { create(payload: { data: { file_type: 'stream'; file_name: string; file: Buffer } }): Promise<unknown> }; messageResource: { get(payload: { params: { type: string }; path: { message_id: string; file_key: string } }): Promise<{ getReadableStream(): AsyncIterable<Uint8Array> }> } }
 }
 export interface Sdk {
   defaultHttpInstance?: { defaults: { timeout: number } }
@@ -102,7 +102,7 @@ export async function createGroup(sdk: Sdk, appId: string, appSecret: string, br
 export function register(sdk: Sdk, options: RegistrationOptions): Promise<RegistrationResult> {
   return sdk.registerApp({ signal: options.signal, source: 'dsh-bot', createOnly: true, onQRCodeReady: options.qr,
     appPreset: { name: options.name, desc: 'DSH Bot 独立 AI 助手' },
-    addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:chat:create'] },
+    addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:chat:create', 'im:resource'] },
       events: { items: { tenant: ['im.message.receive_v1'] } } } })
 }
 export async function qrImage(url: string): Promise<string> {
@@ -149,7 +149,7 @@ export class FeishuTransport {
   private connection: Promise<void> | undefined
   private readonly handlers = new Set<Promise<void>>()
   constructor(sdk: Sdk, private readonly config: { appId: string; appSecret: string; brand: Brand; botOpenId: string; timeoutMs: number; allowUsers?: string[]; allowGroups?: string[]; allowAllGroups?: boolean | undefined }, receive: (input: Incoming) => Promise<unknown>,
-    status: (status: FeishuBindingView['status']) => void, private readonly report: () => void, upload?: (request: UploadRequest) => Promise<ChatAttachment>) {
+    status: (status: FeishuBindingView['status']) => void, private readonly report: () => void, private readonly upload?: (request: UploadRequest) => Promise<ChatAttachment>, private readonly read?: (item: ChatAttachment) => Promise<AttachmentData>) {
     const common = { appId: config.appId, appSecret: config.appSecret, domain: domain(config.brand), logger, cache: tokenCache() }
     this.client = new sdk.Client(common)
     this.socket = new sdk.WSClient({ ...common, handshakeTimeoutMs: config.timeoutMs,
@@ -163,22 +163,7 @@ export class FeishuTransport {
         : config.allowGroups && !config.allowAllGroups && !config.allowGroups.includes(input.conversation.id)) return
       const task = (async () => {
         const { resources, ...message } = input
-        if (resources?.length) {
-          if (!upload || !this.client.im) throw new Error('Native media support is unavailable')
-          message.attachments = []
-          let total = 0
-          for (const resource of resources) {
-            const response = await this.client.im.messageResource.get({ params: { type: resource.type === 'image' ? 'image' : 'file' }, path: { message_id: input.message.id, file_key: resource.key } })
-            const chunks: Buffer[] = []
-            for await (const chunk of response.getReadableStream()) {
-              total += chunk.byteLength
-              if (total > 20 * 1024 * 1024) throw new Error('Media exceeds 20 MiB')
-              chunks.push(Buffer.from(chunk))
-            }
-            const bytes = Buffer.concat(chunks)
-            message.attachments.push(await upload({ name: resource.name, base64: bytes.toString('base64'), mediaType: imageMime(bytes) ?? 'application/octet-stream', transcribe: resource.type === 'audio' }))
-          }
-        }
+        if (resources?.length) message.media = { accountId: config.appId, resources }
         await receive(message)
       })().then(() => {}, () => { this.report(); throw new Error('DSH could not persist this message or attachment; check media permissions and providers') })
       this.handlers.add(task)
@@ -191,6 +176,22 @@ export class FeishuTransport {
   }
   private readonly begin: () => void
   start(): void { if (!this.stopped && !this.connection) this.begin() }
+  async prepare(input: Incoming): Promise<Incoming> {
+    if (!input.media) return input
+    if (!this.upload || !this.client.im) throw new Error('Native media support is unavailable')
+    const attachments: ChatAttachment[] = []; let total = 0
+    for (const resource of input.media.resources ?? []) {
+      const response = await this.client.im.messageResource.get({ params: { type: resource.type === 'image' ? 'image' : 'file' }, path: { message_id: input.message.id, file_key: resource.key } })
+      const chunks: Buffer[] = []
+      for await (const chunk of response.getReadableStream()) {
+        total += chunk.byteLength; if (total > 20 * 1024 * 1024) throw new PermanentChatError('Media exceeds 20 MiB')
+        chunks.push(Buffer.from(chunk))
+      }
+      const bytes = Buffer.concat(chunks)
+      attachments.push(await this.upload({ name: resource.name, base64: bytes.toString('base64'), mediaType: imageMime(bytes) ?? 'application/octet-stream', transcribe: resource.type === 'audio' }))
+    }
+    return { ...input, attachments }
+  }
   async send(delivery: Delivery): Promise<void> {
     if (this.stopped) throw new Error('Feishu is stopping')
     const escape = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
@@ -198,9 +199,24 @@ export class FeishuTransport {
       .filter(mention => /^ou_[\w-]+$/.test(mention.id) && mention.id !== this.config.botOpenId)
       .map(mention => `<at user_id="${mention.id}">${escape(mention.name)}</at>`).join(' ') : ''
     const content = mentions ? `${mentions}\n${escape(delivery.text)}` : escape(delivery.text)
+    let msgType = 'text', body: Record<string, string> = { text: content }
+    if (delivery.attachment) {
+      if (!this.read) throw new PermanentChatError('Attachment reader unavailable')
+      const item = delivery.attachment, data = await this.read(item)
+      const dimensionLimit = data.mediaType === 'image/gif' ? 2000 : 12000
+      const asImage = item.type === 'image' && item.attachment.bytes <= 10000000
+        && (item.attachment.width ?? 0) <= dimensionLimit && (item.attachment.height ?? 0) <= dimensionLimit
+      if (!item.attachment.bytes) throw new PermanentChatError('Feishu does not accept empty files')
+      const response = asImage
+        ? await this.client.im?.image?.create({ data: { image_type: 'message', image: Buffer.from(data.base64, 'base64') } })
+        : await this.client.im?.file?.create({ data: { file_type: 'stream', file_name: data.name, file: Buffer.from(data.base64, 'base64') } })
+      const raw = object(response), result = raw.code === undefined ? raw : object(checked(raw).data), key = text(result[asImage ? 'image_key' : 'file_key'])
+      if (!key) throw new Error('Feishu did not return an uploaded resource key')
+      msgType = asImage ? 'image' : 'file'; body = { [asImage ? 'image_key' : 'file_key']: key }
+    }
     // Feishu honors uuid deduplication for a bounded window; retries retain it.
     checked(await this.client.request({ method: 'POST', url: '/open-apis/im/v1/messages', params: { receive_id_type: 'chat_id' }, timeout: this.config.timeoutMs,
-      data: { receive_id: delivery.conversation.id, msg_type: 'text', content: JSON.stringify({ text: content }),
+      data: { receive_id: delivery.conversation.id, msg_type: msgType, content: JSON.stringify(body),
         uuid: createHash('sha256').update(delivery.id).digest('hex').slice(0, 48) } }))
   }
   async close(): Promise<void> { this.stopped = true; this.socket.close({ force: true }); await this.connection; await Promise.allSettled(this.handlers) }

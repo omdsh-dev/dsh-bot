@@ -8,6 +8,8 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { AttemptRequest, Bot, BotId, ChatMessage, ChatAttachment, ChatMessageId, CreateBotRequest, CreateGroupRequest, MembersRequest, Room, SendRequest, UpdateBotRequest } from '../types.ts'
 import { Controls } from './Controls.tsx'
 import { VoiceInput } from './VoiceInput.tsx'
+import { AttachmentView } from './Attachments.tsx'
+import { Questions } from './Questions.tsx'
 import type { CapabilityFace } from './capability-face.ts'
 import type { ModelSnapshot } from './model.ts'
 import type { createBotViewStore } from './view-store.ts'
@@ -234,9 +236,12 @@ export function BotPanel(props: Props) {
                         <span>{quoted.text.slice(0, 140)}</span></div>}
                       {message.text && (own ? <div className={css.body}>{message.text}</div>
                         : <MarkdownText text={message.text} labels={labels} />)}
-                      {message.attachments?.map(item => <p key={item.attachment.attachmentId}>📎 {item.attachment.name} · {Math.ceil(item.attachment.bytes / 1024)} KB{item.transcript && <span> · {item.transcript}</span>}</p>)}
+                      {message.attachments?.map(item => props.capabilities ? <AttachmentView key={item.attachment.attachmentId} item={item} face={props.capabilities} request={{ roomId: room.id, messageId: message.id, attachmentId: item.attachment.attachmentId }}/> : <p key={item.attachment.attachmentId}>📎 {item.attachment.name}</p>)}
+                      {message.toolDetails?.map((tool, index) => <details key={index}><summary>{tool.name}</summary><pre style={{ whiteSpace: 'pre-wrap' }}>{tool.arguments}</pre>{tool.result && <pre style={{ whiteSpace: 'pre-wrap' }}>{tool.result}</pre>}</details>)}
+                      {props.capabilities && message.questions?.map(view => <Questions key={view.id} view={view} roomId={room.id} face={props.capabilities!} english={t('you') === 'You'}/>)}
+                      {message.progress?.question && props.capabilities && <Questions key={message.progress.question.id} view={message.progress.question} roomId={room.id} face={props.capabilities} english={t('you') === 'You'}/>}
                       {message.progress && <div role="status"><span>{message.progress.phase} {message.progress.tools.join(', ')}</span>
-                        {message.progress.approvalId && props.capabilities && <><p>{message.progress.reason}</p>
+                        {message.progress.approvalId && props.capabilities && <><p>{message.progress.reason}</p><pre style={{ whiteSpace: 'pre-wrap' }}>{message.progress.arguments}</pre>
                           <Button disabled={busy} onClick={() => { void act(() => props.capabilities!.decideApproval({ roomId: room.id, id: message.progress!.approvalId!, allow: true })) }}>{t('allowOnce')}</Button>
                           <Button disabled={busy} onClick={() => { void act(() => props.capabilities!.decideApproval({ roomId: room.id, id: message.progress!.approvalId!, allow: false })) }}>{t('reject')}</Button></>}
                       </div>}

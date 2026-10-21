@@ -38,8 +38,8 @@ export interface ChatAttachment {
 }
 export interface UploadRequest { name: string; mediaType: string; base64: string; transcribe?: boolean }
 export interface Usage { input: number; output: number; cost: number }
-export interface Budget { tokenLimit: number; costLimit: number; currency: string; used: Usage; since: number }
-export interface ConfigureBudget { tokenLimit: number; costLimit: number; currency: string; reset?: boolean }
+export interface Budget { tokenLimit: number; costLimit: number; currency: string; used: Usage; since: number; period?: 'never' | 'day' | 'month' | undefined; reservationTokens?: number | undefined; reservationCost?: number | undefined }
+export interface ConfigureBudget { tokenLimit: number; costLimit: number; currency: string; reset?: boolean; botId?: BotId; period?: 'never' | 'day' | 'month'; reservationTokens?: number; reservationCost?: number }
 /** One Bot's persistent context and consumed public-history position. */
 export interface Member { botId: BotId; sessionId: SessionId; cursor: number }
 /** A public user message or one Bot's response attempt. */
@@ -60,8 +60,11 @@ export interface ChatMessage {
   localOnly?: boolean | undefined
   attachments?: ChatAttachment[] | undefined
   usage?: Usage | undefined
+  questions?: (QuestionView & { callId: string })[] | undefined
+  questionReply?: { callId: string; questions: QuestionItem[]; answer: QuestionAnswer } | undefined
+  toolDetails?: { name: string; arguments: string; result?: string | undefined }[] | undefined
   /** Transient projection, never persisted with token-level updates. */
-  progress?: { phase: string; tools: string[]; approvalId?: string | undefined; reason?: string | undefined } | undefined
+  progress?: { phase: string; tools: string[]; approvalId?: string | undefined; reason?: string | undefined; arguments?: string | undefined; question?: QuestionView | undefined } | undefined
   /** Explicitly configured scheduler source, used for auditing and notification idempotency. */
   scheduleId?: string | undefined
   publishExternal?: boolean | undefined
@@ -82,6 +85,8 @@ export interface Room {
   /** Tombstones retain external receipts to prevent replay after deletion. */
   deleted?: boolean | undefined
   messageCount?: number | undefined
+  /** Storage-only immutable chunk references. Public snapshots contain hydrated messages. */
+  historyChunks?: string[] | undefined
 }
 /** Atomic persisted state; also the detached Client baseline. */
 export interface BotState {
@@ -89,17 +94,21 @@ export interface BotState {
   /** Profile-wide UI preference. Missing in older data; existing InfoFlow use keeps its entry visible. */
   infoflowVisible?: boolean | undefined
   budget?: Budget | undefined
+  botBudgets?: Record<string, Budget> | undefined
+  budgetReservations?: Record<string, { scope: string; tokens: number; cost: number }[]> | undefined
   retiredBotIds?: BotId[] | undefined
   schedules?: Schedule[] | undefined
 }
 export interface Schedule {
   id: string; roomId: RoomId; name: string; text: string; targets: BotId[]
+  calendar?: CalendarRule | undefined
   nextAt: number; intervalMinutes: number; enabled: boolean
   allowDelegation: boolean; notify: boolean
   lastAt?: number | undefined; lastMessageId?: ChatMessageId | undefined; error?: string | undefined
 }
 export interface SaveScheduleRequest {
   id?: string; roomId: RoomId; name: string; text: string; targets: BotId[]
+  calendar?: CalendarRule | undefined
   nextAt: number; intervalMinutes: number; enabled: boolean; allowDelegation: boolean; notify: boolean
 }
 export interface HistoryRequest { roomId: RoomId; before?: ChatMessageId; limit?: number; query?: string }
@@ -107,7 +116,7 @@ export interface HistoryPage { messages: ChatMessage[]; before: ChatMessageId | 
 export interface LifecycleRequest { kind: 'bot' | 'room'; id: string; action: 'archive' | 'restore' | 'delete' }
 export interface FailureView {
   provider: 'infoflow' | 'feishu'; queue: string; id: string; time: number
-  kind: 'admission' | 'delivery'; reason: string; destination: string; text: string; attempts: number
+  kind: 'admission' | 'media' | 'delivery'; reason: string; destination: string; text: string; attempts: number
 }
 export interface FailureAction { provider: 'infoflow' | 'feishu'; queue: string; id: string; action: 'retry' | 'discard' }
 /** Reconnecting feed replaces the complete small-domain snapshot. */
@@ -148,3 +157,13 @@ export interface TestInfoFlowRequest { botId: BotId; user: string }
 export interface ToggleInfoFlowRequest { botId: BotId; enabled: boolean }
 /** Stable browser request ID prevents duplicate platform groups after retries. */
 export interface CreateInfoFlowGroupRequest extends CreateGroupRequest { requestId: string; owner: string; members: string[] }
+
+/** Calendar recurrence uses an explicit IANA zone; weekdays use ISO 1=Monday … 7=Sunday. */
+export interface CalendarRule { timeZone: string; time: string; weekdays: number[] }
+export interface ScheduleRun { messageId: ChatMessageId; time: number; status: ChatMessage['status']; replies: { botId: BotId | null; status: ChatMessage['status']; text: string; error: string | null }[] }
+export interface QuestionItem { id: string; question: string; detail?: string | undefined; header?: string | undefined; options?: { label: string; description?: string | undefined }[] | undefined; multiSelect?: boolean | undefined }
+export interface QuestionAnswer { answers: { id: string; selected: string[]; custom?: string | undefined }[] }
+export interface QuestionView { id: string; questions: QuestionItem[] }
+export interface AttachmentRequest { roomId: RoomId; messageId: ChatMessageId; attachmentId: string }
+export interface AttachmentData { name: string; mediaType: string; base64: string }
+export interface CapabilityCatalog { providers: { id: string; models: { id: string; name: string }[]; error?: string | undefined }[]; tools: { name: string; description: string }[] }

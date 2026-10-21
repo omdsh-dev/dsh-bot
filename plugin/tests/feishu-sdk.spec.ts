@@ -19,7 +19,7 @@ it('uses the official create-only flow with explicit messaging permissions and c
   const b = bench(), controller = new AbortController(), qr = vi.fn()
   await register(b.sdk, { signal: controller.signal, name: 'Alpha', qr })
   expect(b.registration).toHaveBeenCalledWith(expect.objectContaining({ createOnly: true, source: 'dsh-bot', signal: controller.signal, onQRCodeReady: qr,
-    appPreset: expect.objectContaining({ name: 'Alpha' }), addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:chat:create'] }, events: { items: { tenant: ['im.message.receive_v1'] } } } }))
+    appPreset: expect.objectContaining({ name: 'Alpha' }), addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:chat:create', 'im:resource'] }, events: { items: { tenant: ['im.message.receive_v1'] } } } }))
   expect(await identity(b.sdk, 'cli_app', 'secret', 'feishu', 100)).toEqual({ openId: 'ou_robot', name: 'Alpha' })
   await b.transport.close()
 })

@@ -136,3 +136,18 @@ it('tests only a saved allowed account without starting a connection or changing
   expect(f.testMessage).toHaveBeenCalledExactlyOnceWith('alice')
   expect(f.runtime.start).not.toHaveBeenCalled(); expect(f.state()).toEqual(saved)
 })
+
+it('attaches an uncertain group only after checking its owner without creating it again', async () => {
+  const f = await configured(); f.create.mockRejectedValueOnce(new Error('timeout'))
+  await expect(f.manager.createGroup(group)).rejects.toThrow('结果未确认')
+  const originalApi = f.runtime.api
+  const groupInfo = vi.fn(async () => ({ groupId: '123456', masterUserId: 'wrong-owner', agentIds: ['11', '22'] }))
+  f.runtime.api = (binding, secrets) => ({ ...originalApi(binding, secrets), groupInfo })
+  await expect(f.manager.attachGroup({ requestId: group.requestId, groupId: '123456' })).rejects.toThrow('owner')
+  expect(f.manager.snapshot().groups[0]!.groupId).toBe('')
+  groupInfo.mockResolvedValueOnce({ groupId: '123456', masterUserId: 'alice', agentIds: ['11', '22'] })
+  await f.manager.attachGroup({ requestId: group.requestId, groupId: '123456' })
+  expect(f.manager.snapshot().groups[0]!.status).toBe('ready')
+  expect(f.create).toHaveBeenCalledOnce()
+  await expect(f.manager.attachGroup({ requestId: group.requestId, groupId: '123456' })).rejects.toThrow('uncertain')
+})

@@ -517,3 +517,59 @@ it.each(['infoflow', 'feishu'] as const)('opens unlisted %s groups only after an
   expect(await revoked.receive({ ...group, message: { ...group.message, id: 'after-revoke' } })).toBe('ignored')
   await restricted.close(); await revoked.close(); await b.bridge.close()
 })
+
+it('persists media descriptors before fetch and retries a retained media failure without replaying accepted work', async () => {
+  const b = bench()
+  const { PermanentChatError } = await import('../src/external-errors.ts')
+  const prepare = vi.fn(async (incoming: Incoming) => {
+    expect(b.state().pending[0]!.input.media).toEqual({ accountId: 'app' })
+    throw new PermanentChatError('missing media permission')
+  })
+  Reflect.get(b.bridge, 'sender').prepare = prepare
+  await b.bridge.receive({ ...input('media'), media: { accountId: 'app' } }); await b.bridge.wake()
+  await vi.waitFor(() => expect(b.bridge.failures('sage')[0]?.kind).toBe('media'))
+  expect(b.submitted).toHaveLength(0)
+  prepare.mockImplementation(async incoming => ({ ...incoming, text: 'transcript' }) as never)
+  await b.bridge.resolveFailure(b.bridge.failures('sage')[0]!.id, 'retry'); await b.bridge.wake()
+  await vi.waitFor(() => expect(b.submitted).toHaveLength(1))
+  b.complete(); await b.bridge.wake(); await b.bridge.close()
+  const restarted = b.create(); await restarted.wake()
+  expect(b.submitted).toHaveLength(1)
+  await restarted.close()
+})
+
+it('retains attachment delivery independently from sent text and supports offline recovery', async () => {
+  const b = bench()
+  await b.bridge.receive(input('output')); await b.bridge.wake(); b.complete()
+  b.durable.rooms[0]!.messages.at(-1)!.attachments = [{ type: 'file', attachment: { attachmentId: 'sha256:' + 'a'.repeat(64), name: 'report.pdf', bytes: 4 } }]
+  const { PermanentChatError } = await import('../src/external-errors.ts')
+  b.send.mockImplementation(async delivery => { if (delivery.attachment) throw new PermanentChatError('missing permission'); b.sent.push(delivery) })
+  await b.bridge.wake()
+  expect(b.sent.filter(item => item.text === 'answer')).toHaveLength(1)
+  const failed = b.bridge.failures('sage')[0]!
+  await b.bridge.close()
+  await b.bridge.resolveFailure(failed.id, 'retry')
+  expect(b.state().outbox).toHaveLength(1)
+  expect(b.state().outbox[0]!.attachment?.attachment.name).toBe('report.pdf')
+  expect(b.submitted).toHaveLength(1)
+  b.send.mockImplementation(async delivery => { b.sent.push(delivery) })
+  const restarted = b.create(); await restarted.wake(); await restarted.close()
+  expect(b.sent.filter(item => item.text === 'answer')).toHaveLength(1)
+  expect(b.sent.filter(item => item.attachment)).toHaveLength(1)
+})
+
+it('admits new requests and stops media preparation without waiting for transcription or starting canceled work', async () => {
+  const b = bench()
+  let release!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  const prepare = vi.fn(async (incoming: Incoming) => { await gate; return incoming })
+  Reflect.get(b.bridge, 'sender').prepare = prepare
+  await b.bridge.receive({ ...input('slow-media'), media: { accountId: 'app' } }); await b.bridge.wake()
+  expect(prepare).toHaveBeenCalledOnce()
+  await expect(b.bridge.receive(input('other-room', 'hello', 'bob'))).resolves.toBe('accepted')
+  await expect(b.bridge.receive(input('stop-media', '/stop'))).resolves.toBe('accepted')
+  release(); await b.bridge.wake()
+  await vi.waitFor(() => expect(b.state().pending.some(item => item.input.message.id === 'slow-media')).toBe(false))
+  expect(b.submitted.some(item => item.external.id === 'slow-media')).toBe(false)
+  b.complete(); await b.bridge.wake(); await b.bridge.close()
+})

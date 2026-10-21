@@ -97,3 +97,22 @@ it('sends a fixed test and translates visibility errors without exposing SDK det
   await expect(api.testMessage('alice')).rejects.toThrow('测试消息未确认送达')
   await b.transport.close()
 })
+
+it('sends small native images as base64 and files as expiring links using the pinned SDK formats', async () => {
+  const b = bench(), upload = vi.fn(async () => ({ url: 'https://bucket.bcebos.com/fixture?signature=ephemeral' }))
+  const client = Reflect.get(b.transport, 'client')
+  client.im.file = { upload }
+  const native = Reflect.get(b.transport, 'config')
+  native.read = async (item: { type: string; attachment: { name: string } }) => ({ name: item.attachment.name, mediaType: item.type === 'image' ? 'image/png' : 'application/octet-stream', base64: 'aGVsbG8=' })
+  for (const kind of ['private', 'group'] as const) {
+    await b.transport.send({ ...delivery(kind), attachment: { type: 'image', attachment: { attachmentId: 'sha256:' + 'a'.repeat(64), name: 'image.png', bytes: 5 } } })
+    await b.transport.send({ ...delivery(kind), id: 'file-' + kind, attachment: { type: 'file', attachment: { attachmentId: 'sha256:' + 'b'.repeat(64), name: 'report.txt', bytes: 5 } } })
+  }
+  expect(b.user).toHaveBeenCalledWith('9223372036854775807', { content: 'aGVsbG8=' }, 'image')
+  expect(b.user).toHaveBeenCalledWith('9223372036854775807', { content: [{ type: 'text', text: 'report.txt（链接有效期 24 小时）' }, { type: 'a', label: '下载', href: 'https://bucket.bcebos.com/fixture?signature=ephemeral' }] }, 'richtext')
+  expect(b.group).toHaveBeenCalledWith({ groupId: '9223372036854775807', msgtype: 'IMAGE', body: [{ type: 'IMAGE', content: 'aGVsbG8=' }] })
+  expect(b.group.mock.calls[1]![0]).toMatchObject({ msgtype: 'TEXT', body: [{ type: 'TEXT' }, { type: 'LINK' }] })
+  expect(upload).toHaveBeenCalledTimes(2)
+  expect(upload.mock.calls[0]![0]).toMatchObject({ expirationSeconds: 86400, fileName: 'report.txt' })
+  await b.transport.close()
+})

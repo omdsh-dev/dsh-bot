@@ -53,7 +53,7 @@ async function bench(overrides: Partial<PanelFace> = {}, infoflowVisible = false
 
 it('keeps the composer available during execution and sends an explicit web delegation choice', async () => {
   const unused = vi.fn(async () => undefined)
-  const capabilities = { openDirect: unused, history: unused, exportChat: unused, lifecycle: unused, configureBudget: unused,
+  const capabilities = { catalog: async () => ({ providers: [], tools: [] }), openDirect: unused, history: unused, exportChat: unused, lifecycle: unused, configureBudget: unused,
     upload: unused, decideApproval: unused, saveSchedule: unused, deleteSchedule: unused, failures: unused, resolveFailure: unused } as unknown as CapabilityFace
   const b = await bench({ capabilities })
   b.room.messages[1]!.status = 'running'
@@ -68,7 +68,7 @@ it('keeps the composer available during execution and sends an explicit web dele
 it('searches older server history and saves an explicit budget from the controls panel', async () => {
   const unused = vi.fn(async () => undefined), history = vi.fn(async () => ({ messages: [], before: null, total: 0 }))
   const configureBudget = vi.fn(async () => undefined)
-  const capabilities = { openDirect: unused, history, exportChat: unused, lifecycle: unused, configureBudget,
+  const capabilities = { catalog: async () => ({ providers: [], tools: [] }), openDirect: unused, history, exportChat: unused, lifecycle: unused, configureBudget,
     upload: unused, decideApproval: unused, saveSchedule: unused, deleteSchedule: unused, failures: unused, resolveFailure: unused } as unknown as CapabilityFace
   const b = await bench({ capabilities })
   fireEvent.click(screen.getByRole('button', { name: 'Chat & execution controls' }))
@@ -78,26 +78,26 @@ it('searches older server history and saves an explicit budget from the controls
   fireEvent.click(screen.getByRole('button', { name: 'Budget', exact: true }))
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Total token limit (0 unlimited)' }), { target: { value: '50000' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save budget' }))
-  await waitFor(() => expect(configureBudget).toHaveBeenCalledWith({ tokenLimit: 50000, costLimit: 0, currency: 'USD' }))
+  await waitFor(() => expect(configureBudget).toHaveBeenCalledWith(expect.objectContaining({ tokenLimit: 50000, costLimit: 0, currency: 'USD' })))
 })
 
 it('preserves unsaved model settings when a fresh live snapshot arrives', async () => {
   const unused = vi.fn(async () => undefined)
-  const capabilities = { openDirect: unused, history: unused, exportChat: unused, lifecycle: unused, configureBudget: unused,
+  const capabilities = { catalog: async () => ({ providers: [], tools: [] }), openDirect: unused, history: unused, exportChat: unused, lifecycle: unused, configureBudget: unused,
     upload: unused, decideApproval: unused, saveSchedule: unused, deleteSchedule: unused, failures: unused, resolveFailure: unused } as unknown as CapabilityFace
   const b = await bench({ capabilities })
   fireEvent.click(screen.getByRole('button', { name: 'Chat & execution controls' }))
   fireEvent.click(screen.getByRole('button', { name: 'Model & tools' }))
-  fireEvent.change(screen.getByRole('textbox', { name: 'Model ID' }), { target: { value: 'unsaved-model' } })
+  fireEvent.change(screen.getByRole('combobox', { name: 'Model ID' }), { target: { value: 'unsaved-model' } })
   b.model.replace(structuredClone({ bots: b.bots, rooms: b.rooms }))
-  await waitFor(() => expect((screen.getByRole('textbox', { name: 'Model ID' }) as HTMLInputElement).value).toBe('unsaved-model'))
+  await waitFor(() => expect((screen.getByRole('combobox', { name: 'Model ID' }) as HTMLInputElement).value).toBe('unsaved-model'))
 })
 
 it('does not attach a late upload to a different chat after navigation', async () => {
   const unused = vi.fn(async () => undefined)
   let finish!: (value: unknown) => void
   const upload = vi.fn(() => new Promise(resolve => { finish = resolve }))
-  const capabilities = { openDirect: unused, history: unused, exportChat: unused, lifecycle: unused, configureBudget: unused,
+  const capabilities = { catalog: async () => ({ providers: [], tools: [] }), openDirect: unused, history: unused, exportChat: unused, lifecycle: unused, configureBudget: unused,
     upload, decideApproval: unused, saveSchedule: unused, deleteSchedule: unused, failures: unused, resolveFailure: unused } as unknown as CapabilityFace
   const b = await bench({ capabilities })
   fireEvent.change(screen.getByLabelText(en.attach), { target: { files: [new File(['hello'], 'private-notes.txt', { type: 'text/plain' })] } })
@@ -536,4 +536,35 @@ it('pastes InfoFlow credentials locally, saves and connects, and sends a test on
   fireEvent.click(screen.getByRole('button', { name: en.ifResetDraft }))
   expect((screen.getByLabelText('AppSecret') as HTMLInputElement).value).toBe('')
   expect(infoflow.save).toHaveBeenCalledTimes(1)
+})
+
+it('renders inline questions and submits selected options with free text', async () => {
+  const answerQuestion = vi.fn(async () => {})
+  const capabilities = { answerQuestion } as unknown as CapabilityFace
+  const b = await bench({ capabilities })
+  b.room.messages[1]!.status = 'running'
+  b.room.messages[1]!.progress = { phase: 'Answer required', tools: [], question: { id: 'question', questions: [{ id: 'q', question: 'Which approach?', options: [{ label: 'Small change' }, { label: 'Full rewrite' }] }] } }
+  b.model.replace({ bots: b.bots, rooms: b.rooms })
+  fireEvent.click(await screen.findByRole('radio', { name: 'Small change' }))
+  fireEvent.change(screen.getByRole('textbox', { name: 'Your answer / additional details' }), { target: { value: 'Keep the API stable' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Submit answers' }))
+  await waitFor(() => expect(answerQuestion).toHaveBeenCalledWith({ roomId: b.room.id, id: 'question', answer: { answers: [{ id: 'q', selected: ['Small change'], custom: 'Keep the API stable' }] } }))
+})
+
+it('saves a weekly calendar rule with an explicit zone and opens dedicated run history', async () => {
+  const saveSchedule = vi.fn(async () => ({})), scheduleRuns = vi.fn(async () => [{ messageId: 'run', time: 1, status: 'complete', replies: [{ botId: 'alpha', status: 'complete', text: 'Scheduled result', error: null }] }])
+  const capabilities = { saveSchedule, scheduleRuns, catalog: async () => ({ providers: [], tools: [] }) } as unknown as CapabilityFace
+  const b = await bench({ capabilities })
+  b.model.replace({ bots: b.bots, rooms: b.rooms, schedules: [{ id: 'scheduled', roomId: b.room.id, name: 'Existing', text: 'Check', targets: [b.room.defaultBot], enabled: false, nextAt: 1, intervalMinutes: 0, allowDelegation: false, notify: false }] })
+  fireEvent.click(screen.getByRole('button', { name: 'Chat & execution controls' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Schedules', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: 'Run history' }))
+  expect(await screen.findByText('Scheduled result')).toBeDefined()
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Calendar recurrence' }))
+  fireEvent.change(screen.getByRole('combobox', { name: 'Time zone' }), { target: { value: 'America/New_York' } })
+  fireEvent.change(screen.getByLabelText('Local time'), { target: { value: '10:30' } })
+  fireEvent.change(screen.getByRole('textbox', { name: 'Task name' }), { target: { value: 'Weekday check' } })
+  fireEvent.change(screen.getByRole('textbox', { name: 'Prompt' }), { target: { value: 'Check progress' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save and enable' }))
+  await waitFor(() => expect(saveSchedule).toHaveBeenCalledWith(expect.objectContaining({ calendar: { timeZone: 'America/New_York', time: '10:30', weekdays: [1, 2, 3, 4, 5] }, notify: false })))
 })

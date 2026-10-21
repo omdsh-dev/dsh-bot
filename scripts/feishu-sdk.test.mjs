@@ -46,3 +46,34 @@ test('real SDK preserves an uncertain HTTP 503 group outcome and reuses its uuid
   }
   assert.deepEqual(uuids, ['one-request', 'one-request'])
 })
+
+test('real SDK uploads native image/file bytes and sends returned keys with stable delivery UUIDs', async () => {
+  const { FeishuTransport } = await import(pathToFileURL(join(runtime, pluginPath, 'lib/types/feishu/sdk.js')))
+  const uploads = [], sends = []
+  const httpInstance = {
+    async post() { return { tenant_access_token: 'fixture-token', expire: 7200 } },
+    async request(options) {
+      if (options.url.endsWith('/images') || options.url.endsWith('/files')) {
+        uploads.push(options)
+        assert.equal(options.headers['Content-Type'], 'multipart/form-data')
+        return { code: 0, data: options.url.endsWith('/images') ? { image_key: 'img_uploaded' } : { file_key: 'file_uploaded' } }
+      }
+      sends.push(options.data)
+      return { code: 0, data: { message_id: 'fixture' } }
+    },
+  }
+  const real = { ...sdk, Client: class extends sdk.Client { constructor(options) { super({ ...options, httpInstance, logger: silent }) } }, WSClient: class { async start() {} close() {} } }
+  const transport = new FeishuTransport(real, { appId: 'cli_upload', appSecret: 'correct', brand: 'feishu', botOpenId: 'ou_bot', timeoutMs: 100 }, async () => {}, () => {}, () => {}, undefined,
+    async item => ({ name: item.attachment.name, mediaType: item.type === 'image' ? 'image/png' : 'application/octet-stream', base64: Buffer.from('bytes').toString('base64') }))
+  const base = { conversation: { provider: 'feishu', accountId: 'cli_upload', kind: 'group', id: 'oc_group' }, text: '', user: 'ou_user', attempts: 0, nextAt: 0 }
+  for (const type of ['image', 'file']) {
+    const delivery = { ...base, id: 'output-' + type, attachment: { type, attachment: { attachmentId: 'sha256:' + 'a'.repeat(64), name: 'result.' + (type === 'image' ? 'png' : 'txt'), bytes: 5 } } }
+    await transport.send(delivery); await transport.send(delivery)
+  }
+  assert.equal(uploads.length, 4)
+  assert.deepEqual(sends.map(item => JSON.parse(item.content)), [{ image_key: 'img_uploaded' }, { image_key: 'img_uploaded' }, { file_key: 'file_uploaded' }, { file_key: 'file_uploaded' }])
+  assert.equal(sends[0].uuid, sends[1].uuid)
+  assert.equal(sends[2].uuid, sends[3].uuid)
+  assert.notEqual(sends[0].uuid, sends[2].uuid)
+  await transport.close()
+})

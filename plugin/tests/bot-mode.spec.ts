@@ -293,3 +293,55 @@ it('allows an approval once, rejects stale decisions, and cancels signal-less ap
   end.resolve(); await stop; await execution
   expect(next).not.toHaveBeenCalled()
 })
+
+it('reserves quota atomically across concurrent rooms and preserves it across failed writes', async () => {
+  const b = bench()
+  await b.service.configureBudget({ tokenLimit: 12, costLimit: 0, currency: 'USD', reservationTokens: 8 })
+  const reserve = (id: string) => Reflect.get(b.service, 'reserveCall').call(b.service, id, b.state.bots[0])
+  const results = await Promise.allSettled([reserve('first'), reserve('second')])
+  expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1)
+  expect(Object.keys(b.service.snapshot().budgetReservations!)).toEqual(['first'])
+  b.set.mockRejectedValueOnce(new Error('disk full'))
+  await expect(b.service.configureBudget({ tokenLimit: 100, costLimit: 0, currency: 'USD' })).rejects.toThrow('disk full')
+  expect(b.service.snapshot().budget!.tokenLimit).toBe(12)
+})
+
+it('returns attachment bytes only for the referenced room message', async () => {
+  const b = bench(), read = vi.fn(async () => ({ data: Buffer.from('png') }))
+  const item = { type: 'image' as const, attachment: { attachmentId: 'sha256:' + 'a'.repeat(64), name: 'image.png', bytes: 3 } }
+  b.state.rooms[0]!.messages[0]!.attachments = [item]
+  Object.assign(b.ctx, { attachments: { readImage: read } })
+  expect(await b.service.attachment({ roomId: 'room' as RoomId, messageId: 'user' as ChatMessageId, attachmentId: item.attachment.attachmentId })).toMatchObject({ name: 'image.png', base64: Buffer.from('png').toString('base64') })
+  await expect(b.service.attachment({ roomId: 'room' as RoomId, messageId: 'attempt' as ChatMessageId, attachmentId: item.attachment.attachmentId })).rejects.toThrow('not part')
+  expect(read).toHaveBeenCalledOnce()
+})
+
+it('answers inline questions, validates choices, and cancels outstanding questions on stop', async () => {
+  const b = bench(), agent = b.ctx.agents.get(), entered = deferred(), end = deferred()
+  const listeners = new Map<string, Function>()
+  Object.assign(agent.ctx, { on: (event: string, listener: Function) => { listeners.set(event, listener); return () => {} } })
+  agent.whenIdle.mockImplementation(async () => { entered.resolve(); await end.promise })
+  Reflect.get(b.service, 'running').set('attempt', b.run)
+  const execution = b.execute(); await entered.promise
+  const hook = listeners.get('user-questions/request')!, next = vi.fn()
+  const answer = hook({ agent, questions: [{ id: 'choice', question: 'Proceed?', options: [{ label: 'Yes' }, { label: 'No' }] }] }, next)
+  const id = [...(Reflect.get(b.service, 'questions') as Map<string, unknown>).keys()][0]!
+  await expect(b.service.answerQuestion({ roomId: 'room' as RoomId, id, answer: { answers: [{ id: 'choice', selected: ['invalid'] }] } })).rejects.toThrow('Invalid')
+  await b.service.answerQuestion({ roomId: 'room' as RoomId, id, answer: { answers: [{ id: 'choice', selected: ['Yes'] }] } })
+  expect(await answer).toEqual({ answers: [{ id: 'choice', selected: ['Yes'] }] })
+  const second = hook({ agent, questions: [{ id: 'free', question: 'Details?' }] }, next).catch((error: Error) => error.message)
+  const stopping = b.service.stop({ roomId: 'room' as RoomId, messageId: 'attempt' as ChatMessageId })
+  expect(await second).toContain('canceled')
+  end.resolve(); await stopping; await execution
+})
+
+it('resumes an expired native question once through an owned response without replaying the earlier turn', async () => {
+  const b = bench(), room = b.state.rooms[0]!
+  room.messages[1]!.status = 'complete'
+  room.messages[1]!.questions = [{ id: 'pending', callId: 'tool-call', questions: [{ id: 'q', question: 'Details?' }] }]
+  const launch = vi.fn(); Reflect.set(b.service, 'launch', launch)
+  await b.service.answerQuestion({ roomId: room.id, id: 'pending', answer: { answers: [{ id: 'q', selected: [], custom: 'details' }] } })
+  expect(launch).toHaveBeenCalledOnce()
+  expect(b.service.snapshot().rooms[0]!.messages.at(-2)!.questionReply?.callId).toBe('tool-call')
+  await expect(b.service.answerQuestion({ roomId: room.id, id: 'pending', answer: { answers: [] } })).rejects.toThrow('no longer')
+})

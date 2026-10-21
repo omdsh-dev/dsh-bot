@@ -37,6 +37,7 @@ it('filters all bound robot identities, isolates a disabled sender, and closes e
     botMode: {
       snapshot: () => ({ bots: bindings.map(binding => ({ id: binding.botId })), rooms: [] }),
       attachInfoFlow: () => detach,
+      attachQueueDiscovery: () => () => {},
       attachQueue: () => () => {},
       async *follow(signal: AbortSignal) { yield {}; if (!signal.aborted) await new Promise(resolve => signal.addEventListener('abort', resolve, { once: true })) },
     },

@@ -30,7 +30,12 @@
     "src/external-errors.ts",
     "src/capabilities.ts",
     "src/media.ts",
-    "src/infoflow/media.ts"
+    "src/infoflow/media.ts",
+    "src/history-store.ts",
+    "src/scheduling.ts",
+    "src/budgets.ts",
+    "src/infoflow/queues.ts",
+    "src/infoflow/archive.ts"
   ],
   "references": [
     {

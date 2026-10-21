@@ -10,6 +10,7 @@ import css from './Panel.module.css'
 
 type Translate = (key: BotKey) => string
 export function InfoFlowPage({ bots, api, t, openRoom }: { bots: Bot[]; api: InfoFlowFace | undefined; t: Translate; openRoom(room: Room): void }) {
+  const [groupIds, setGroupIds] = useState<Record<string, string>>({}), [attaching, setAttaching] = useState('')
   const [snapshot, setSnapshot] = useState<InfoFlowState | null>(null)
   const [selected, setSelected] = useState<BotId | undefined>(bots[0]?.id)
   const [error, setError] = useState<string | null>(null)
@@ -40,6 +41,11 @@ export function InfoFlowPage({ bots, api, t, openRoom }: { bots: Bot[]; api: Inf
       </div>
       {!!snapshot.groups.length && <section className={css.integrationGroups}><h3>{t('ifLinkedGroups')}</h3>{snapshot.groups.map(group => <article key={group.requestId}>
         <div><strong>{group.title}</strong><p>{group.groupId ? `${t('ifGroupId')}: ${group.groupId}` : t('ifGroupUncertain')}</p>{group.warning && <p role="status">{group.warning}</p>}</div>
+        {!group.groupId && group.status === 'uncertain' && <div><label>{t('ifGroupId')}<Input value={groupIds[group.requestId] ?? ''} onChange={event => setGroupIds(ids => ({ ...ids, [group.requestId]: event.target.value }))}/></label>
+          <Button disabled={!!attaching || !groupIds[group.requestId]} onClick={() => {
+            setAttaching(group.requestId)
+            void api.attachGroup({ requestId: group.requestId, groupId: groupIds[group.requestId]!.trim() }).then(room => { openRoom(room); return refresh() }).catch(cause => setError(String(cause))).finally(() => setAttaching(''))
+          }}>{t('ifResumeGroup')}</Button></div>}
         {group.groupId && <Button onClick={() => { void api.resumeGroup(group.requestId).then(room => { openRoom(room) }).catch(cause => { setError(String(cause instanceof Error ? cause.message : cause)) }) }}>{t(group.roomId ? 'ifOpenChat' : 'ifResumeGroup')}</Button>}
       </article>)}</section>}
     </>}

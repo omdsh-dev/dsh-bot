@@ -27,7 +27,9 @@
     "src/client/Icons.tsx",
     "src/client/Controls.tsx",
     "src/client/capability-face.ts",
-    "src/client/VoiceInput.tsx"
+    "src/client/VoiceInput.tsx",
+    "src/client/Attachments.tsx",
+    "src/client/Questions.tsx"
   ],
   "references": [
     {

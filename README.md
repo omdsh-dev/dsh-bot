@@ -8,11 +8,11 @@ This is an independent, experimental community plugin. It is not an official Dee
 
 **InfoFlow is hidden by default:** New profiles hide InfoFlow configuration and group creation. Internal users can enable **IM connections → Advanced settings → Show InfoFlow integration (internal users)**. The preference persists in the DSH profile. Existing bindings or chats retain their entry on upgrade; hiding it preserves connections and history. The optional companion and enterprise SDK are still required.
 
-**Version 0.8.1** runs the same packages on **DSH 0.1.5-rc.2 and 0.2.0-rc.2**, with Web, Feishu and InfoFlow in one Bot workspace. Configure both IM platforms under **DSH Bots → IM connections**, bind each platform's robot to a Bot, and create platform groups from DSH.
+**Version 0.9.0** runs the same packages on **DSH 0.1.5-rc.2 and 0.2.0-rc.2**, with Web, Feishu and InfoFlow in one Bot workspace. Configure both IM platforms under **DSH Bots → IM connections**, bind each platform's robot to a Bot, and create platform groups from DSH.
 
 One Bot can use Feishu and InfoFlow at the same time. Bot instructions, models and tools are shared; conversation histories and reply destinations stay separate by platform and chat. Files and external memory accessed through tools still follow the deployment's permissions.
 
-The source tree is preparing **0.9.0** with chat management, queued handoffs, model/budget/tool controls, media input, live progress, delivery recovery and scheduled tasks. Published npm versions remain those listed below. See the [capability guide](docs/capabilities.md).
+Version **0.9.0** adds chat management, automatic history segments, native model/tool selectors, per-Bot periodic budgets with call reservations, media input/output, inline questions and approvals, offline failure recovery, and calendar schedules. The table below is the release package set; publication and live-tenant acceptance are tracked in the [completion ledger](docs/feature-completion.md). See the [capability guide](docs/capabilities.md).
 
 ## What you can do
 
@@ -26,7 +26,7 @@ The source tree is preparing **0.9.0** with chat management, queued handoffs, mo
 - Bind an InfoFlow robot through guided credential setup, control private/group access, test messaging, and optionally create an InfoFlow group.
 - For either IM platform, allow specific groups or enable **Allow mentions in all groups containing this robot** per Bot. This option defaults off and does not change private-chat access.
 
-In a connected Feishu group or connected InfoFlow group, a Bot can hand off part of a human request by writing a separate `@handle concrete task` line. The target runs in its own group Session and replies through its own robot. Markdown task lists and semicolon-separated recipients are supported. Concrete fixes can return to an earlier participant, with at most three runs per Bot and twelve handoffs per human request; duplicate tasks are not repeated. Quoted text, code, ordinary mentions and `@all` in Bot replies do not dispatch work; private chats and Web chats retain human-only routing.
+In a connected Feishu group or connected InfoFlow group, a Bot can hand off part of a human request by writing a separate `@handle concrete task` line. The target runs in its own group Session and replies through its own robot. Markdown task lists and semicolon-separated recipients are supported. Concrete fixes can return to an earlier participant, with at most three runs per Bot and twelve handoffs per human request; duplicate tasks are not repeated. Quoted text, code, ordinary mentions and `@all` in Bot replies do not dispatch work; private chats retain human-only routing; Web groups can explicitly enable handoffs per message.
 
 | Entry point | How to call the Bot | Where the reply appears |
 | --- | --- | --- |
@@ -47,30 +47,30 @@ This release uses the experimental `next` tag on npm.
 
 | Package | Version | Purpose |
 | --- | --- | --- |
-| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.8.1` | Required base: Web chats and the IM configuration panel |
-| [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.4.1` | Optional Feishu connection and group creation |
-| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.5.1` | Optional InfoFlow connection; requires enterprise SDK access |
+| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.9.0` | Required base: Web chats and the IM configuration panel |
+| [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.5.0` | Optional Feishu connection and group creation |
+| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.6.0` | Optional InfoFlow connection; requires enterprise SDK access |
 
-**Specify a version or `@next` when installing.** The examples below pin this release. To install the version currently tagged `next`, use `@zzzpyyy/dsh-bot@next`, `@zzzpyyy/dsh-bot-feishu@next`, or `@zzzpyyy/dsh-bot-infoflow@next`. Installing a bare package name uses `latest`, which points to older releases as of **2026-10-20**.
+**Specify a version or `@next` when installing.** The examples below pin this release. To install the version currently tagged `next`, use `@zzzpyyy/dsh-bot@next`, `@zzzpyyy/dsh-bot-feishu@next`, or `@zzzpyyy/dsh-bot-infoflow@next`. Installing a bare package name uses `latest`, which points to older releases as of **2026-10-21**.
 
-Use the same package set above on DSH **0.1.5-rc.2** and **0.2.0-rc.2**. Later DSH versions are admitted without a new plugin release, but acceptance is not a guarantee of compatibility with untested or changed interfaces. Feishu and InfoFlow accept Bot `>=0.8.0 <1.0.0`, so a Bot update no longer forces matching connector releases. See the [compatibility policy and matrix](docs/compatibility.md).
+Use the same package set above on DSH **0.1.5-rc.2** and **0.2.0-rc.2**. Later DSH versions are admitted without a new plugin release, but acceptance is not a guarantee of compatibility with untested or changed interfaces. Feishu and InfoFlow accept Bot `>=0.9.0 <1.0.0`, so a Bot update no longer forces matching connector releases. See the [compatibility policy and matrix](docs/compatibility.md).
 
-In **Desktop → plugin manager**, install `@zzzpyyy/dsh-bot@0.8.1`, then add the optional companion packages you need to the same profile.
+In **Desktop → plugin manager**, install `@zzzpyyy/dsh-bot@0.9.0`, then add the optional companion packages you need to the same profile.
 
 If Feishu installation reports `ERR_PNPM_IGNORED_BUILDS` for `protobufjs`, explicitly disable that optional install script in the profile as described in the [Feishu guide](docs/feishu.zh.md#安装与开发), then retry.
 
 For an existing compatible **DSH CLI Web profile**, use:
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot@0.8.1
+dsh plugin --profile web add @zzzpyyy/dsh-bot@0.9.0
 # Optional: Feishu integration
-dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.4.1
+dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.5.0
 ```
 
 InfoFlow additionally requires `@baidu/infoflow-sdk-nodejs@2026.8.28` from your authorized enterprise registry. Configure `@baidu` registry access in the target profile's package-manager environment before installing its companion; the public package does not bundle the private SDK or credentials:
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.5.1
+dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.6.0
 ```
 
 Use the same `DSH_HOME` and profile as your running installation. For upgrades, back up that data directory, let active replies finish, stop the Host, update the base and installed companions to the versions in the table, then restart. Saved Bot identities, bindings and conversation history remain in the same data directory. Installing a companion exposes its configuration page; it does not create robots or enable unconfigured connections. See the [Feishu guide](docs/feishu.zh.md) and [InfoFlow guide](docs/infoflow.md) for permissions and setup.
@@ -137,11 +137,11 @@ npm start -- --patch /absolute/path/bot-settings.patch.yml
 
 ## Current limits
 
-- Group replies appear when complete; token streaming, tools, and approvals are in each member's execution Session.
-- Bots inherit DSH's selected model. Per-Bot models and scheduling are not implemented. Edit a Bot's name and responsibilities from chat info; the handle and preset are fixed after creation. Bot-to-Bot handoffs are supported only within connected Feishu or InfoFlow groups; private chats and Web chats require human messages to dispatch work.
-- Use the extensible `standard` preset. Complete-prompt presets such as `minimal` are rejected.
-- A restart marks unfinished public replies interrupted. It does not resend them; inspect the execution Session before retrying uncertain tool work.
-- There is no Bot/chat deletion or large-history pagination yet. Removing and rejoining a member creates a new Session and preserves the public history.
+- Use the extensible `standard` preset; complete-prompt presets such as `minimal` are rejected. Bot handles and presets stay fixed after creation.
+- Native model catalogs provide names, not token prices. Budgets use configured estimates and can be exceeded by an individual call; concurrent calls reserve quota before dispatch.
+- History and receipt windows use immutable segments with atomic manifests. The Host still hydrates history in memory; storage retention and native execution logs remain deployment-managed.
+- A restart marks unfinished public replies interrupted; uncertain model/tool work is not automatically replayed. Platform confirmation loss can still duplicate IM deliveries.
+- Live tenant permissions, reconnect and notification delivery need tenant-specific acceptance. See the [completion ledger](docs/feature-completion.md).
 
 ## Development and verification
 

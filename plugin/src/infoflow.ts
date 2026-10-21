@@ -8,6 +8,7 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-user-questions'
 import type {} from './index.ts'
+import { BridgeArchive } from './infoflow/archive.ts'
 import { InfoFlowBridge, type BridgeConfig } from './infoflow/bridge.ts'
 import { infoflowDomain } from './infoflow/domain.ts'
 import { InfoFlowTransport, loadSdk } from './infoflow/sdk.ts'
@@ -52,6 +53,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   if (!key || !secret) throw new Error('Configure the InfoFlow application key and secret through DSH credentials before enabling the connector')
   const sdk = loadSdk()
   const domain = await ctx.storageDomain.open(infoflowDomain)
+  const store = await BridgeArchive.load(domain.global, spec => ctx.storageDomain.open(spec)).catch(async cause => { await domain.close(); throw cause })
   const abort = new AbortController()
   let bridge: InfoFlowBridge | undefined
   let transport: InfoFlowTransport | undefined
@@ -69,11 +71,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }, 'infoflow: disconnect, drain handlers and close durable queues')
   const report = (message: string) => { ctx.logger.warn(message) }
   const connection = new InfoFlowTransport(sdk, { ...config, appKey: key.value, appSecret: secret.value,
-    upload: request => ctx.botMode.upload(request),
+    upload: request => ctx.botMode.upload(request), read: item => ctx.botMode.readAttachment(item),
     allowMedia: input => input.conversation.kind === 'private' ? config.allowUsers.includes(input.message.sender.id) : config.allowAllGroups === true || config.allowGroups.includes(input.conversation.id),
   }, input => bridge!.receive(input), report)
   transport = connection
-  const owner = new InfoFlowBridge(ctx.botMode, domain.global, connection,
+  const owner = new InfoFlowBridge(ctx.botMode, store, connection,
     { ...config, notifyScheduled: true, botIds: config.botIds.map(brandString<BotId>), defaultBot: brandString<BotId>(config.defaultBot), labelReplies: config.botIds.length > 1 }, report)
   bridge = owner
   detachQueue = ctx.botMode.attachQueue('infoflow', 'legacy', owner)

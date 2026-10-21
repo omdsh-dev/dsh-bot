@@ -53,6 +53,10 @@ function install(ctx: Context): void {
   ctx.effect(() => () => control.dispose(), 'bot-mode: state stream')
   const face: PanelFace = {
     capabilities: {
+      attachment: request => value(ctx.remote.bots.attachment(request)),
+      answerQuestion: request => value(ctx.remote.bots.answerQuestion(request)),
+      catalog: botId => value(ctx.remote.bots.catalog(botId)),
+      scheduleRuns: request => value(ctx.remote.bots.scheduleRuns(request)),
       openDirect: botId => value(ctx.remote.bots.openDirect(botId)),
       history: request => value(ctx.remote.bots.history(request)),
       exportChat: request => value(ctx.remote.bots.exportChat(request)),
@@ -76,6 +80,7 @@ function install(ctx: Context): void {
       cancel: attemptId => value(ctx.remote.bots.cancelFeishuRegistration(attemptId)),
     },
     infoflow: {
+      attachGroup: request => value(ctx.remote.bots.attachInfoflowGroup(request)),
       snapshot: () => value(ctx.remote.bots.infoflowSnapshot()),
       save: request => value(ctx.remote.bots.saveInfoflowBinding(request)),
       verify: botId => value(ctx.remote.bots.verifyInfoflowBinding(botId)),

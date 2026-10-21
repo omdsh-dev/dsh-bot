@@ -1,12 +1,12 @@
 /** Durable text bridge. The Bot owner commits work; this module retries only admission and delivery. */
 import type { BotMode } from '../index.ts'
-import type { BotId, Room, FailureView } from '../types.ts'
+import type { BotId, Room, FailureView, ChatAttachment } from '../types.ts'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { conversationKey, splitMessage, type Incoming } from './messages.ts'
 import type { BridgeState, Delivery, Pending, RobotMention } from './domain.ts'
 import { humanRequest, responseTree } from '../delegation.ts'
 import { isDeepStrictEqual } from 'node:util'
-import { isPermanentChatError } from '../external-errors.ts'
+import { PermanentChatError, isPermanentChatError } from '../external-errors.ts'
 
 /** All deployment-varying queue and routing limits. */
 export interface BridgeConfig {
@@ -27,7 +27,7 @@ export interface BridgeConfig {
 /** Native domain handle narrowed to the two operations the bridge owns. */
 export interface BridgeStore { get(): BridgeState; set(state: BridgeState): Promise<void> }
 /** Transport confirms sending or rejects; it never invokes the model. */
-export interface Sender { send(delivery: Delivery): Promise<void> }
+export interface Sender { send(delivery: Delivery): Promise<void>; prepare?(input: Incoming): Promise<Incoming> }
 
 /** One configured robot. All persistence writes are serialized, including SDK callbacks. */
 export class InfoFlowBridge {
@@ -37,6 +37,8 @@ export class InfoFlowBridge {
   private worker: Promise<void> | undefined
   private dirty = false
   private closed = false
+  private mediaRetryAt = new Map<string, number>()
+  private mediaTasks = new Map<string, Promise<void>>()
   /** @param bots - same Host's Bot owner. @param store - durable native domain. @param sender - SDK adapter.
    * @param config - validated deployment settings. @param report - contained error reporting, without message bodies or secrets.
    */
@@ -69,17 +71,19 @@ export class InfoFlowBridge {
     return this.bots.snapshot().rooms.find(room => room.external && (conversationKey(room.external) === conversationKey(input.conversation)
       || (room.external.provider === input.conversation.provider && room.external.kind === 'group' && input.conversation.kind === 'group' && room.external.id === input.conversation.id)))
   }
-  private enqueue(state: BridgeState, key: string, input: Incoming, content: string, botId: BotId = input.targets?.[0] ?? this.config.defaultBot, mentions: RobotMention[] = []): void {
+  private enqueue(state: BridgeState, key: string, input: Incoming, content: string, botId: BotId = input.targets?.[0] ?? this.config.defaultBot, mentions: RobotMention[] = [], attachments: ChatAttachment[] = []): void {
     const parts = splitMessage(content, this.config.chunkSize, input.conversation.provider === 'infoflow' && input.conversation.kind === 'group' ? 2048 : Infinity)
     // InfoFlow accepts at most ten robot mentions per message. Never repeat them on text continuation chunks.
     const count = Math.max(parts.length, Math.ceil(mentions.length / 10))
-    if (state.outbox.length + count > this.config.maxOutbox) throw new Error('External chat outbox is full; delivery must recover before accepting more results')
+    if (state.outbox.length + count + attachments.length > this.config.maxOutbox) throw new Error('External chat outbox is full; delivery must recover before accepting more results')
     for (let index = 0; index < count; index++) {
       const targets = mentions.slice(index * 10, index * 10 + 10)
       state.outbox.push({ id: `${key}:${index}`, conversation: input.conversation,
         user: input.message.sender.id, botId, text: parts[index] ?? '派活给以上 Bot。', attempts: 0, nextAt: 0,
         ...(targets.length ? { mentions: targets } : {}) })
     }
+    for (const [index, attachment] of attachments.entries()) state.outbox.push({ id: `${key}:media:${index}`, conversation: input.conversation,
+      user: input.message.sender.id, botId, text: attachment.attachment.name, attachment, attempts: 0, nextAt: 0 })
   }
 
   /** Persist authorization-approved input and its receipt in the same write.
@@ -161,6 +165,8 @@ export class InfoFlowBridge {
       this.dirty = false
       // Stop may await tools finishing. New arrivals must still acquire the admission lock.
       try { await this.stopPending() } catch { this.report('External chat stop failed; request retained') }
+      for (const key of this.mediaRetryAt.keys()) if (!this.state.pending.some(item => item.key === key)) this.mediaRetryAt.delete(key)
+      this.prepareMedia()
       try { await this.exclusive(() => this.dispatch()) } catch { this.report('External chat processing failed; durable work is retained for the next retry') }
       // A full outbox must still drain, and slow network sends must not hold the admission lock.
       try { await this.deliver() } catch { this.report('External chat delivery settlement failed; durable replies are retained') }
@@ -218,7 +224,7 @@ export class InfoFlowBridge {
                 const id = this.config.mentionId?.(child.botId)
                 return id ? [{ id, name: snapshot.bots.find(bot => bot.id === child.botId)?.name ?? child.botId }] : []
               }) : []
-              this.enqueue(state, `${item.key}:result:${response.id}`, item.input, text, response.botId ?? this.config.defaultBot, mentions)
+              this.enqueue(state, `${item.key}:result:${response.id}`, item.input, text, response.botId ?? this.config.defaultBot, mentions, response.status === 'complete' ? response.attachments : [])
             }
             current.delivered = [...(current.delivered ?? []), ...ready.map(message => message.id)]
             current.announced = [...(current.announced ?? []), ...announcements.map(message => message.id)]
@@ -230,7 +236,7 @@ export class InfoFlowBridge {
       const key = conversationKey(item.input.conversation)
       if (blocked.has(key)) continue
       blocked.add(key)
-      if ((item.nextAt ?? 0) > Date.now()) continue
+      if (item.input.media || (item.nextAt ?? 0) > Date.now()) continue
       const active = this.bots.snapshot().rooms.filter(room => room.external && room.messages.some(message => message.status === 'running')).length
       if (active >= this.config.maxConcurrentRooms) continue
       // Membership errors are actionable and terminal; storage failures remain retryable.
@@ -242,7 +248,7 @@ export class InfoFlowBridge {
         const accepted = await this.bots.submitExternalMessage({ roomId: room.id, text: item.input.text, external: item.input.message, sourceAccountId: item.input.conversation.accountId,
           ...(item.input.attachments ? { attachments: item.input.attachments } : {}),
           ...(this.config.allowDelegation ? { allowDelegation: true } : {}), ...(item.input.targets ? { targets: item.input.targets } : {}) })
-        if (accepted.status === 'rejected') { await this.finish(item, accepted.reason === 'room-full' ? '该聊天的历史容量已满，请部署者调整 DSH Bot 的 maxMessages 配置。' : '消息无法提交，请检查文字和 @Bot 是否属于当前聊天。'); continue }
+        if (accepted.status === 'rejected') { await this.finish(item, accepted.reason === 'room-full' ? '该聊天的待处理回复已满，请等待完成或调整 DSH Bot 的 maxMessages 配置。' : '消息无法提交，请检查文字和 @Bot 是否属于当前聊天。'); continue }
         if (accepted.status === 'accepted') {
           committed = true
           await this.change((state) => {
@@ -254,6 +260,12 @@ export class InfoFlowBridge {
         // Accepted work already owns a native receipt. Never abandon its response tree
         // because the connector failed to save the acknowledgement in its own domain.
         if (committed) throw cause
+        await this.admissionFailed(item, cause)
+      }
+    }
+  }
+
+  private async admissionFailed(item: Pending, cause: unknown): Promise<void> {
         this.report('External chat admission failed; check Bot configuration/storage and retained queue')
         await this.change((state) => {
           const current = state.pending.find(pending => pending.key === item.key)
@@ -272,7 +284,25 @@ export class InfoFlowBridge {
           this.enqueue(state, notice, item.input, '请求暂未提交，请部署者检查 Bot 配置或存储。消息已保留，系统会重试。')
           state.notices.push(notice)
         })
-      }
+  }
+
+  /** Downloads never own the inbound lock. A removed pending record cannot start a model. */
+  private prepareMedia(): void {
+    for (const item of this.state.pending) {
+      if (this.closed || this.mediaTasks.size >= this.config.maxConcurrentRooms) break
+      if (!item.input.media || item.submitted || item.stop || this.mediaTasks.has(item.key) || Math.max(item.nextAt ?? 0, this.mediaRetryAt.get(item.key) ?? 0) > Date.now()
+        || item.input.conversation.accountId !== this.config.accountId) continue
+      const task = Promise.resolve().then(async () => {
+        if (!this.sender.prepare) throw new PermanentChatError('Media retrieval is unavailable')
+        const ready = await this.sender.prepare(structuredClone(item.input))
+        delete ready.media
+        await this.change(state => {
+          const current = state.pending.find(pending => pending.key === item.key)
+          if (current) { current.input = ready; current.attempts = 0; current.nextAt = 0 }
+        })
+      }).catch(cause => this.admissionFailed(item, cause)).catch(() => { this.mediaRetryAt.set(item.key, Date.now() + Math.max(100, this.config.retryMs)); this.report('Media settlement failed; input remains retained') })
+        .finally(() => { this.mediaTasks.delete(item.key); if (!this.closed) void this.wake() })
+      this.mediaTasks.set(item.key, task)
     }
   }
 
@@ -330,17 +360,17 @@ export class InfoFlowBridge {
           if (!response.botId && response.publishExternal && response.notifyBot && this.config.botIds.includes(response.notifyBot)) {
             this.enqueue(state, `web:${response.id}`, { conversation: { ...room.external!, accountId: this.config.accountId },
               message: { id: response.id, sender: { id: '', name: 'DSH' } }, text: response.text },
-              `DSH 用户：${response.text}${response.attachments?.length ? '\n（附件请在 DSH 查看）' : ''}`, response.notifyBot)
+              `DSH 用户：${response.text}`, response.notifyBot, [], response.attachments)
           }
           if (!response.botId || !this.config.botIds.includes(response.botId)) continue
           const root = humanRequest(room, response)
-          if ((!root?.scheduleId && !root?.publishExternal) || root.localOnly) continue
+          if ((!root?.scheduleId && !root?.publishExternal && !root?.questionReply) || root.localOnly) continue
           if (response.status === 'running' || response.status === 'queued') break
           const conversation = { ...room.external!, accountId: this.config.accountId }
           const sender = [...room.messages].reverse().find(message => message.external)?.external?.sender.id
           if (conversation.kind === 'private' && !this.config.allowUsers.includes(conversation.provider === 'feishu' ? sender ?? '' : conversation.id)) continue
           this.enqueue(state, `scheduled:${response.id}`, { conversation, message: { id: root.id, sender: { id: '', name: 'Scheduler' } }, text: root.text },
-            response.status === 'complete' ? response.text || '定时任务已完成。' : `定时任务${response.status}，请在 DSH 查看。`, response.botId)
+            response.status === 'complete' ? response.text || '定时任务已完成。' : `定时任务${response.status}，请在 DSH 查看。`, response.botId, [], response.status === 'complete' ? response.attachments : [])
         }
         state.notificationCursors[room.id] = cursor
       }
@@ -350,13 +380,13 @@ export class InfoFlowBridge {
   failures(queue: string): FailureView[] {
     return (this.state.failed ?? []).map(item => ({
       provider: this.config.provider ?? 'infoflow', queue, id: item.delivery?.id ?? item.pending!.key,
-      time: item.time, kind: item.delivery ? 'delivery' : 'admission', reason: item.reason,
+      time: item.time, kind: item.delivery ? 'delivery' : item.pending?.input.media ? 'media' : 'admission', reason: item.reason,
       destination: item.delivery?.conversation.id ?? item.pending!.input.conversation.id,
       text: item.delivery?.text ?? item.pending!.input.text, attempts: item.delivery?.attempts ?? item.pending?.attempts ?? 0,
     }))
   }
 
-  async resolveFailure(id: string, action: 'retry' | 'discard'): Promise<void> {
+  async resolveFailure(id: string, action: 'retry' | 'discard', wake = true): Promise<void> {
     await this.change(state => {
       const failed = state.failed?.find(item => (item.delivery?.id ?? item.pending?.key) === id)
       if (!failed) throw new Error('Failed work no longer exists')
@@ -371,7 +401,7 @@ export class InfoFlowBridge {
       }
       state.failed = state.failed!.filter(item => item !== failed)
     })
-    void this.wake().catch(() => this.report('Failed work retry could not be reconciled'))
+    if (wake) void this.wake().catch(() => this.report('Failed work retry could not be reconciled'))
   }
 
   private retryAt(attempts: number): number {
@@ -409,5 +439,5 @@ export class InfoFlowBridge {
   }
 
   /** Stop taking work and await in-flight persistence/sending; Bot execution remains owned by DSH. */
-  async close(): Promise<void> { this.closed = true; await this.worker; await this.operations; await this.tail }
+  async close(): Promise<void> { this.closed = true; await this.worker; await Promise.allSettled(this.mediaTasks.values()); await this.operations; await this.tail }
 }

@@ -5,6 +5,7 @@ import { PermanentChatError } from './external-errors.ts'
 import { Context, Service } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import { brandString } from '@deepseek-ai/dsh-brand'
+import type { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -17,8 +18,13 @@ import { botDomain } from './domain.ts'
 import { isExternalGroup, mergeExternalRooms } from './external-rooms.ts'
 import { findMessage, route } from './routing.ts'
 import { planHandoffs, humanRequest } from './delegation.ts'
+import { HistoryStore } from './history-store.ts'
+import { nextCalendar, validateCalendar } from './scheduling.ts'
+import { resetPeriod, needsBudgetReset, reserveBudget, addUsage } from './budgets.ts'
+import type {} from '@deepseek-ai/dsh-user-questions'
+import type { QuestionView, QuestionAnswer, AttachmentRequest, AttachmentData, CapabilityCatalog, ScheduleRun } from './types.ts'
 import { historyPage, exportRoom, validatePolicy } from './capabilities.ts'
-import { uploadMedia, validateMedia, mediaContent, mediaHost } from './media.ts'
+import { uploadMedia, readMedia, outputMedia, validateMedia, mediaContent, mediaHost } from './media.ts'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type { ConfigureBudget, Budget, HistoryRequest, HistoryPage, LifecycleRequest, SaveScheduleRequest, Schedule, ChatAttachment, UploadRequest, Usage, FailureView, FailureAction } from './types.ts'
 import type { AttemptRequest, StopRequest, Bot, BotFrame, BotId, BotState, ChatMessage, ChatMessageId, CreateBotRequest, CreateGroupRequest, Member, MembersRequest, Room, RoomId, SendRequest, UpdateBotRequest } from './types.ts'
@@ -36,7 +42,7 @@ export interface Config {
   historyMessages: number
   /** Maximum Bot members in one chat, capped at sixteen. */
   maxBots: number
-  /** Maximum public message records in one chat, including response attempts. */
+  /** Maximum in-flight response attempts in one chat; settled history is automatically segmented. */
   maxMessages: number
 }
 
@@ -55,6 +61,8 @@ export class BotMode extends TypertRemoteService {
     maxMessages: Schema.natural().min(10).default(10000),
   })
   private domain!: Domain<typeof botDomain>
+  private historyStore?: HistoryStore
+  private questions = new Map<string, { roomId: RoomId; messageId: ChatMessageId; view: QuestionView; resolve(answer: QuestionAnswer): void; cancel(): void }>()
   private state: BotState = { bots: [], rooms: [] }
   private tail: Promise<unknown> = Promise.resolve()
   private infoflow: InfoFlowControl | undefined
@@ -66,6 +74,7 @@ export class BotMode extends TypertRemoteService {
   private schedulerBusy = false
   private schedulerTask: Promise<void> | undefined
   private approvals = new Map<string, { resolve: (value: 'allowed-once' | 'rejected' | 'cancelled') => void; roomId: RoomId; messageId: ChatMessageId }>()
+  private queueDiscoveries = new Set<() => Promise<void>>()
   private queues = new Map<string, { failures(queue: string): FailureView[]; resolveFailure(id: string, action: 'retry' | 'discard'): Promise<void> }>()
 
   /**
@@ -78,7 +87,10 @@ export class BotMode extends TypertRemoteService {
     checkHost(this.ctx)
     this.domain = await this.ctx.storageDomain.open(botDomain)
     try {
-      this.state = structuredClone(this.domain.global.get())
+      this.historyStore = new HistoryStore(spec => this.ctx.storageDomain.open(spec))
+      this.state = await this.historyStore.hydrate(this.domain.global.get())
+      // Unknown in-flight usage is charged conservatively on restart, never silently refunded.
+      for (const id of Object.keys(this.state.budgetReservations ?? {})) this.settleReservation(this.state, id)
       // Do not replay uncertain requests after a process crash. DSH retains the
       // input/output log; users can inspect it before explicitly retrying.
       for (const room of this.state.rooms) for (const message of room.messages) {
@@ -87,7 +99,7 @@ export class BotMode extends TypertRemoteService {
       for (const provider of ['feishu', 'infoflow'] as const) {
         for (const chatId of new Set(this.state.rooms.filter(room => isExternalGroup(room) && room.external!.provider === provider).map(room => room.external!.id))) mergeExternalRooms(this.state, chatId, provider)
       }
-      await this.domain.global.set(this.state)
+      await this.persist(this.state)
       this.ctx.on('agent/created', ({ agent }) => { this.installIdentity(agent) })
       for (const room of this.state.rooms) for (const member of room.members) {
         const agent = this.ctx.agents.get(member.sessionId)
@@ -102,6 +114,8 @@ export class BotMode extends TypertRemoteService {
         clearInterval(timer)
         this.closing = true
         await this.schedulerTask
+        for (const pending of this.questions?.values() ?? []) pending.cancel()
+        this.questions?.clear()
         for (const pending of this.approvals.values()) pending.resolve('cancelled')
         this.approvals.clear()
         for (const run of this.running.values()) { run.canceled = true; run.agent?.cancel({ kind: 'user' }) }
@@ -140,12 +154,15 @@ export class BotMode extends TypertRemoteService {
     this.ctx.effect(() => agent.ctx.systemPrompt.section({ name: 'bot-mode.identity', order: 999, text: '{{bot_mode_identity}}' }), 'bot-mode: identity section')
   }
 
+  private persist(state: BotState): Promise<void> { return this.historyStore ? this.historyStore.persist(state, manifest => this.domain.global.set(manifest)) : this.domain.global.set(state) }
+  private activeCount(room: Room): number { return room.messages.filter(message => message.status === 'running' || message.status === 'queued').length }
+
   private change<T>(action: (draft: BotState) => T, recover?: (draft: BotState) => void): Promise<T> {
     const operation = this.tail.then(async () => {
       const draft = structuredClone(this.state)
       const result = action(draft)
       if (isDeepStrictEqual(draft, this.state)) return structuredClone(result)
-      try { await this.domain.global.set(draft) }
+      try { await this.persist(draft) }
       catch (cause) {
         if (recover) {
           // Serialize recovery with other mutations; never publish uncommitted handoffs.
@@ -153,7 +170,7 @@ export class BotMode extends TypertRemoteService {
           recover(fallback)
           this.state = fallback
           for (const wake of this.watchers) wake()
-          try { await this.domain.global.set(fallback) } catch { /* Next successful mutation persists the recovery. */ }
+          try { await this.persist(fallback) } catch { /* Next successful mutation persists the recovery. */ }
         }
         throw cause
       }
@@ -237,13 +254,85 @@ export class BotMode extends TypertRemoteService {
     this.queues.set(key, queue)
     return () => { if (this.queues.get(key) === queue) this.queues.delete(key) }
   }
-  @Remote failures(): FailureView[] { return [...this.queues.entries()].flatMap(([key, queue]) => queue.failures(key.slice(key.indexOf(':') + 1))).sort((a, b) => b.time - a.time) }
+  attachQueueDiscovery(discover: () => Promise<void>): () => void { this.queueDiscoveries.add(discover); return () => { this.queueDiscoveries.delete(discover) } }
+  @Remote async failures(): Promise<FailureView[]> { for (const discover of this.queueDiscoveries ?? []) await discover(); return [...this.queues.entries()].flatMap(([key, queue]) => queue.failures(key.slice(key.indexOf(':') + 1))).sort((a, b) => b.time - a.time) }
   @Remote resolveFailure(request: FailureAction): Promise<void> {
     const queue = this.queues.get(`${request.provider}:${request.queue}`)
-    if (!queue) throw new Error('Reconnect this robot to inspect and recover its retained queue')
+    if (!queue) throw new Error('Refresh failed deliveries to load this retained queue')
     return queue.resolveFailure(request.id, request.action)
   }
   @Remote upload(request: UploadRequest): Promise<ChatAttachment> { return uploadMedia(mediaHost(this.ctx), request) }
+  @Remote async attachment(request: AttachmentRequest): Promise<AttachmentData> {
+    const item = findMessage(this.room(this.state, request.roomId), request.messageId).attachments?.find(item => item.attachment.attachmentId === request.attachmentId)
+    if (!item) throw new Error('Attachment is not part of this message')
+    return readMedia(mediaHost(this.ctx), item)
+  }
+  /** Host-only transport read of already committed native references. */
+  readAttachment(item: ChatAttachment): Promise<AttachmentData> { return readMedia(mediaHost(this.ctx), item) }
+  private validateAnswers(view: QuestionView, answer: QuestionAnswer): void {
+    const answers = answer.answers
+    if (answers.length !== view.questions.length || new Set(answers.map(a => a.id)).size !== answers.length) throw new Error('Answer every question exactly once')
+    for (const question of view.questions) {
+      const value = answers.find(item => item.id === question.id)
+      if (!value || !value.selected.length && !value.custom?.trim() || !question.multiSelect && value.selected.length > 1
+        || value.selected.some(label => !question.options?.some(option => option.label === label))
+        || (value.custom?.length ?? 0) > 32000) throw new Error('Invalid question answer')
+    }
+  }
+  @Remote async answerQuestion(request: { roomId: RoomId; id: string; answer: QuestionAnswer }): Promise<void> {
+    const pending = this.questions?.get(request.id)
+    if (pending) {
+      if (pending.roomId !== request.roomId) throw new Error('Question belongs to another chat')
+      this.validateAnswers(pending.view, request.answer)
+      pending.resolve(structuredClone(request.answer)); this.questions.delete(request.id); return
+    }
+    const batch = await this.change(state => {
+      const room = this.room(state, request.roomId)
+      const original = room.messages.find(message => message.questions?.some(q => q.id === request.id))
+      const question = original?.questions?.find(q => q.id === request.id)
+      if (!original?.botId || !question) throw new Error('Question is no longer pending')
+      this.validateAnswers(question, request.answer)
+      const agent = this.ctx.agents.get(this.member(room, original.botId).sessionId)
+      const projections = Reflect.get(this.ctx, 'sessionProjections') as { stateOf(session: Agent['session'], name: string): { questions?: { active: { callId: string; state: string }[] } } | undefined } | undefined
+      if (agent && projections && !projections.stateOf(agent.session, 'userQuestions')?.questions?.active.some(item => item.callId === question.callId && item.state === 'continued')) throw new Error('Question was already settled in the native Session')
+      const queued = room.messages.some(message => message.status === 'running' || message.status === 'queued')
+      const batch = this.append(state, room, { roomId: room.id, text: JSON.stringify({ kind: 'answer_to_pending_question', tool: 'ask_user_question', callId: question.callId, questions: question.questions, answers: request.answer.answers }), targets: [original.botId] })
+      batch.user.questionReply = { callId: question.callId, questions: question.questions, answer: structuredClone(request.answer) }
+      batch.user.localOnly = original.localOnly
+      for (const attempt of batch.attempts) { attempt.localOnly = original.localOnly; if (queued) attempt.status = 'queued' }
+      original.questions = original.questions!.filter(q => q.id !== request.id)
+      return { roomId: room.id, attempts: queued ? [] : batch.attempts }
+    })
+    for (const attempt of batch.attempts) this.launch(batch.roomId, attempt)
+  }
+  @Remote async catalog(botId?: BotId): Promise<CapabilityCatalog> {
+    const member = this.state.rooms.flatMap(room => room.members).find(item => item.botId === botId)
+    if (member && !this.ctx.agents.get(member.sessionId)) {
+      const bot = this.state.bots.find(item => item.id === member.botId)!
+      await this.ctx.sessionController.create({ sessionId: member.sessionId, cwd: this.config.cwd, agentPreset: bot.preset })
+    }
+    const agent = member && this.ctx.agents.get(member.sessionId)
+    const host = agent?.ctx ?? this.ctx
+    const llm = Reflect.get(host, 'llm') as { listProviders?(): { id: string }[]; listModels?(id: string): Promise<{ id: string; name: string }[]> } | undefined
+    const tools = Reflect.get(host, 'tools') as { schemas?(scope?: Agent): { name: string; description: string }[] } | undefined
+    const providers = await Promise.all((llm?.listProviders?.() ?? []).map(async provider => {
+      try { return { id: provider.id, models: await llm!.listModels?.(provider.id) ?? [] } }
+      catch { return { id: provider.id, models: [], error: 'Model discovery unavailable; enter an ID manually' } }
+    }))
+    return { providers, tools: (tools?.schemas?.(agent || undefined) ?? []).map(({ name, description }) => ({ name, description })) }
+  }
+  @Remote scheduleRuns(request: { id: string; before?: number; limit?: number }): ScheduleRun[] {
+    const schedule = this.state.schedules?.find(item => item.id === request.id)
+    if (!schedule) throw new Error('Schedule not found')
+    const room = this.room(this.state, schedule.roomId)
+    return room.messages.filter(message => message.scheduleId === schedule.id && message.time < (request.before ?? Infinity))
+      .slice(-Math.max(1, Math.min(100, request.limit ?? 20))).reverse().map(message => {
+        const replies = room.messages.filter(item => item.replyTo === message.id || item.delegation?.rootId === message.id)
+        const status = replies.find(item => item.status === 'running' || item.status === 'queued')?.status
+          ?? replies.find(item => item.status !== 'complete')?.status ?? 'complete'
+        return { messageId: message.id, time: message.time, status, replies: replies.map(({ botId, status, text, error }) => ({ botId, status, text, error })) }
+      })
+  }
   @Remote decideApproval(request: { roomId: RoomId; id: string; allow: boolean }): void {
     const pending = this.approvals.get(request.id)
     if (!pending || pending.roomId !== request.roomId) throw new Error('Approval is no longer pending')
@@ -300,10 +389,44 @@ export class BotMode extends TypertRemoteService {
     if (!request.currency.trim() || request.currency.length > 16) throw new Error('Specify the budget currency')
     return this.change(state => {
       if (request.reset && state.rooms.some(room => room.messages.some(message => message.status === 'running'))) throw new Error('Stop active responses before resetting usage')
-      state.budget = { tokenLimit: request.tokenLimit, costLimit: request.costLimit, currency: request.currency.trim(),
-        used: !request.reset && state.budget ? state.budget.used : { input: 0, output: 0, cost: 0 },
-        since: !request.reset && state.budget ? state.budget.since : Date.now() }
-      return state.budget
+      if (request.botId && !state.bots.some(bot => bot.id === request.botId)) throw new Error('Bot not found')
+      for (const value of [request.reservationTokens ?? 8192, request.reservationCost ?? 0]) if (!Number.isFinite(value) || value < 0) throw new Error('Invalid call reservation')
+      const old = request.botId ? state.botBudgets?.[request.botId] : state.budget
+      if (old && old.currency !== request.currency.trim() && old.used.cost && !request.reset) throw new Error('Reset usage before changing its currency')
+      const other = [...(request.botId && state.budget ? [state.budget] : []), ...Object.entries(state.botBudgets ?? {}).filter(([id]) => id !== request.botId).map(([, budget]) => budget)]
+      if (other.some(budget => (budget.costLimit || budget.used.cost) && budget.currency !== request.currency.trim())) throw new Error('Bot and profile spending budgets must use the same currency')
+      const budget: Budget = { tokenLimit: request.tokenLimit, costLimit: request.costLimit, currency: request.currency.trim(),
+        period: request.period ?? old?.period ?? 'never', reservationTokens: request.reservationTokens ?? old?.reservationTokens ?? 8192,
+        reservationCost: request.reservationCost ?? old?.reservationCost ?? 0,
+        used: !request.reset && old ? old.used : { input: 0, output: 0, cost: 0 }, since: !request.reset && old ? old.since : Date.now() }
+      if (request.botId) { state.botBudgets ??= {}; state.botBudgets[request.botId] = budget } else state.budget = budget
+      return budget
+    })
+  }
+
+  private settleReservation(state: BotState, id: string, usage?: Usage): void {
+    for (const reservation of state.budgetReservations?.[id] ?? []) {
+      const budget = reservation.scope === '*' ? state.budget : state.botBudgets?.[reservation.scope]
+      if (budget && !usage) addUsage(budget, { input: reservation.tokens, output: 0, cost: reservation.cost })
+    }
+    if (state.budgetReservations) delete state.budgetReservations[id]
+  }
+
+  private reserveCall(id: ChatMessageId, bot: Bot): Promise<void> {
+    return this.change(state => {
+      // A prior attempt with no usage report is accounted for conservatively.
+      this.settleReservation(state, id)
+      const reservations = []
+      for (const scope of ['*', bot.id]) {
+        const budget = scope === '*' ? state.budget : state.botBudgets?.[scope]
+        if (!budget) continue
+        resetPeriod(budget, Date.now())
+        if (budget.costLimit && (bot.policy?.inputPrice === undefined || bot.policy.outputPrice === undefined)) throw new Error('Configure this Bot’s token prices before using a spending budget')
+        const reserved = Object.values(state.budgetReservations ?? {}).flat().filter(item => item.scope === scope)
+          .reduce((sum, item) => ({ tokens: sum.tokens + item.tokens, cost: sum.cost + item.cost }), { tokens: 0, cost: 0 })
+        reservations.push({ scope, ...reserveBudget(budget, reserved) })
+      }
+      state.budgetReservations ??= {}; state.budgetReservations[id] = reservations
     })
   }
 
@@ -320,7 +443,8 @@ export class BotMode extends TypertRemoteService {
       if (!request.id && state.schedules.length >= 100) throw new Error('Schedule limit reached')
       const old = request.id ? state.schedules.find(item => item.id === request.id) : undefined
       if (request.id && !old) throw new Error('Schedule not found')
-      const saved: Schedule = { ...request, id: old?.id ?? randomUUID(), name: request.name.trim(), targets: [...request.targets] }
+      const calendar = request.calendar ? validateCalendar(request.calendar) : undefined
+      const saved: Schedule = { ...request, calendar, nextAt: calendar ? nextCalendar(calendar, Date.now()) : request.nextAt, id: old?.id ?? randomUUID(), name: request.name.trim(), targets: [...request.targets] }
       if (old) Object.assign(old, saved, { error: undefined })
       else state.schedules.push(saved)
       return old ?? saved
@@ -332,6 +456,9 @@ export class BotMode extends TypertRemoteService {
     if (this.closing || this.schedulerBusy) return
     this.schedulerBusy = true
     try {
+      if ([...(this.state.budget ? [this.state.budget] : []), ...Object.values(this.state.botBudgets ?? {})].some(budget => needsBudgetReset(budget, Date.now()))) {
+        await this.change(state => { for (const budget of [...(state.budget ? [state.budget] : []), ...Object.values(state.botBudgets ?? {})]) resetPeriod(budget, Date.now()) })
+      }
       for (const room of this.state.rooms) await this.drain(room.id)
       if (!(this.state.schedules ?? []).some(item => item.enabled && item.nextAt <= Date.now())) return
       const batches = await this.change(state => {
@@ -349,7 +476,8 @@ export class BotMode extends TypertRemoteService {
             if (queued) for (const attempt of batch.attempts) attempt.status = 'queued'
             batches.push({ roomId: room.id, attempts: queued ? [] : batch.attempts })
             schedule.lastAt = Date.now(); schedule.lastMessageId = batch.user.id; schedule.error = undefined
-            if (schedule.intervalMinutes) schedule.nextAt = Date.now() + schedule.intervalMinutes * 60000
+            if (schedule.calendar) schedule.nextAt = nextCalendar(schedule.calendar, Date.now())
+            else if (schedule.intervalMinutes) schedule.nextAt = Date.now() + schedule.intervalMinutes * 60000
             else schedule.enabled = false
           } catch (cause) { schedule.error = cause instanceof Error ? cause.message : String(cause); schedule.enabled = false }
         }
@@ -392,6 +520,7 @@ export class BotMode extends TypertRemoteService {
   /** Explicitly create one platform group and its DSH conversation. */
   @Remote createInfoflowGroup(request: CreateInfoFlowGroupRequest): Promise<Room> { return this.connector().createGroup(request) }
   /** Complete local linking for a group whose platform ID is already saved. */
+  @Remote attachInfoflowGroup(request: { requestId: string; groupId: string }): Promise<Room> { return this.connector().attachGroup(request) }
   @Remote resumeInfoflowGroup(requestId: string): Promise<Room> { return this.connector().resumeGroup(requestId) }
 
   /** The optional Feishu manager has its own lifetime and credentials. */
@@ -536,7 +665,7 @@ export class BotMode extends TypertRemoteService {
     const targets = route(state, room, request)
     if (targets.some(id => state.bots.find(bot => bot.id === id)?.archived)) throw new PermanentChatError('Restore the selected Bot first')
     if (room.messages.filter(message => message.status === 'queued').length + targets.length > 100) throw new Error('Chat queue is full')
-    if (room.messages.length + targets.length + 1 > this.config.maxMessages) throw new Error('Chat message limit reached')
+    if (this.activeCount(room) + targets.length > this.config.maxMessages) throw new Error('Chat pending-response limit reached')
     const user: ChatMessage = { id: brandString<ChatMessageId>(randomUUID()), botId: null, text: request.text.trim(),
       replyTo: request.replyTo ?? null, status: 'complete', error: null, time: Date.now(), ...(external ? { external } : {}),
       ...(request.attachments?.length ? { attachments: request.attachments } : {}), allowDelegation: room.kind === 'group' && request.allowDelegation === true }
@@ -608,7 +737,7 @@ export class BotMode extends TypertRemoteService {
         const existing = room.messages.filter(message => message.botId && message.replyTo === previous.id && targets.includes(message.botId))
         const missing = previous.allowDelegation === false ? [] : targets.filter(id => !room.messages.some(message => message.botId === id && (message.replyTo === previous.id || message.delegation?.rootId === previous.id)))
         if (missing.length && room.messages.some(message => message.status === 'running')) return { status: 'busy' as const }
-        if (room.messages.length + missing.length > this.config.maxMessages) return { status: 'rejected' as const, reason: 'room-full' as const }
+        if (this.activeCount(room) + missing.length > this.config.maxMessages) return { status: 'rejected' as const, reason: 'room-full' as const }
         if (this.closing) throw new Error('Bot Mode is closing')
         const attempts: ChatMessage[] = missing.map(botId => ({ id: brandString<ChatMessageId>(randomUUID()), botId,
           text: '', replyTo: previous.id, status: 'running', error: null, time: Date.now() }))
@@ -627,7 +756,7 @@ export class BotMode extends TypertRemoteService {
       let targets: BotId[]
       try { targets = route(state, room, request) } catch { return { status: 'rejected' as const, reason: 'invalid-input' as const } }
       if (!request.text.trim() || request.text.length > 32000) return { status: 'rejected' as const, reason: 'invalid-input' as const }
-      if (room.messages.length + targets.length + 1 > this.config.maxMessages) return { status: 'rejected' as const, reason: 'room-full' as const }
+      if (this.activeCount(room) + targets.length > this.config.maxMessages) return { status: 'rejected' as const, reason: 'room-full' as const }
       const external = shared ? { ...request.external, sources: [{ accountId: accountId!, senderId: request.external.sender.id }] } : request.external
       const { user, attempts } = this.append(state, room, request, external)
       if (request.allowDelegation === true && room.kind === 'group') user.allowDelegation = true
@@ -649,6 +778,7 @@ export class BotMode extends TypertRemoteService {
     const root = humanRequest(currentRoom, current)
     const cancelIds = request.cascade && root ? currentRoom.messages.filter(message => message.replyTo === root.id || message.delegation?.rootId === root.id).map(message => message.id) : [current.id]
     for (const id of cancelIds) { const run = this.running.get(id); if (run) { run.canceled = true; run.agent?.cancel({ kind: 'user' }) } }
+    for (const [id, pending] of this.questions ?? []) if (pending.roomId === currentRoom.id && cancelIds.includes(pending.messageId)) { pending.cancel(); this.questions.delete(id) }
     for (const [id, pending] of this.approvals ?? []) if (pending.roomId === currentRoom.id && cancelIds.includes(pending.messageId)) {
       pending.resolve('cancelled'); this.approvals.delete(id)
     }
@@ -684,7 +814,7 @@ export class BotMode extends TypertRemoteService {
       const old = findMessage(room, request.messageId)
       if (room.external && !old.localOnly) throw new Error('Inspect the native Session before retrying external work; automatic replay is disabled')
       if (!old.botId || !old.replyTo || old.status === 'complete' || !room.members.some(member => member.botId === old.botId)) throw new Error('Only unsuccessful current-member responses can be retried')
-      if (room.messages.length >= this.config.maxMessages) throw new Error('Chat message limit reached')
+      if (this.activeCount(room) >= this.config.maxMessages) throw new Error('Chat pending-response limit reached')
       const next: ChatMessage = { ...old, id: brandString<ChatMessageId>(randomUUID()), status: 'running', text: '', error: null, time: Date.now() }
       room.messages.push(next)
       return next
@@ -757,6 +887,9 @@ export class BotMode extends TypertRemoteService {
     const cleanup: (() => void)[] = []
     let usage: Usage = { input: 0, output: 0, cost: 0 }
     let usageFailure: unknown
+    const outputs: ChatAttachment[] = []
+    const continuedQuestions: (QuestionView & { callId: string })[] = []
+    const toolCalls = new Map<string, { name: string; arguments: string; result?: string }>()
     let turn = 0, ownTurn = -1, streamOwned = false
     try {
       const room = this.room(this.state, roomId)
@@ -816,11 +949,9 @@ export class BotMode extends TypertRemoteService {
           if (ownTurn >= 0 && payload.turn !== ownTurn) return next()
           await this.tail
           if (usageFailure) throw new Error('Usage could not be persisted; model calls paused')
-          const budget = this.state.budget
-          if (budget && (budget.tokenLimit > 0 && budget.used.input + budget.used.output >= budget.tokenLimit
-            || budget.costLimit > 0 && budget.used.cost >= budget.costLimit)) throw new Error('Bot budget exhausted')
-          if (budget?.costLimit && (bot.policy?.inputPrice === undefined || bot.policy.outputPrice === undefined)) throw new Error('Configure this Bot’s token prices before using a spending budget')
           const config = await next()
+          if (run.canceled) throw new Error('Bot request canceled')
+          try { await this.reserveCall(attempt.id, bot) } catch (cause) { error = cause instanceof Error ? cause.message : String(cause); throw cause }
           if (!bot.policy?.provider || !bot.policy.model) return config
           const { reasoningEffort: _effort, ...base } = config
           return { ...base, provider: bot.policy.provider, model: bot.policy.model }
@@ -829,13 +960,34 @@ export class BotMode extends TypertRemoteService {
           if (frame.type === 'start') { streamOwned = frame.turn === ownTurn; if (streamOwned) { text = ''; publish('Generating') } }
           if (streamOwned && frame.type === 'chunk' && frame.chunk.type === 'text-delta') { text += frame.chunk.text; publish('Generating') }
         }))
+        cleanup.push(agent.ctx.on('user-questions/request', async (request, next) => {
+          if (request.agent !== agent || ownTurn >= 0 && turn !== ownTurn) return next()
+          if (run.canceled) throw new Error('Question canceled')
+          const id = randomUUID(), view: QuestionView = { id, questions: structuredClone(request.questions) }
+          this.questions ??= new Map()
+          publish('Answer required', [], { question: view }); notify()
+          try {
+            const answer = await new Promise<QuestionAnswer>((resolve, reject) => {
+              const cancel = () => { reject(request.signal?.reason ?? new Error('Question canceled')) }
+              const finish = (answer: QuestionAnswer) => { request.signal?.removeEventListener('abort', cancel); resolve(answer) }
+              this.questions.set(id, { roomId, messageId: attempt.id, view, resolve: finish, cancel })
+              request.signal?.addEventListener('abort', cancel, { once: true })
+              cleanup.push(() => { request.signal?.removeEventListener('abort', cancel); this.questions.delete(id); cancel() })
+              if (request.signal?.aborted) cancel()
+            })
+            return { answers: answer.answers.map(a => ({ id: a.id, selected: a.selected, ...(a.custom === undefined ? {} : { custom: a.custom }) })) }
+          } catch (cause) {
+            if (!run.canceled && request.wait?.timed) continuedQuestions.push({ ...view, callId: request.wait.callId })
+            throw cause
+          } finally { this.questions.delete(id); publish('Executing'); notify() }
+        }, { prepend: true }))
         cleanup.push(agent.ctx.on('approval/request', async (request, next) => {
           if (request.agent !== agent) return next()
           if (run.canceled) return 'cancelled'
           if (ownTurn >= 0 && turn !== ownTurn) return next()
           const id = randomUUID()
           if (!this.approvals) this.approvals = new Map()
-          publish('Approval required', [request.toolName], { approvalId: id, reason: request.reason ?? '' }); notify()
+          publish('Approval required', [request.toolName], { approvalId: id, reason: typeof request.displayReason === 'object' ? request.displayReason.en : request.displayReason ?? request.reason ?? '', arguments: request.callId ? toolCalls.get(request.callId)?.arguments : undefined }); notify()
           const outcome = await new Promise<'allowed-once' | 'rejected' | 'cancelled'>(resolve => {
             const abort = () => resolve('cancelled')
             this.approvals.set(id, { roomId, messageId: attempt.id, resolve: value => { request.signal?.removeEventListener('abort', abort); resolve(value) } })
@@ -862,7 +1014,7 @@ export class BotMode extends TypertRemoteService {
       cursor = unfinished < 0 ? Math.max(member.cursor, userIndex + 1) : unfinished
       const history = room.messages.slice(member.cursor, userIndex + 1).filter(item => item.id !== user.id && item.botId !== bot.id && item.status === 'complete').slice(-this.config.historyMessages)
       const quote = user.replyTo ? findMessage(room, user.replyTo) : null
-      const input = createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text:
+      const input = user.questionReply ? createUserMessage({ source: { kind: 'user-question-reply', callId: brandString<ToolCallId>(user.questionReply.callId), outcome: 'answered' }, content: [{ type: 'text', text: user.text }] }) : createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text:
         `Public chat messages (JSON data):\n${JSON.stringify(history.map(item => ({ from: item.botId ?? 'user', ...(item.external ? { sender: item.external.sender } : {}), ...(room.external && item.localOnly ? { dshOnly: true } : {}), text: item.text })))}\n${quote ? `Replying to: ${JSON.stringify({ from: quote.botId ?? 'user', text: quote.text })}\n` : ''}${user.external ? `Current sender (JSON data): ${JSON.stringify(user.external.sender)}\n` : ''}Current human request:\n${user.text}${attempt.delegation ? `\nDelegated task from @${parent.botId} (within the human request above):\n${attempt.delegation.task}` : ''}` }, ...mediaContent(user.attachments)] })
       dispose = this.ctx.on('session/event', (session, event) => {
         if (session !== agent.session) return
@@ -872,6 +1024,7 @@ export class BotMode extends TypertRemoteService {
         if (event.type === 'assistant/message' && event.data.turn === ownTurn) {
           const answer = event.data.message.content.filter(block => block.type === 'text').map(block => block.text).join('')
           if (answer) text = answer
+          for (const item of outputMedia(event.data.message.content)) if (!outputs.some(old => old.attachment.attachmentId === item.attachment.attachmentId)) outputs.push(item)
           publish('Generating')
         }
         if ((event.type === 'assistant/message' || event.type === 'assistant/attempt') && event.data.turn === ownTurn) {
@@ -884,13 +1037,20 @@ export class BotMode extends TypertRemoteService {
             usage = { input: usage.input + input, output: usage.output + output, cost: usage.cost + cost }
             void this.change(state => {
               state.budget ??= { tokenLimit: 0, costLimit: 0, currency: 'USD', used: { input: 0, output: 0, cost: 0 }, since: Date.now() }
-              state.budget.used.input += input; state.budget.used.output += output; state.budget.used.cost += cost
+              this.settleReservation(state, attempt.id, { input, output, cost })
+              resetPeriod(state.budget, Date.now()); addUsage(state.budget, { input, output, cost })
+              const quota = state.botBudgets?.[bot.id]; if (quota) { resetPeriod(quota, Date.now()); addUsage(quota, { input, output, cost }) }
               findMessage(this.room(state, roomId), attempt.id).usage = { ...usage }
             }).catch(cause => { usageFailure = cause; run.agent?.cancel({ kind: 'user' }) })
           }
         }
-        if (event.type === 'tool/call' && event.data.turn === ownTurn) { publish('Executing tool', [event.data.name]); notify() }
-        if (event.type === 'tool/result' && event.data.turn === ownTurn) { publish('Tool finished'); notify() }
+        if (event.type === 'tool/call' && event.data.turn === ownTurn) { toolCalls.set(event.data.callId, { name: event.data.name, arguments: event.data.arguments }); publish('Executing tool', [event.data.name]); notify() }
+        if (event.type === 'tool/result' && event.data.turn === ownTurn) {
+          const call = toolCalls.get(event.data.message.toolCallId)
+          if (call) call.result = JSON.stringify(event.data.meta ?? event.data.message.content, null, 2)
+          for (const item of outputMedia(event.data.message.content)) if (!outputs.some(old => old.attachment.attachmentId === item.attachment.attachmentId)) outputs.push(item)
+          publish('Tool finished'); notify()
+        }
         if (event.type === 'turn/end' && event.data.turn === ownTurn) {
           status = event.data.reason.kind === 'completed' ? 'complete' : 'failed'
           if (status === 'failed') error = event.data.reason.kind
@@ -911,14 +1071,16 @@ export class BotMode extends TypertRemoteService {
       const delegated = await this.change((state) => {
         const room = this.room(state, roomId)
         const message = findMessage(room, attempt.id)
-        Object.assign(message, { text, status: run.canceled ? 'canceled' : status, error })
+        this.settleReservation(state, attempt.id)
+        if (outputs.length > 8) text += '\n\nOnly the first eight output attachments are included here; additional attachments remain in the native Session.'
+        Object.assign(message, { text, status: run.canceled ? 'canceled' : status, error, attachments: outputs.slice(0, 8), questions: run.canceled ? [] : continuedQuestions, toolDetails: [...toolCalls.values()] })
         if (receipt.received) this.member(room, attempt.botId).cursor = cursor
         const root = humanRequest(room, message)
         if (this.closing || message.status !== 'complete' || !root?.allowDelegation) return []
         const { tasks, rejected } = planHandoffs(room, message, state.bots, this.delegationRoster(room, root.localOnly).map(bot => bot.id))
         if (rejected.length) message.text += `\n\n派活未执行：${rejected.join('；')}。`
-        if (room.messages.length + tasks.length > this.config.maxMessages) {
-          message.text += '\n\n派活未执行：当前聊天的消息容量已满，请部署者调整 maxMessages。'
+        if (this.activeCount(room) + tasks.length > this.config.maxMessages) {
+          message.text += '\n\n派活未执行：当前聊天的待处理回复已满，请等待完成或调整 maxMessages。'
           return []
         }
         const children: ChatMessage[] = tasks.map(task => ({ id: brandString<ChatMessageId>(randomUUID()), botId: task.botId,

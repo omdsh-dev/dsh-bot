@@ -12,7 +12,7 @@
 
 **如流入口默认隐藏：** 新用户默认隐藏如流配置和建群选项。内部用户可在 **IM 接入 → 高级设置 → 显示如流接入（内部用户）** 开启，设置保存在当前 DSH profile。已有如流绑定或聊天记录的用户升级后保留入口；关闭显示不会停用连接或删除记录。开启显示后仍需安装如流配套插件并配置企业 SDK。
 
-当前源码正在准备 **0.9.0**：新增聊天管理、排队派活、模型/预算/权限、媒体输入、实时进度、失败补发与定时任务。npm 已发布版本仍为下表中的版本。详见[新功能使用说明](docs/capabilities.md)。
+**0.9.0** 增加了聊天管理、历史自动分段、模型和工具候选项、每 Bot 周期预算与并发预留、附件收发与下载、内联问答与审批、离线失败恢复和带时区的日历任务。下表为本次发布包；发布进度及实机验收范围见[完成记录](docs/feature-completion.md)，配置见[功能使用说明](docs/capabilities.md)。
 
 ## 能做什么
 
@@ -47,30 +47,30 @@
 
 | 包 | 版本 | 用途 |
 | --- | --- | --- |
-| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.8.1` | 必装主包，提供 Web 聊天和 IM 配置面板 |
-| [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.4.1` | 可选，提供飞书连接和建群能力 |
-| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.5.1` | 可选，提供如流连接；需能获取企业 SDK |
+| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.9.0` | 必装主包，提供 Web 聊天和 IM 配置面板 |
+| [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.5.0` | 可选，提供飞书连接和建群能力 |
+| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.6.0` | 可选，提供如流连接；需能获取企业 SDK |
 
-**安装时请指定版本号或 `@next`。** 下方命令固定安装本次版本；要安装当前 `next` 标签对应的版本，可使用 `@zzzpyyy/dsh-bot@next`、`@zzzpyyy/dsh-bot-feishu@next` 或 `@zzzpyyy/dsh-bot-infoflow@next`。只填写包名会使用 `latest`，截至 **2026-10-20**，该标签仍指向旧版。
+**安装时请指定版本号或 `@next`。** 下方命令固定安装本次版本；要安装当前 `next` 标签对应的版本，可使用 `@zzzpyyy/dsh-bot@next`、`@zzzpyyy/dsh-bot-feishu@next` 或 `@zzzpyyy/dsh-bot-infoflow@next`。只填写包名会使用 `latest`，截至 **2026-10-21**，该标签仍指向旧版。
 
-上面同一套包已覆盖 DSH **0.1.5-rc.2** 与 **0.2.0-rc.2**，无需为它们选择不同的插件版本。更高 DSH 版本不会仅因版本号变化被拒绝，但尚未验证的版本不等于保证可用；如果上游删除或改变核心接口，仍需适配。飞书和如流包接受主包 `>=0.8.0 <1.0.0`，无需随主包的每次更新同步升级。详见[兼容策略与测试](docs/compatibility.md)。
+上面同一套包已覆盖 DSH **0.1.5-rc.2** 与 **0.2.0-rc.2**，无需为它们选择不同的插件版本。更高 DSH 版本不会仅因版本号变化被拒绝，但尚未验证的版本不等于保证可用；如果上游删除或改变核心接口，仍需适配。飞书和如流包接受主包 `>=0.9.0 <1.0.0`，无需随主包的每次更新同步升级。详见[兼容策略与测试](docs/compatibility.md)。
 
-在 **Desktop → 插件管理器** 安装 `@zzzpyyy/dsh-bot@0.8.1`，再按需向同一个 profile 添加配套插件。
+在 **Desktop → 插件管理器** 安装 `@zzzpyyy/dsh-bot@0.9.0`，再按需向同一个 profile 添加配套插件。
 
 飞书安装若报 `ERR_PNPM_IGNORED_BUILDS: protobufjs`，按[飞书安装说明](docs/feishu.zh.md#安装与开发)在目标 profile 中明确禁用该可选安装脚本，再重试。
 
 已有兼容版本的 **DSH CLI Web profile** 可执行：
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot@0.8.1
+dsh plugin --profile web add @zzzpyyy/dsh-bot@0.9.0
 # 可选：接入飞书
-dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.4.1
+dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.5.0
 ```
 
 如流额外依赖企业 SDK `@baidu/infoflow-sdk-nodejs@2026.8.28`。先在目标 profile 的包管理环境中配置组织授权的 `@baidu` registry，再安装如流配套包；公共包不附带私有 SDK 或凭据：
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.5.1
+dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.6.0
 ```
 
 使用与当前服务相同的 `DSH_HOME` 和 profile。升级时先备份数据目录，等待正在执行的回复完成，停止 Host，将主包和已安装的配套包更新到上表版本，再重启。Bot 身份、绑定和历史继续保存在同一数据目录。安装配套包只提供配置入口，不自动创建机器人或启用尚未配置的连接。权限及配置步骤见[飞书接入](docs/feishu.zh.md)和[如流接入](docs/infoflow.zh.md)。
@@ -137,11 +137,11 @@ npm start -- --patch /absolute/path/bot-settings.patch.yml
 
 ## 当前限制
 
-- 群聊在回答完成后显示回复；逐字输出、工具和审批位于对应成员的执行 Session。
-- 所有 Bot 继承 DSH 的模型选择，尚不支持每 Bot 单独选模型和定时任务。可在聊天信息中编辑 Bot 的显示名称和职责；标识和 preset 创建后不可修改。Bot 之间的派活仅限已接入的飞书群或如流群；私聊和 Web 聊天仍由用户消息驱动。
-- 使用可扩展的 `standard` preset；`minimal` 等完整提示词 preset 会被拒绝。
-- 重启会把尚未结束的公开回复标为中断，不自动重发。涉及工具执行时，重试前请查看原始 Session。
-- 暂不支持删除 Bot / 聊天和大历史分页。移除成员后重新加入会创建新的 Session，并保留公开历史。
+- 使用可扩展的 `standard` preset；`minimal` 等完整提示词 preset 会被拒绝。Bot 标识和 preset 创建后不可修改。
+- 原生模型目录提供名称，不提供 token 单价。预算采用配置单价估算，并发调用先占用预留额度；单次实际用量仍可能超过预留。
+- 历史和去重窗口使用不可变分段及原子索引，Host 仍在内存中加载完整历史；存储保留策略和原生执行日志由部署者管理。
+- 重启把未结算回复标为中断，不自动重跑不确定的模型／工具工作。平台确认丢失仍可能导致重复投递。
+- 真实租户的权限、重连、通知送达需单独验收，详见[完成记录](docs/feature-completion.md)。
 
 ## 开发与验证
 

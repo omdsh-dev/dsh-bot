@@ -11,7 +11,7 @@ import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-user-questions'
 import type { BotId } from './types.ts'
 import { InfoFlowBridge } from './infoflow/bridge.ts'
-import { bridgeDomain } from './infoflow/domain.ts'
+import { QueueRegistry } from './infoflow/queues.ts'
 import { settingsDomain } from './feishu/settings.ts'
 import { FeishuManager } from './feishu/manager.ts'
 import { FeishuTransport, createGroup, identity, loadSdk, qrImage, register } from './feishu/sdk.ts'
@@ -26,6 +26,8 @@ export const Config: Schema<Config> = Schema.object({
 })
 export async function apply(ctx: Context, config: Config): Promise<void> {
   checkIM(ctx)
+  const queues = new QueueRegistry(ctx, 'feishu')
+  const queueName = (botId: string, appId: string) => `bot_fs_${createHash('sha256').update(`${botId}:${appId}`).digest('hex').slice(0, 28)}`
   const settings = await ctx.storageDomain.open(settingsDomain)
   const connections = new Map<BotId, { bridge: InfoFlowBridge; transport: FeishuTransport; close(): Promise<void> }>()
   const stop = async (botId: BotId) => { const current = connections.get(botId); if (current) { connections.delete(botId); await current.close() } }
@@ -50,12 +52,13 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         conversation: { provider: 'feishu', accountId: binding.appId, kind: 'group', id: chatId },
         title: `飞书 · ${chatId}`, botIds: [binding.botId], defaultBot: binding.botId,
       })
-      const queue = await ctx.storageDomain.open(bridgeDomain(`bot_fs_${createHash('sha256').update(`${binding.botId}:${binding.appId}`).digest('hex').slice(0, 28)}`))
+      const name = queueName(binding.botId, binding.appId)
+      const queue = await queues.open(name)
       let bridge: InfoFlowBridge | undefined, transport: FeishuTransport | undefined
       try {
         transport = new FeishuTransport(loadSdk(config.endpointTimeoutMs), { ...binding, appSecret, timeoutMs: config.endpointTimeoutMs }, input => bridge!.receive({ ...input, targets: [binding.botId] }),
-          status => { manager.connection(binding.botId, status, status === 'error' ? '长连接异常，请检查事件订阅、应用发布状态和网络后重新启用' : null) }, report, request => ctx.botMode.upload(request))
-        bridge = new InfoFlowBridge(ctx.botMode, queue.global, { send: async delivery => {
+          status => { manager.connection(binding.botId, status, status === 'error' ? '长连接异常，请检查事件订阅、应用发布状态和网络后重新启用' : null) }, report, request => ctx.botMode.upload(request), item => ctx.botMode.readAttachment(item))
+        bridge = new InfoFlowBridge(ctx.botMode, queue.global, { prepare: input => transport!.prepare(input), send: async delivery => {
           const target = connections.get(delivery.botId ?? binding.botId)
           if (!target) throw new PermanentChatError('Replying robot is disabled')
           await target.transport.send(delivery)
@@ -65,19 +68,26 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           provider: 'feishu', accountId: binding.appId,
           botIds: [binding.botId], defaultBot: binding.botId, allowUsers: binding.allowUsers, allowGroups: binding.allowGroups, allowAllGroups: binding.allowAllGroups === true, admins: binding.admins }, report)
         const currentBridge = bridge, currentTransport = transport
-        const detachQueue = ctx.botMode.attachQueue('feishu', binding.botId, bridge)
-        connections.set(binding.botId, { bridge, transport, close: async () => { detachQueue(); await currentTransport.close(); await currentBridge.close(); await queue.close() } })
+        queues.bind(binding.botId, name, bridge)
+        connections.set(binding.botId, { bridge, transport, close: async () => { await currentTransport.close(); await currentBridge.close() } })
         transport.start()
-      } catch (cause) { await transport?.close(); await bridge?.close(); await queue.close(); throw cause }
+      } catch (cause) { await Promise.allSettled([transport?.close(), bridge?.close()]); throw cause }
+      finally { queues.cancel(name) }
     },
+  })
+  const detachDiscovery = ctx.botMode.attachQueueDiscovery(async () => {
+    for (const binding of settings.global.get().bindings) await queues.offline(binding.botId, queueName(binding.botId, binding.appId), {
+      ...config, provider: 'feishu', accountId: binding.appId, botIds: [binding.botId], defaultBot: binding.botId,
+      allowUsers: binding.allowUsers, allowGroups: binding.allowGroups, admins: binding.admins,
+    })
   })
   const abort = new AbortController()
   const wake = async () => { await Promise.all([...connections.values()].map(item => item.bridge.wake())) }
   let feed: Promise<void> | undefined, timer: ReturnType<typeof setInterval> | undefined
   const detach = ctx.botMode.attachFeishu(manager)
   ctx.effect(() => async () => {
-    detach(); abort.abort(); if (timer) clearInterval(timer)
-    await manager.close(); await Promise.all([...connections.keys()].map(stop)); await feed; await settings.close()
+    detach(); detachDiscovery(); abort.abort(); if (timer) clearInterval(timer)
+    await manager.close(); await Promise.all([...connections.keys()].map(stop)); await feed; await queues.close(); await settings.close()
   }, 'feishu: cancel registration, drain handlers and close native queues')
   await manager.init()
   ctx.on('session/event', (session, event) => {
