@@ -20,7 +20,7 @@ mkdirSync(destination, { recursive: true })
 const bundleFiles = copyHostEntry(source, destination)
 const peers = ['@deepseek-ai/cordis', '@deepseek-ai/schemastery', '@deepseek-ai/dsh-brand', '@deepseek-ai/dsh-credentials', '@deepseek-ai/dsh-storage-domain', '@deepseek-ai/dsh']
 const peerDependencies = { [base.name]: compatibility.bot, ...hostPeers(peers) }
-const manifest = { ...release, type: 'module', license: 'MIT', description: 'Optional InfoFlow text connector for DSH Bot',
+const manifest = { ...release, type: 'module', license: 'MIT', description: 'Optional InfoFlow messaging and media connector for DSH Bot',
   engines: { node: '^22.19.0 || >=24.0.0' }, repository: { type: 'git', url: 'git+https://github.com/zzzpyyy/dsh-bot.git' },
   homepage: 'https://github.com/zzzpyyy/dsh-bot/blob/main/docs/infoflow.zh.md', bugs: 'https://github.com/zzzpyyy/dsh-bot/issues',
   keywords: ['deepseek', 'dsh', 'bot', 'infoflow'], publishConfig: { access: 'public' },

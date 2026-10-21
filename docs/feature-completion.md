@@ -19,4 +19,4 @@ Operational limits are explicit in the [capability guide](capabilities.md): budg
 
 Verification uses real DSH storage, profile restarts and the real pinned platform SDKs with offline HTTP responses. Offline tests cannot establish real tenant permissions or live service delivery. No uncertain model execution is replayed automatically.
 
-Source verification: 165 tests across 19 files, the authenticated launcher smoke, three real Feishu SDK tests and one real InfoFlow SDK test passed. Distribution metadata and local documentation links passed. Final clean-archive compatibility checks and publication follow the source commit.
+Verification: 165 source tests across 19 files, the authenticated launcher smoke, three real Feishu SDK tests and one real InfoFlow SDK test passed. The same release archives passed DSH 0.1.5-rc.2 and 0.2.0-rc.2 Host/client checks, plus four Node 22 package tests. DSH 0.1's registry-only installer is checked after publication. Distribution metadata and local documentation links passed.
