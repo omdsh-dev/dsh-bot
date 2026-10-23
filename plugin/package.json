@@ -80,7 +80,8 @@
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@deepseek-ai/schemastery": "workspace:~",
     "@deepseek-ai/dsh-llm": "workspace:*",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@playwright/mcp": "0.0.80"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

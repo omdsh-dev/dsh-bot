@@ -13,10 +13,11 @@ The complete follow-up is in progress. Checkboxes below mean implemented **and v
 - [x] Safe declarative metric/table/progress/form cards.
 - [x] Main Bot team-management tools with explicit operator-granted authority.
 - [x] Context steward decisions using public native compaction/rotation seams.
-- [ ] macOS/Windows regression matrix, container packaging, desktop entry and isolated browser capability.
+- [x] Per-Bot isolated browser capability, verified with real Chromium on both supported DSH revisions.
+- [ ] macOS/Windows regression matrix, container packaging and desktop entry.
 - [ ] Final source/package checks, push, release and live Feishu media/inbound acceptance.
 
-Current checkpoint: 233 source tests across 29 files and the launcher passed. Per-Bot grants passed real native MCP process/skill scope, shell variable selection, revocation, redaction and restart checks, plus DSH 0.1.5 and 0.2 Desktop/Web/shipped-client archive checks. Declarative cards passed native tool/form/restart, atomic duplicate-submission and client rendering checks. History/index and queued-result callback changes passed native DSH 0.2 Desktop restart, authenticated Web, shipped-client and IM delegation package checks. The prior usage/memory checkpoint also passed DSH 0.1.5 Host/client checks. Main Bot native tool/restart, authority isolation, atomic operations and explicit-grant UI checks passed. macOS, Linux and Node 22 passed the earlier history checkpoint; the Windows path filter fix is under remote verification.
+Current checkpoint: 235 source tests across 30 files and the launcher passed. Per-Bot grants passed real native MCP process/skill scope, shell variable selection, revocation, redaction and restart checks, plus DSH 0.1.5 and 0.2 Desktop/Web/shipped-client archive checks. Declarative cards passed native tool/form/restart, atomic duplicate-submission and client rendering checks. History/index and queued-result callback changes passed native DSH 0.2 Desktop restart, authenticated Web, shipped-client and IM delegation package checks. The prior usage/memory checkpoint also passed DSH 0.1.5 Host/client checks. Main Bot native tool/restart, authority isolation, atomic operations and explicit-grant UI checks passed. macOS, Linux and Node 22 passed the earlier history checkpoint; Windows passed the full declarative-card checkpoint; later connector tests now explicitly disable unrelated background memory review. Isolated browser checks prove concurrent Bot cookie separation and fresh storage after cancellation on both DSH revisions.
 
 Legacy accounting metadata that was never saved remains unknown. Live platform acceptance requires actual tenant access; offline tests do not establish it.
 

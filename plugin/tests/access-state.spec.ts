@@ -27,6 +27,12 @@ it('separates shell grants, preserves an existing value only for an exact revisi
   expect(() => credentialRequest(s, { name: 'API_TOKEN', description: '', botIds: ['a'], shellBotIds: [] })).toThrow('changed')
   expect(credentialRequest(s, { name: 'API_TOKEN', description: '', revision: 1, botIds: ['a'], shellBotIds: ['a'], value: '' }).revision).toBe(2)
 })
+it('stores isolated-browser grants without accepting user profile, attachment or arbitrary MCP settings', () => {
+  const s = state()
+  const saved = saveCapability(s, { name: 'browser', kind: 'browser', description: '', botIds: ['a'], command: 'unsafe', args: ['--cdp-endpoint', 'http://localhost:1'], env: { PLAYWRIGHT_MCP_EXTENSION: 'true' } })
+  expect(saved).toEqual({ name: 'browser', kind: 'browser', description: '', botIds: ['a'], revision: 1 })
+  expect(() => saveCapability(s, { name: 'relative', kind: 'browser', description: '', botIds: [], executablePath: './browser' })).toThrow('absolute')
+})
 it('recognizes POSIX and PowerShell references and redacts nested content and common encoded forms in one pass', () => {
   expect(credentialNames('$DSH_SECRET_ONE ${DSH_SECRET_TWO} $env:DSH_SECRET_THREE')).toEqual(['ONE', 'TWO', 'THREE'])
   const secret = 'credential/"LONG_SECRET', clean = secretRedactor([['TOKEN', secret], ['OTHER', 'credential']])

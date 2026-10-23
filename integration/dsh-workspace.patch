@@ -2,7 +2,7 @@ diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
 index 6c7ce04..cdbd79c 100644
 --- a/pnpm-lock.yaml
 +++ b/pnpm-lock.yaml
-@@ -7421,6 +7421,115 @@ importers:
+@@ -7421,6 +7421,118 @@ importers:
          specifier: workspace:*
          version: link:../../interaction/user-approval
 
@@ -17,6 +17,9 @@ index 6c7ce04..cdbd79c 100644
 +      '@deepseek-ai/schemastery':
 +        specifier: link:../../../vendor/schemastery
 +        version: link:../../../vendor/schemastery
++      '@playwright/mcp':
++        specifier: 0.0.80
++        version: 0.0.80
 +      zod:
 +        specifier: ^4.4.3
 +        version: 4.4.3

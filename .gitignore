@@ -10,3 +10,4 @@ lib/
 *.log
 .DS_Store
 dist/
+.pnpm-store/

@@ -28,6 +28,7 @@ jobs:
       - run: npm run test:client-package
       - run: npm run test:install
       - run: npm run test:package
+      - run: npm run test:browser
       - run: npm run test:infoflow-package
       - run: npm run test:infoflow-managed-package
       - run: npm run test:feishu-package
@@ -111,6 +112,7 @@ jobs:
           path: dist
       - run: npm run test:client-package
       - run: npm run test:package
+      - run: npm run test:browser
       - run: npm run test:feishu-package
       - run: npm run test:infoflow-managed-package
       - run: npm run test:im-isolation-package

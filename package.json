@@ -28,6 +28,9 @@
     "test:im-isolation-package": "node --test scripts/im-isolation-package.test.mjs",
     "test:im-delegation-package": "node --test scripts/im-delegation-package.test.mjs",
     "test:compatibility": "node scripts/test-compatibility.mjs",
-    "test:client-package": "node scripts/test-client-package.mjs"
+    "test:client-package": "node scripts/test-client-package.mjs",
+    "browser:install": "node scripts/browser-install.mjs",
+    "test:browser": "node scripts/test-browser.mjs",
+    "test:container": "node scripts/test-container.mjs"
   }
 }

@@ -59,7 +59,8 @@
     "src/card-types.ts",
     "src/cards.ts",
     "src/team-types.ts",
-    "src/team.ts"
+    "src/team.ts",
+    "src/browser-capability.ts"
   ],
   "references": [
     {

@@ -45,7 +45,7 @@ const manifest = {
   engines: { node: '^22.19.0 || >=24.0.0' }, publishConfig: { access: 'public' },
   files: ['implementation/', 'cordis.patch.yml', 'LICENSE', 'NOTICE', 'README.md', 'compatibility.json'],
   dsh: { bundle: { patch: './cordis.patch.yml' } },
-  dependencies: { zod: '4.4.3' }, peerDependencies,
+  dependencies: { zod: '4.4.3', '@playwright/mcp': '0.0.80' }, peerDependencies,
 }
 writeFileSync(join(destination, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 writeFileSync(join(destination, 'cordis.patch.yml'), '- insert:\n    - id: bot-mode\n      name: ./implementation/lib/index.js\n')

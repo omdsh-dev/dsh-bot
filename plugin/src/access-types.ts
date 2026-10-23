@@ -1,7 +1,8 @@
 /** Operator-owned capabilities. Secret values never enter this document or a snapshot. */
 export interface BotCapability {
   name: string; revision: number; description: string; botIds: string[]
-  kind: 'skill' | 'mcp'; content?: string | undefined
+  kind: 'skill' | 'mcp' | 'browser'; content?: string | undefined
+  executablePath?: string | undefined
   transport?: 'stdio' | 'streamable-http' | undefined
   command?: string | undefined; args?: string[] | undefined; env?: Record<string, string> | undefined
   url?: string | undefined; headers?: Record<string, string> | undefined

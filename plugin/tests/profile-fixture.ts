@@ -1,6 +1,8 @@
 /** Keyless real-profile driver. Only the external model is replaced. */
 import assert from 'node:assert/strict'
 import { writeFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
+import { once } from 'node:events'
 import type { Context } from '@deepseek-ai/cordis'
 import { LlmAdapter, ToolCallId, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import type {} from '../src/index.ts'
@@ -11,6 +13,7 @@ export const inject = ['botMode', 'llm', 'storageDomain', 'agents']
 export async function apply(ctx: Context): Promise<void> {
   const requests: GenerateOptions[] = []
   let knowledgeMessageId = ''
+  let browserUrl = ''
   class Fixture extends LlmAdapter {
     async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
       if (options.purpose !== 'session-title') requests.push(options)
@@ -41,6 +44,10 @@ export async function apply(ctx: Context): Promise<void> {
         { id: 'team-create', name: 'team_manage', args: { command: JSON.stringify({ operation: 'create-bot', id: 'team-worker', name: 'Team worker', instructions: 'Gather evidence.' }) } },
         { id: 'team-group', name: 'team_manage', args: { command: JSON.stringify({ operation: 'create-group', title: 'Native team fixture', botIds: ['team-worker'], defaultBot: 'team-worker' }) } },
       ].find(call => !hasResult(call.id))
+      for (const [marker, id, path] of [['BROWSER_OWNER_FIXTURE', 'browser-owner', 'set'], ['BROWSER_OTHER_FIXTURE', 'browser-other', 'other'], ['BROWSER_FRESH_FIXTURE', 'browser-fresh', 'fresh']]) {
+        if (content.includes(marker!) && !hasResult(id!)) tool = { id: id!, name: 'mcp__bot_browser-fixture__browser_navigate', args: { url: browserUrl + path } }
+      }
+      if (content.includes('BROWSER_OWNER_FIXTURE') && hasResult('browser-owner') && !hasResult('browser-owner-check')) tool = { id: 'browser-owner-check', name: 'mcp__bot_browser-fixture__browser_navigate', args: { url: browserUrl + 'owner-check' } }
       if (content.includes('COLLAB_FIXTURE') && !content.includes('Delegated task from') && !hasResult('collab-delegate'))
         tool = { id: 'collab-delegate', name: 'delegate_task', args: { botId: 'collab-worker', task: 'Return a verified result for this fixture.' } }
       if (options.purpose !== 'session-title' && tool) {
@@ -293,6 +300,32 @@ export async function apply(ctx: Context): Promise<void> {
 
     }
     if (process.env.BOT_TEST_PHASE === 'first') {
+      if (process.env.DSH_BOT_BROWSER_EXECUTABLE) {
+        const cookies = new Map<string, string>(), server = createServer((request, response) => {
+          cookies.set(request.url!, request.headers.cookie ?? '')
+          if (request.url === '/set') response.setHeader('Set-Cookie', 'dsh_bot_isolation=OWNER_COOKIE; Path=/; SameSite=Lax')
+          response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><title>Bot browser fixture</title><h1>Isolated browser fixture</h1>')
+        })
+        server.listen(0, '127.0.0.1'); await once(server, 'listening')
+        const address = server.address(); assert.ok(address && typeof address !== 'string'); browserUrl = `http://127.0.0.1:${address.port}/`
+        try {
+          const a = await service.createBot({ id: 'browser-owner', name: 'Browser owner', instructions: '' }), b = await service.createBot({ id: 'browser-other', name: 'Browser other', instructions: '' })
+          await service.saveCapability({ name: 'browser-fixture', kind: 'browser', description: 'Disposable browser fixture', botIds: [a.id, b.id], executablePath: process.env.DSH_BOT_BROWSER_EXECUTABLE })
+          const first = await service.openDirect(a.id), second = await service.openDirect(b.id)
+          await service.send({ roomId: first.id, text: 'BROWSER_OWNER_FIXTURE Navigate, then WAIT_FOR_STOP.' })
+          const deadline = Date.now() + 20000
+          while (!cookies.has('/owner-check')) { if (Date.now() > deadline) throw new Error('The real isolated browser did not navigate: ' + JSON.stringify({ observed: [...cookies], room: service.snapshot().rooms.find(room => room.id === first.id), latest: requests.at(-1)?.messages.slice(-3) })); await new Promise(resolve => setTimeout(resolve, 30)) }
+          assert.equal(cookies.get('/owner-check'), 'dsh_bot_isolation=OWNER_COOKIE', 'The first browser must actually retain its own cookie')
+          await service.send({ roomId: second.id, text: 'BROWSER_OTHER_FIXTURE Navigate independently.' })
+          assert.equal((await settled(second.id)).messages.at(-1)!.status, 'complete')
+          assert.equal(cookies.get('/other'), '', 'Concurrent Bots must not share cookies')
+          const active = service.snapshot().rooms.find(room => room.id === first.id)!.messages.find(message => message.status === 'running')!
+          await service.stop({ roomId: first.id, messageId: active.id }); await settled(first.id)
+          await service.send({ roomId: first.id, text: 'BROWSER_FRESH_FIXTURE Navigate with a fresh profile.' })
+          assert.equal((await settled(first.id)).messages.at(-1)!.status, 'complete')
+          assert.equal(cookies.get('/fresh'), '', 'A stopped delivery must not retain its login profile')
+        } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())) }
+      }
       const mainBot = await service.createBot({ id: 'team-main', name: 'Main Bot', instructions: 'Manage the team only as explicitly requested.' }), mainRoom = await service.openDirect(mainBot.id)
       await service.configureTeam({ revision: 0, botId: mainBot.id, operations: ['create-bot', 'create-group'] })
       await service.send({ roomId: mainRoom.id, text: 'TEAM_FIXTURE Create the requested worker and local team group.' })

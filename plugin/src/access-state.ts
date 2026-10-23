@@ -1,12 +1,13 @@
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
+import { isAbsolute } from 'node:path'
 import type { AccessState, AccessRemoval, BotCapability, SaveCapability, SaveBotCredential } from './access-types.ts'
 import type { BotState } from './types.ts'
 
 const ids = z.array(z.string()).max(1000)
 export const accessSchema: z.ZodType<AccessState> = z.object({
   capabilities: z.array(z.object({ name: z.string(), revision: z.number().int().positive(), description: z.string(), botIds: ids,
-    kind: z.enum(['skill', 'mcp']), content: z.string().optional(), transport: z.enum(['stdio', 'streamable-http']).optional(),
+    kind: z.enum(['skill', 'mcp', 'browser']), content: z.string().optional(), executablePath: z.string().optional(), transport: z.enum(['stdio', 'streamable-http']).optional(),
     command: z.string().optional(), args: z.array(z.string()).optional(), env: z.record(z.string(), z.string()).optional(),
     url: z.string().optional(), headers: z.record(z.string(), z.string()).optional() })).max(100),
   credentials: z.array(z.object({ name: z.string(), revision: z.number().int().positive(), description: z.string(), botIds: ids, shellBotIds: ids, key: z.string() })).max(100),
@@ -44,6 +45,11 @@ export function saveCapability(state: BotState, request: SaveCapability): BotCap
   if (request.kind === 'skill') {
     item.content = label(request.content ?? '', 64000, 'skill content')
     if (!item.content) throw new Error('Skill instructions are required')
+  } else if (request.kind === 'browser') {
+    if (request.executablePath?.trim()) {
+      item.executablePath = label(request.executablePath, 2000, 'browser executable')
+      if (!isAbsolute(item.executablePath) || credentialNames(item.executablePath).length) throw new Error('Use an absolute browser executable path')
+    }
   } else if (request.kind === 'mcp') {
     item.transport = request.transport
     if (request.transport === 'stdio') {

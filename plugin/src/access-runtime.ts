@@ -7,6 +7,7 @@ import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { BotState } from './types.ts'
 import { accessFingerprint, credentialNames, secretRedactor } from './access-state.ts'
 import { optionalService } from './compatibility.ts'
+import { isolatedBrowser } from './browser-capability.ts'
 
 interface SkillService { register(value: { name: string; description: string; content: string; source: string }): () => void }
 interface ShellEnvironment {
@@ -90,7 +91,7 @@ export class CapabilityRuntime {
         const loader = optionalService<{ import(name: string): Promise<Plugin<Record<string, unknown>>> }>(ctx, 'loader')
         if (!loader) throw new Error('The native plugin loader is unavailable')
         const plugin = await loader.import('@deepseek-ai/dsh-mcp-client')
-        const config = item.transport === 'stdio' ? { transport: 'stdio', command: item.command, args: item.args ?? [],
+        const config = item.kind === 'browser' ? { ...isolatedBrowser(item), cwd: agent.session.header.cwd ?? '' } : item.transport === 'stdio' ? { transport: 'stdio', command: item.command, args: item.args ?? [],
           env: Object.fromEntries(Object.entries(item.env ?? {}).map(([key, value]) => [key, resolve(value)])), cwd: agent.session.header.cwd ?? '' }
           : { transport: 'streamable-http', url: item.url, headers: Object.fromEntries(Object.entries(item.headers ?? {}).map(([key, value]) => [key, resolve(value)])) }
         await ctx.plugin(plugin, { ...config, serverName: 'bot_' + item.name, toolCallTimeoutMs: 60000, failOnStartupError: true, reconnect: { enabled: false } })

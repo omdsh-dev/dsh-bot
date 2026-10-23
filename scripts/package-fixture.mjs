@@ -1,7 +1,7 @@
 /** Materialize built DSH resources and unpack the actual release archive into an isolated profile. */
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { root, pin, run, workspacePackages } from './common.mjs'
 import { runtime, target } from './test-runtime.mjs'
@@ -108,7 +108,26 @@ export async function materializePackage(home) {
   const plugin = join(profile, 'node_modules', info.name)
   mkdirSync(plugin, { recursive: true })
   run('tar', ['-xzf', join(root, 'dist', info.file), '--strip-components=1', '-C', plugin])
-  cpSync(realpathSync(join(pool, 'zod')), join(profile, 'node_modules/zod'), { recursive: true })
+  const dependencyManifest = JSON.parse(readFileSync(join(plugin, 'package.json'), 'utf8')).dependencies ?? {}
+  const cache = join(root, '.runtime/package-fixture-dependencies')
+  const matches = (name, version) => {
+    const file = join(cache, 'node_modules', name, 'package.json')
+    return existsSync(file) && JSON.parse(readFileSync(file, 'utf8')).version === version
+  }
+  if (!Object.entries(dependencyManifest).every(([name, version]) => matches(name, version))) {
+    mkdirSync(cache, { recursive: true })
+    writeFileSync(join(cache, 'package.json'), JSON.stringify({ private: true, dependencies: dependencyManifest }))
+    run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-package-lock'], { cwd: cache, stdio: 'pipe' })
+  }
+  for (const [name, version] of Object.entries(dependencyManifest)) {
+    if (!matches(name, version)) throw new Error(`Release dependency version mismatch: ${name}@${version}`)
+  }
+  // An installed profile owns its private dependency closure. DSH 0.1 deliberately rejects
+  // external symlinks; copy npm's complete local tree, including transitive dependencies.
+  cpSync(join(cache, 'node_modules'), join(profile, 'node_modules'), {
+    recursive: true, dereference: true,
+    filter: path => !path.split(/[\\/]/).includes('.bin'),
+  })
   const manifest = JSON.parse(readFileSync(join(profile, 'package.json'), 'utf8'))
   manifest.type = 'module'
   manifest.dependencies[info.name] = info.version

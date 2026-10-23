@@ -104,3 +104,10 @@ Submitting a form records its values and a new human message atomically, address
 Open **Controls → Team management** to appoint one Main Bot and select individual operations: create/edit Bot identities, create/edit local groups, or archive/restore. Everything starts disabled. `team_list` and `team_manage` are available only during a direct local operator message to that Bot; external IM, local groups, schedules and delegated/callback deliveries carry no team authority. Grants are rechecked inside the state transaction, and changing them cancels affected work and invalidates its context.
 
 The Main Bot cannot change its own identity, presets, model/tool/file policies, capability or credential grants, budgets, connector configuration, or delete data. Newly created Bots use the deployment default preset and receive no per-Bot grants. Group edits retain ordinary idle/membership validation; archiving Bots connected to external rooms requires the operator. Each request permits at most 20 successful changes. Native call IDs deduplicate retries; each successful mutation records actor, source response, operation, target and time atomically. The panel shows the latest 50 entries; the domain retains 500. Team listings expose identities and local group rosters, not private conversations or memories.
+
+
+## 隔离浏览器
+
+「管理 → 工具与凭据」可添加「隔离浏览器」并逐个授权 Bot。运行 `npm run browser:install` 安装固定 Playwright 版本的 Chromium，或填写已有 Chrome/Chromium 的绝对可执行路径。这里使用独立的无头浏览器进程，每次回复从空白浏览器状态开始；不会连接用户日常浏览器、读取个人登录目录，或在不同 Bot 之间复用 Cookie。停止、撤权和回复结束均销毁本次浏览器实例。
+
+浏览器基于固定的 `@playwright/mcp`，工具由原生 MCP 加载。它可以访问当前部署可访问的网络，导航与点击仍属于该 Bot 的工具权限范围。需要保持登录的任务须在同一回复内完成；不支持跨回复保存登录状态。环境中的 `PLAYWRIGHT_MCP_*` 设置不会覆盖这一隔离模式。
