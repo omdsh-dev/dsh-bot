@@ -6,7 +6,7 @@ The complete follow-up is in progress. Checkboxes below mean implemented **and v
 
 - [x] Usage overview page and budget visibility (commit `117b936`; 199 source tests and native Host/client package checks).
 - [x] Independent per-call usage ledger, date/model/provider/room/purpose queries and cache accounting.
-- [ ] Persistent full-text index and lazy historical transcript loading.
+- [x] Persistent full-text index and lazy historical transcript loading (idle archives stay unloaded; active work hydrates its chat on demand).
 - [x] Memory semantic duplicate/conflict review, merge suggestions and scoped context invalidation.
 - [x] Per-response recall evidence, context occupancy, segments and handoff inspection.
 - [ ] Per-Bot MCP, skills and credential capability grants/revocation.
@@ -16,7 +16,7 @@ The complete follow-up is in progress. Checkboxes below mean implemented **and v
 - [ ] macOS/Windows regression matrix, container packaging, desktop entry and isolated browser capability.
 - [ ] Final source/package checks, push, release and live Feishu media/inbound acceptance.
 
-Current checkpoint: 214 source tests across 25 files and the launcher passed; the built archive passed DSH 0.1.5 Desktop restart, authenticated Web and shipped-client checks. macOS/Windows CI jobs are configured; remote results remain pending.
+Current checkpoint: 220 source tests across 26 files and the launcher passed. History/index and queued-result callback changes passed native DSH 0.2 Desktop restart, authenticated Web, shipped-client and IM delegation package checks. The prior usage/memory checkpoint also passed DSH 0.1.5 Host/client checks. macOS/Windows CI jobs are configured; remote results remain pending.
 
 Legacy accounting metadata that was never saved remains unknown. Live platform acceptance requires actual tenant access; offline tests do not establish it.
 
@@ -39,7 +39,7 @@ This ledger describes implemented source and verification scope; publication is 
 - [ ] Feishu media output: the tenant app lacks `im:resource` (error 99991672). Delivery now fails permanently after one attempt without blocking later text. Grant the permission, then retry the two retained failures.
 - [ ] Inbound tenant image/file/voice from real users has not been tested live; source and real-SDK offline checks cover the formats.
 
-Operational limits are explicit in the [capability guide](capabilities.md): budgets are estimates and an individual call can exceed its reservation; native catalogs do not publish token prices; history still hydrates in memory; unreferenced history chunks and native attachments require deployment-level retention management. InfoFlow file links expire after 24 hours. Plugin upgrades must preserve every storage domain and must not be downgraded to a version that ignores archive manifests.
+Operational limits are explicit in the [capability guide](capabilities.md): budgets are estimates and an individual call can exceed its reservation; native catalogs do not publish token prices; active chat work can still hydrate one complete transcript on demand; unreferenced history chunks and native attachments require deployment-level retention management. InfoFlow file links expire after 24 hours. Plugin upgrades must preserve every storage domain and must not be downgraded to a version that ignores archive manifests.
 
 Verification uses real DSH storage, profile restarts and the real pinned platform SDKs with offline HTTP responses. Offline tests cannot establish real tenant permissions or live service delivery. No uncertain model execution is replayed automatically.
 

@@ -51,7 +51,8 @@
     "src/usage-ledger.ts",
     "src/usage-store.ts",
     "src/memory-invalidation.ts",
-    "src/memory-governance.ts"
+    "src/memory-governance.ts",
+    "src/chat-index.ts"
   ],
   "references": [
     {

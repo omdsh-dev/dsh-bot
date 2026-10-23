@@ -30,6 +30,7 @@ export const messageSchema = z.object({ id: messageId, botId: botId.nullable(), 
       attachments: z.array(attachmentSchema).max(8).optional(), questions: z.array(z.object({ id: z.string(), callId: z.string(), questions: z.array(questionItem) })).optional(), questionReply: z.object({ callId: z.string(), questions: z.array(questionItem), answer: answerSchema }).optional(), toolDetails: z.array(z.object({ name: z.string(), arguments: z.string(), result: z.string().optional() })).optional(), usage: usage.optional(), scheduleId: z.string().optional(), publishExternal: z.boolean().optional(), notifyBot: botId.optional() })
 const budgetSchema = z.object({ tokenLimit: z.number().nonnegative(), costLimit: z.number().nonnegative(), currency: z.string(), used: usage, since: z.number(), period: z.enum(['never', 'day', 'month']).optional(), reservationTokens: z.number().nonnegative().optional(), reservationCost: z.number().nonnegative().optional() })
 const schema: z.ZodType<BotState> = z.object({
+  historyVersion: z.number().optional(),
   usageLedger: usageLedgerSchema.optional(),
   memorySuggestions: z.array(suggestionSchema).optional(),
   memories: z.array(memorySchema).optional(), memoryChunks: z.array(z.string()).optional(), retiredMemoryChunks: z.array(z.string()).optional(), memoryEpoch: z.number().int().nonnegative().optional(),
@@ -56,6 +57,7 @@ const schema: z.ZodType<BotState> = z.object({
     archived: z.boolean().optional(), deleted: z.boolean().optional(),
     members: z.array(z.object({ botId, sessionId: z.string().transform(SessionId), cursor: z.number().int().nonnegative(), segments: z.array(z.object({ sessionId: z.string(), endedAt: z.number(), reason: z.string(), nextSessionId: z.string().optional(), handoff: z.string().optional() })).optional(), handoff: z.string().optional(), memoryEpoch: z.number().int().nonnegative().optional(), requiredMemoryEpoch: z.number().int().nonnegative().optional(), contextDecisions: z.array(z.object({ time: z.number(), action: z.string(), before: z.number(), after: z.number(), window: z.number() })).optional() })),
     historyChunks: z.array(z.string()).optional(),
+    participants: z.array(z.object({ id: z.string(), name: z.string() })).optional(),
     messages: z.array(messageSchema),
   })),
 })

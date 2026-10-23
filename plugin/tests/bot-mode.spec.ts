@@ -102,13 +102,13 @@ it('commits memory atomically, excludes it from ordinary feeds and loads it into
   await b.execute()
   expect(b.followup.mock.calls[0]![0].content[0].text).toContain('MEMORY_GLOBAL_BULLETS')
   expect(b.followup.mock.calls[0]![0].content[0].text).toContain(item.id)
-  expect(b.service.contextView({ roomId: 'room' as RoomId, messageId: 'attempt' as ChatMessageId }).memories[0]).toMatchObject({ id: item.id, body: 'MEMORY_GLOBAL_BULLETS', revision: 1 })
+  expect((await b.service.contextView({ roomId: 'room' as RoomId, messageId: 'attempt' as ChatMessageId })).memories[0]).toMatchObject({ id: item.id, body: 'MEMORY_GLOBAL_BULLETS', revision: 1 })
   b.set.mockRejectedValueOnce(new Error('disk full'))
   await expect(b.service.memoryAction({ id: item.id, revision: 1, action: 'forget' })).rejects.toThrow('disk full')
   expect(b.service.listMemories({})[0]!.status).toBe('active')
   await b.service.memoryAction({ id: item.id, revision: 1, action: 'forget' })
   expect(b.service.listMemories({})).toEqual([])
-  expect(b.service.contextView({ roomId: 'room' as RoomId, messageId: 'attempt' as ChatMessageId }).memories[0]).toMatchObject({ id: item.id, body: '', status: 'forgotten' })
+  expect((await b.service.contextView({ roomId: 'room' as RoomId, messageId: 'attempt' as ChatMessageId })).memories[0]).toMatchObject({ id: item.id, body: '', status: 'forgotten' })
 })
 
 it('rejects the second of concurrent stale memory updates', async () => {
@@ -241,13 +241,13 @@ it('enables bounded web group handoffs only when explicitly selected', async () 
 it('paginates and searches full history while the browser feed stays bounded, and exports older records', async () => {
   const b = bench(), room = b.state.rooms[0]!
   room.messages = Array.from({ length: 150 }, (_, i) => ({ ...room.messages[0]!, id: `m${i}` as ChatMessageId, text: i % 10 ? 'other' : `needle ${i}`, time: i }))
-  const page = b.service.history({ roomId: room.id, limit: 10, query: 'needle' })
+  const page = await b.service.history({ roomId: room.id, limit: 10, query: 'needle' })
   expect(page.total).toBe(15); expect(page.messages[0]!.text).toBe('needle 50')
-  expect(b.service.history({ roomId: room.id, query: 'needle', before: page.before!, limit: 10 }).messages).toHaveLength(5)
+  expect((await b.service.history({ roomId: room.id, query: 'needle', before: page.before!, limit: 10 })).messages).toHaveLength(5)
   const controller = new AbortController(), feed = b.service.follow(controller.signal)[Symbol.asyncIterator]()
   const frame = await feed.next()
   expect(frame.value.value.rooms[0].messages).toHaveLength(50)
-  expect(b.service.exportChat({ roomId: room.id, format: 'json' })).toContain('needle 0')
+  expect(await b.service.exportChat({ roomId: room.id, format: 'json' })).toContain('needle 0')
   controller.abort(); await feed.return?.()
 })
 
@@ -472,4 +472,24 @@ it('claims a pending memory review once when maintenance wakes overlap', async (
   expect(calls).toBe(1)
   expect(b.service.knowledgeStatus().reviews[0]).toMatchObject({ status: 'complete', attempts: 1 })
   expect(b.service.knowledgeStatus().usage[0]).toMatchObject({ calls: 1, input: 1, output: 1 })
+})
+
+it('releases idle archived bodies, reads old pages on demand and retains historic receipt and identity isolation', async () => {
+  const b = bench(), { HistoryStore } = await import('../src/history-store.ts'), docs = new Map<string, unknown>()
+  Reflect.set(b.service, 'historyStore', new HistoryStore(async spec => ({ global: {
+    get: () => spec.global.schema.parse(docs.get(spec.name) ?? []), set: async (value: unknown) => { docs.set(spec.name, structuredClone(value)) },
+  }, close: async () => {} }) as never))
+  const room = b.state.rooms[0]!
+  room.messages = Array.from({ length: 600 }, (_, i) => ({ id: ('old-' + i) as ChatMessageId, botId: null, text: 'archive ' + i,
+    external: { id: 'receipt-' + i, sender: { id: i === 0 ? 'historic-user' : 'recent-user', name: 'User' } }, replyTo: null, status: 'complete', error: null, time: i }))
+  await b.service.setInfoflowVisible(false)
+  expect(b.service.snapshot().rooms[0]!.messages.length).toBeLessThanOrEqual(256)
+  expect(b.service.snapshot().rooms[0]!.messageCount).toBe(600)
+  expect(b.service.memoryCatalog().users.some(user => user.id.includes('historic-user'))).toBe(true)
+  expect((await b.service.history({ roomId: room.id, query: 'archive 0' })).messages.map(message => message.id)).toEqual(['old-0'])
+  expect(await b.service.submitExternalMessage({ roomId: room.id, text: 'archive 0', external: { id: 'receipt-0', sender: { id: 'historic-user', name: 'User' } } })).toMatchObject({ status: 'accepted', messageId: 'old-0', attemptIds: [] })
+  expect(b.followup).not.toHaveBeenCalled()
+  expect(b.service.snapshot().rooms[0]!.messages.length).toBeLessThanOrEqual(256)
+  expect((await b.service.connectorNotifications(room.id, 600)).offset).toBeGreaterThan(0)
+  expect((await b.service.connectorNotifications(room.id, 0)).room.messages).toHaveLength(600)
 })

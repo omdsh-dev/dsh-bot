@@ -573,3 +573,23 @@ it('admits new requests and stops media preparation without waiting for transcri
   expect(b.submitted.some(item => item.external.id === 'slow-media')).toBe(false)
   b.complete(); await b.bridge.wake(); await b.bridge.close()
 })
+
+it('keeps queued result callbacks pending and delivers their final text exactly once without robot self mentions', async () => {
+  const b = bench(), bridge = b.create({ allowDelegation: true, mentionId: id => 'robot-' + id })
+  await bridge.receive(input('root', 'delegate', 'alice', true)); await bridge.wake()
+  const room = b.durable.rooms[0]!, parent = room.messages[1]!, root = room.messages[0]!
+  parent.status = 'complete'; parent.text = 'assigned'; parent.awaiting = ['child' as ChatMessageId]; parent.continuedBy = 'callback' as ChatMessageId
+  room.messages.push({ ...parent, id: 'child' as ChatMessageId, botId: 'worker' as BotId, text: 'child result', replyTo: parent.id,
+    delegation: { rootId: root.id, task: 'task' }, awaiting: undefined, continuedBy: undefined },
+  { ...parent, id: 'callback' as ChatMessageId, text: '', replyTo: parent.id, status: 'queued', delegation: { rootId: root.id, task: 'summarize' },
+    continuationOf: parent.id, resultIds: ['child' as ChatMessageId], awaiting: undefined, continuedBy: undefined })
+  await bridge.wake()
+  expect(b.state().pending).toHaveLength(1)
+  expect(b.sent.some(item => item.text.includes('执行失败'))).toBe(false)
+  expect(b.sent.flatMap(item => item.mentions ?? []).map(item => item.id)).toEqual(['robot-worker'])
+  const callback = room.messages.at(-1)!; callback.status = 'complete'; callback.text = 'verified summary'
+  await bridge.wake(); await bridge.wake()
+  expect(b.sent.filter(item => item.text === 'verified summary')).toHaveLength(1)
+  expect(b.state().pending).toHaveLength(0)
+  await bridge.close()
+})

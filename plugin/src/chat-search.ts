@@ -1,7 +1,7 @@
 import type { ChatMessage, Room } from './types.ts'
 
 /** The index caches text for invalidation and term postings; reads always use the authoritative transcript. */
-function terms(text: string): string[] {
+export function searchTerms(text: string): string[] {
   const value = text.normalize('NFKC').toLocaleLowerCase()
   const found: string[] = value.match(/[a-z0-9_./-]+/gu) ?? []
   for (const phrase of value.match(/[\p{Script=Han}]+/gu) ?? []) {
@@ -9,6 +9,7 @@ function terms(text: string): string[] {
   }
   return [...new Set(found)]
 }
+const terms = searchTerms
 export interface ChatRead { id: string; from: string; time: number; text: string; truncated: boolean }
 export class ChatSearch {
   private rooms = new Map<string, { texts: Map<string, string>; postings: Map<string, Set<string>> }>()

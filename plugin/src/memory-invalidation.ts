@@ -8,7 +8,7 @@ export function memoryVersion(state: BotState, room: Room, botId: string): numbe
   return room.members.find(member => member.botId === botId)?.requiredMemoryEpoch ?? state.memoryEpoch ?? 0
 }
 function roomUsers(state: BotState, room: Room): Set<string | undefined> {
-  return new Set([...(room.external ? [] : [LOCAL_USER]), ...room.messages.filter(message => !message.botId).map(message => memoryUser(room, message, state))])
+  return new Set([...(room.external ? [] : [LOCAL_USER]), ...(room.participants ?? []).map(person => canonicalUser(state, person.id)), ...room.messages.filter(message => !message.botId).map(message => memoryUser(room, message, state))])
 }
 /** Ignore expiry/status when determining past exposure: stale values may already be in a Session. */
 export function memoryAudience(state: BotState, memories: Memory[], users: string[] = []): MemoryTarget[] {

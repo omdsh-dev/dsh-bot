@@ -83,3 +83,38 @@ it('segments dedup windows and evicts old receipts without rewriting the retaine
   chunks.delete('bot_receipts_' + raw.windows!.receipts!.chunks[0])
   await expect(load()).rejects.toThrow('missing or corrupted')
 })
+
+it('pages archived history without hydrating unrelated chunks and appends to an existing manifest without dropping history', async () => {
+  const docs = new Map<string, unknown>(), reads: string[] = []
+  const store = new HistoryStore(async spec => ({ global: {
+    get: () => { reads.push(spec.name); return spec.global.schema.parse(docs.get(spec.name) ?? []) },
+    set: async (value: unknown) => { docs.set(spec.name, structuredClone(value)) },
+  }, close: async () => {} }) as never)
+  const state = botDomain.global.schema.parse({ bots: [], rooms: [{ id: 'r', title: 'History', kind: 'dm', defaultBot: 'b', members: [], messages:
+    Array.from({ length: 900 }, (_, i) => ({ text: 'message ' + i, id: 'm' + i, botId: null, replyTo: null, status: 'complete', error: null, time: i })) }] })
+  let manifest: BotState = state
+  await store.persist(state, async next => { manifest = next })
+  expect((await store.page(manifest.rooms[0]!, { roomId: manifest.rooms[0]!.id, limit: 20 })).messages.map(m => m.id)).toEqual(state.rooms[0]!.messages.slice(-20).map(m => m.id))
+  expect(reads).toHaveLength(0)
+  const page = await store.page(manifest.rooms[0]!, { roomId: manifest.rooms[0]!.id, before: 'm780' as never, limit: 30 })
+  expect(page.messages.map(m => m.id)).toEqual(state.rooms[0]!.messages.slice(750, 780).map(m => m.id))
+  expect(reads).toHaveLength(1)
+  const savedChunks = [...manifest.rooms[0]!.historyChunks!]
+  manifest.rooms[0]!.messages.push(...Array.from({ length: 300 }, (_, i) => ({ ...state.rooms[0]!.messages[0]!, id: ('new' + i) as never })))
+  await store.persist(manifest, async next => { manifest = next })
+  expect(manifest.rooms[0]!.historyChunks!.slice(0, savedChunks.length)).toEqual(savedChunks)
+  expect(store.count(manifest.rooms[0]!)).toBe(1200)
+  expect((await store.room(manifest.rooms[0]!)).messages).toHaveLength(1200)
+})
+
+it('pins unfinished response ancestry and pending questions in the restart tail', async () => {
+  const docs = new Map<string, unknown>()
+  const store = new HistoryStore(async spec => ({ global: { get: () => spec.global.schema.parse(docs.get(spec.name) ?? []), set: async (value: unknown) => { docs.set(spec.name, value) } }, close: async () => {} }) as never)
+  const state = botDomain.global.schema.parse({ bots: [], rooms: [{ id: 'r', title: 'History', kind: 'dm', defaultBot: 'b', members: [], messages:
+    Array.from({ length: 900 }, (_, i) => ({ text: 'message ' + i, id: 'm' + i, botId: i === 400 ? 'b' : null, replyTo: i === 400 ? 'm300' : null, status: i === 400 ? 'queued' : 'complete', error: null, time: i })) }] })
+  let manifest: BotState = state
+  await store.persist(state, async next => { manifest = next })
+  expect(manifest.rooms[0]!.messages.some(m => m.id === 'm300')).toBe(true)
+  expect(manifest.rooms[0]!.messages.some(m => m.id === 'm400')).toBe(true)
+  expect(store.count(manifest.rooms[0]!)).toBe(900)
+})

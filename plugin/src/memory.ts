@@ -30,6 +30,7 @@ export function memoryUser(room: Room, message?: ChatMessage, state?: BotState):
 
 export function memoryCatalog(state: BotState): MemoryCatalog {
   const users = new Map([[LOCAL_USER, '本地用户 / Local operator']])
+  for (const room of state.rooms.filter(item => !item.deleted)) for (const person of room.participants ?? []) users.set(person.id, person.name)
   for (const room of state.rooms.filter(item => !item.deleted)) for (const message of room.messages) {
     if (message.botId !== null || !message.external) continue
     const sources = message.external.sources?.length ? message.external.sources : [{ accountId: room.external?.accountId ?? '', senderId: message.external.sender.id }]

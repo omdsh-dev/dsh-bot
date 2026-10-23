@@ -48,6 +48,8 @@ export function mergeExternalRooms(state: BotState, chatId: string, provider: 'f
   messages.sort((left, right) => left.time - right.time)
   target.aliases = [...new Set(rooms.flatMap(room => [...(room.aliases ?? []), ...(room.id !== target.id ? [room.id] : [])]))]
   target.external = { provider, accountId, kind: 'group', id: chatId }
+  const participants = new Map(rooms.flatMap(room => (room.participants ?? []).map(person => [person.id, person] as const)))
+  if (participants.size) target.participants = [...participants.values()]
   target.members = [...members.values()]; target.messages = messages
   state.rooms = state.rooms.filter(room => !rooms.includes(room) || room === target)
   return target

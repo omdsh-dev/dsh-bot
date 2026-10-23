@@ -97,12 +97,15 @@ export interface Room {
   /** Tombstones retain external receipts to prevent replay after deletion. */
   deleted?: boolean | undefined
   messageCount?: number | undefined
-  /** Storage-only immutable chunk references. Public snapshots contain hydrated messages. */
+  /** Immutable archived history; snapshots expose the recent/unfinished tail. */
   historyChunks?: string[] | undefined
+  /** Historic identities remain available without loading archived message bodies. */
+  participants?: { id: string; name: string }[] | undefined
 }
 /** Atomic persisted state; also the detached Client baseline. */
 export interface BotState {
   bots: Bot[]; rooms: Room[]
+  historyVersion?: number | undefined
   /** Storage-only independent accounting ledger; snapshots exclude call metadata. */
   usageLedger?: UsageLedger | undefined
   /** Storage-only records. Ordinary snapshots/feed exclude them; management uses dedicated APIs. */

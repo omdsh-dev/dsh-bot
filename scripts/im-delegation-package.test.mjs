@@ -86,8 +86,9 @@ export async function apply(ctx){
     await new Promise(resolve=>{if(options.signal?.aborted)resolve();else options.signal?.addEventListener('abort',resolve,{once:true});});
     options.signal?.throwIfAborted();
    }
+   const returned=JSON.stringify(last).includes('Your delegated work has returned.');
    const count=requests.filter(r=>r.bot===who&&r.human===human).length;
-   const text=human.includes('REWORK')?(who==='alpha'?(count===1?'| **@beta** | 实现 MVP |':'验收汇总完成'):who==='beta'?(count===1?'@gamma 请审查 MVP':'已补充 #1 测试'):'@beta 补 #1 测试；@alpha 汇总验收结果'):human.includes('LOOP')?'@'+(who==='alpha'?'beta':'alpha')+' 执行第 '+count+' 轮新任务':human.includes('QUOTED')?'> @beta 这只是引用。':human.includes('STOP_PAIR')?'@beta 等待停止\n@gamma 等待停止':human.includes('PARALLEL')?(who==='gamma'?'并发审阅已完成':'@gamma 只审阅一次'):who==='beta'?'工作已完成':'**@beta** 请完成这项工作。';
+   const text=returned?(human.includes('REWORK')?(who==='beta'?'已补充 #1 测试':'验收汇总完成'):'汇总已完成'):human.includes('REWORK')?(who==='alpha'?(count===1?'| **@beta** | 实现 MVP |':'验收汇总完成'):who==='beta'?(count===1?'@gamma 请审查 MVP':'已补充 #1 测试'):'审阅发现需要补 #1 测试，请按原任务完成修复。'):human.includes('LOOP')?'@'+(who==='alpha'?'beta':'alpha')+' 执行第 '+count+' 轮新任务':human.includes('QUOTED')?'> @beta 这只是引用。':human.includes('STOP_PAIR')?'@beta 等待停止\n@gamma 等待停止':human.includes('PARALLEL')?(who==='gamma'?'并发审阅已完成':'@gamma 只审阅一次'):who==='beta'?'工作已完成':'**@beta** 请完成这项工作。';
    yield {type:'block-start',index:0,blockType:'text'};yield {type:'text-delta',index:0,text};
    yield {type:'block-end',index:0,block:{type:'text',text}};yield {type:'finish',reason:{kind:'stop'}};
   }
@@ -134,11 +135,13 @@ export async function apply(ctx){
     await emit(provider);
    }
    await new Promise(r=>setTimeout(r,250));
-   assert.equal(requests.length,4,'Each Bot runs once per human request, no loops or duplicate ingress');
+   assert.equal(requests.length,6,'Each platform runs the initial assignment, child, and one result callback; duplicate ingress adds no work');
    for(const provider of ['infoflow','feishu']){
     const room=rooms().find(r=>r.external.provider===provider&&(provider!=='infoflow'||r.external.id==='777'));
-    assert.deepEqual(room.messages.filter(m=>m.botId).map(m=>m.botId),['alpha','beta']);
+    assert.deepEqual(room.messages.filter(m=>m.botId).map(m=>m.botId),['alpha','beta','alpha']);
     assert.equal(room.messages.filter(m=>!m.botId).length,1,'Delegation is not fabricated as a human message');
+    assert.equal(room.messages.filter(m=>m.continuationOf).length,1,'Each settled branch returns exactly once');
+    await wait(()=>provider==='infoflow'?info.state.sent.filter(s=>s.bot===11&&s.text==='汇总已完成').length===1:fs.state.sent.filter(s=>s.bot==='cli_alpha'&&JSON.parse(s.content).text==='汇总已完成').length===1,provider+': callback result was not delivered exactly once');
    }
    for(const {options} of requests){const s=JSON.stringify(options.messages);assert.ok(!(s.includes('IF_ONLY')&&s.includes('FS_ONLY')),'Cross-platform context leak');}
    assert.equal(info.state.sent.filter(s=>s.text.includes('工作已完成')).length,1);
@@ -151,17 +154,17 @@ export async function apply(ctx){
    for(const provider of ['infoflow','feishu']){
     const room=()=>rooms().find(r=>r.external.provider===provider&&(provider!=='infoflow'||r.external.id==='777'));
     const chain=id=>{const r=room(),root=r.messages.find(m=>m.external?.id===id);if(!root)return [];return r.messages.filter(m=>m.botId&&(m.replyTo===root?.id||m.delegation?.rootId===root?.id));};
-    await emit(provider,'parallel','PARALLEL 请共同交给 gamma 审阅',['alpha','beta']);
-    await wait(()=>chain('parallel').length===3&&chain('parallel').every(m=>m.status==='complete'),'parallel delegation did not settle');
+    await emit(provider,'parallel','PARALLEL 请共同交给 gamma 审阅',['alpha','beta','alpha']);
+    await wait(()=>chain('parallel').length===4&&chain('parallel').every(m=>m.status==='complete'),'parallel delegation did not settle');
     assert.equal(chain('parallel').filter(m=>m.botId==='gamma').length,1,'Competing Bots reserve the same recipient once');
     await emit(provider,'rework','REWORK 实现、审阅、修复并汇总');
     await wait(()=>chain('rework').length===5&&chain('rework').every(m=>m.status==='complete'),provider+': real Markdown/multiple mentions/rework failed');
     assert.deepEqual(chain('rework').map(m=>m.botId),['alpha','beta','gamma','beta','alpha']);
     assert.ok(chain('rework').some(m=>m.botId==='beta'&&m.text==='已补充 #1 测试'));
-    await wait(()=>provider==='infoflow'?info.state.sent.some(s=>s.bot===33&&s.body?.some(b=>b.atagentids?.includes(11)&&b.atagentids?.includes(22))):fs.state.sent.some(s=>s.bot==='cli_gamma'&&s.content.includes('ou_cli_beta')&&s.content.includes('ou_cli_alpha')),provider+': every follow-up must have its real robot mention');
+    assert.deepEqual(chain('rework').filter(m=>m.continuationOf).map(m=>m.botId),['beta','alpha'],'Review results return to the worker, then the coordinator');
     await emit(provider,'loop','LOOP 验证循环有界');
-    await wait(()=>chain('loop').length===6&&chain('loop').every(m=>m.status==='complete'),provider+': bounded follow-ups did not settle');
-    assert.ok(chain('loop').at(-1).text.includes('本轮协作已达上限'),'Rejected follow-ups must be visible');
+    await wait(()=>chain('loop').length===3&&chain('loop').every(m=>m.status==='complete'),provider+': bounded follow-ups did not settle');
+    assert.ok(chain('loop').some(m=>m.text.includes('正在等待子任务结果')),'An ancestor waiting for results cannot be assigned a recursive task');
     await emit(provider,'quoted','QUOTED 引用示例');
     await wait(()=>chain('quoted').some(m=>m.status==='complete'),'quoted reply');
     assert.equal(chain('quoted').length,1,'Quoted addressing must not dispatch');

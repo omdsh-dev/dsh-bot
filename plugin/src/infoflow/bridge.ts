@@ -42,7 +42,7 @@ export class InfoFlowBridge {
   /** @param bots - same Host's Bot owner. @param store - durable native domain. @param sender - SDK adapter.
    * @param config - validated deployment settings. @param report - contained error reporting, without message bodies or secrets.
    */
-  constructor(private readonly bots: Pick<BotMode, 'snapshot' | 'ensureExternalRoom' | 'submitExternalMessage' | 'stop'>,
+  constructor(private readonly bots: Pick<BotMode, 'snapshot' | 'ensureExternalRoom' | 'submitExternalMessage' | 'stop'> & Partial<Pick<BotMode, 'connectorRoom' | 'connectorNotifications'>>,
     private readonly store: BridgeStore, private readonly sender: Sender, private readonly config: BridgeConfig,
     private readonly report: (message: string) => void) { this.state = structuredClone(store.get()) }
 
@@ -196,13 +196,15 @@ export class InfoFlowBridge {
       if (item.input.conversation.accountId !== this.config.accountId) continue
       if (item.submitted) {
         const snapshot = this.bots.snapshot()
-        const room = snapshot.rooms.find(room => room.id === item.submitted!.roomId || room.aliases?.includes(item.submitted!.roomId))
+        const room = this.bots.connectorRoom ? await this.bots.connectorRoom(item.submitted.roomId)
+          : snapshot.rooms.find(room => room.id === item.submitted!.roomId || room.aliases?.includes(item.submitted!.roomId))
         if (!room) throw new Error('Submitted external room is missing')
         if (item.submitted.attemptIds.some(id => !room.messages.some(message => message.id === id))) throw new Error('Submitted external response is missing')
         const responses = responseTree(room, item.submitted.attemptIds)
-        const ready = responses.filter(message => message.status !== 'running' && !item.delivered?.includes(message.id))
-        const announcements = responses.filter(message => message.delegation && message.status === 'running' && !item.announced?.includes(message.id))
-        const finished = responses.every(message => message.status !== 'running')
+        const ready = responses.filter(message => !['running', 'queued'].includes(message.status) && !item.delivered?.includes(message.id))
+        const announcements = responses.filter(message => message.delegation && !message.continuationOf && message.status === 'running' && !item.announced?.includes(message.id))
+        const finished = responses.every(message => !['running', 'queued'].includes(message.status)
+          && (!message.awaiting?.length || message.continuedBy || message.collaborationCanceled))
         if (ready.length || announcements.length || finished) {
           await this.change(state => {
             const current = state.pending.find(pending => pending.key === item.key)
@@ -220,7 +222,7 @@ export class InfoFlowBridge {
               const text = this.config.labelReplies ? `@${response.botId}\n${content}` : content
               // Only actual child reservations produce a platform mention; prose and blocked handoffs do not.
               const mentions = item.input.conversation.kind === 'group' ? responses.flatMap(child => {
-                if (!child.delegation || child.replyTo !== response.id || !child.botId) return []
+                if (!child.delegation || child.continuationOf || child.replyTo !== response.id || !child.botId) return []
                 const id = this.config.mentionId?.(child.botId)
                 return id ? [{ id, name: snapshot.bots.find(bot => bot.id === child.botId)?.name ?? child.botId }] : []
               }) : []
@@ -351,10 +353,12 @@ export class InfoFlowBridge {
     const rooms = this.bots.snapshot().rooms.filter(room => !room.deleted && room.external?.provider === (this.config.provider ?? 'infoflow')
       && (room.external.kind === 'group' ? this.config.notifyGroup?.(room.external.id) !== false && (this.config.allowAllGroups || this.config.allowGroups.includes(room.external.id))
         : room.external.accountId === this.config.accountId))
+    const views = await Promise.all(rooms.map(async room => this.bots.connectorNotifications
+      ? this.bots.connectorNotifications(room.id, this.state.notificationCursors?.[room.id] ?? 0) : { room, offset: 0 }))
     await this.change(state => {
       state.notificationCursors ??= {}
-      for (const room of rooms) {
-        let cursor = state.notificationCursors[room.id] ?? 0
+      for (const { room, offset } of views) {
+        let cursor = Math.max(0, (state.notificationCursors[room.id] ?? 0) - offset)
         for (; cursor < room.messages.length; cursor++) {
           const response = room.messages[cursor]!
           if (!response.botId && response.publishExternal && response.notifyBot && this.config.botIds.includes(response.notifyBot)) {
@@ -372,7 +376,7 @@ export class InfoFlowBridge {
           this.enqueue(state, `scheduled:${response.id}`, { conversation, message: { id: root.id, sender: { id: '', name: 'Scheduler' } }, text: root.text },
             response.status === 'complete' ? response.text || '定时任务已完成。' : `定时任务${response.status}，请在 DSH 查看。`, response.botId, [], response.status === 'complete' ? response.attachments : [])
         }
-        state.notificationCursors[room.id] = cursor
+        state.notificationCursors[room.id] = cursor + offset
       }
     })
   }
