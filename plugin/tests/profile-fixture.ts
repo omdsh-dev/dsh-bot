@@ -36,6 +36,11 @@ export async function apply(ctx: Context): Promise<void> {
       ].find(call => !hasResult(call.id))
       if (content.includes('ACCESS_TOOL_FIXTURE') && !hasResult('access-inspect')) tool = { id: 'access-inspect', name: 'mcp__bot_access-fixture__inspect', args: {} }
       if (content.includes('CARD_VIEW_FIXTURE') && !hasResult('card-view')) tool = { id: 'card-view', name: 'show_card', args: { id: 'followup', card: JSON.stringify({ kind: 'form', title: 'Native form fixture', submitLabel: 'Continue', fields: [{ name: 'detail', label: 'Detail', type: 'text', required: true }] }) } }
+      if (content.includes('TEAM_FIXTURE')) tool = [
+        { id: 'team-list', name: 'team_list', args: {} },
+        { id: 'team-create', name: 'team_manage', args: { command: JSON.stringify({ operation: 'create-bot', id: 'team-worker', name: 'Team worker', instructions: 'Gather evidence.' }) } },
+        { id: 'team-group', name: 'team_manage', args: { command: JSON.stringify({ operation: 'create-group', title: 'Native team fixture', botIds: ['team-worker'], defaultBot: 'team-worker' }) } },
+      ].find(call => !hasResult(call.id))
       if (content.includes('COLLAB_FIXTURE') && !content.includes('Delegated task from') && !hasResult('collab-delegate'))
         tool = { id: 'collab-delegate', name: 'delegate_task', args: { botId: 'collab-worker', task: 'Return a verified result for this fixture.' } }
       if (options.purpose !== 'session-title' && tool) {
@@ -288,6 +293,17 @@ export async function apply(ctx: Context): Promise<void> {
 
     }
     if (process.env.BOT_TEST_PHASE === 'first') {
+      const mainBot = await service.createBot({ id: 'team-main', name: 'Main Bot', instructions: 'Manage the team only as explicitly requested.' }), mainRoom = await service.openDirect(mainBot.id)
+      await service.configureTeam({ revision: 0, botId: mainBot.id, operations: ['create-bot', 'create-group'] })
+      await service.send({ roomId: mainRoom.id, text: 'TEAM_FIXTURE Create the requested worker and local team group.' })
+      assert.equal((await settled(mainRoom.id)).messages.at(-1)!.status, 'complete')
+      assert.ok(service.snapshot().bots.some(bot => bot.id === 'team-worker'))
+      assert.ok(service.snapshot().rooms.some(room => room.title === 'Native team fixture'))
+      assert.equal(service.teamView().audit.length, 2)
+      const externalTeam = await service.ensureExternalRoom({ conversation: { provider: 'feishu', accountId: mainBot.id, kind: 'private', id: 'team-outsider' }, title: 'External team request', botIds: [mainBot.id], defaultBot: mainBot.id })
+      await service.submitExternalMessage({ roomId: externalTeam.id, text: 'TEAM_EXTERNAL_SCOPE_CHECK', external: { id: 'team-receipt', sender: { id: 'outsider', name: 'External sender' } } })
+      assert.equal((await settled(externalTeam.id)).messages.at(-1)!.status, 'complete')
+      assert.ok(!JSON.stringify(requests.at(-1)?.tools).includes('team_manage'))
       const cardBot = await service.createBot({ id: 'card-bot', name: 'Card Bot', instructions: 'Use native cards.' }), cardRoom = await service.openDirect(cardBot.id)
       await service.send({ roomId: cardRoom.id, text: 'CARD_VIEW_FIXTURE Ask for the next detail.' })
       const cardMessage = (await settled(cardRoom.id)).messages.at(-1)!
@@ -346,6 +362,8 @@ createInterface({input:process.stdin}).on('line', line=>{
       assert.equal(requests.length, beforeRevoked, 'A missing credential blocks MCP activation before a model call')
       await service.saveBotCredential({ name: 'FIXTURE_TOKEN', description: 'Restored scoped fixture', value: 'ONLY_GRANTED_FIXTURE_TOKEN_123', botIds: [owner.id], shellBotIds: [owner.id] })
     } else if (process.env.BOT_TEST_PHASE === 'resume') {
+      assert.equal(service.teamView().settings.botId, 'team-main')
+      assert.equal(service.teamView().audit.length, 2)
       const cards = service.snapshot().rooms.find(room => room.defaultBot === 'card-bot')!.messages.flatMap(message => message.cards ?? [])
       assert.equal(cards[0]!.submitted!.values.detail, 'NATIVE_FORM_ANSWER')
       assert.ok((await service.accessCatalog()).credentials.some(item => item.name === 'FIXTURE_TOKEN' && item.configured))

@@ -57,7 +57,9 @@
     "src/access-state.ts",
     "src/access-runtime.ts",
     "src/card-types.ts",
-    "src/cards.ts"
+    "src/cards.ts",
+    "src/team-types.ts",
+    "src/team.ts"
   ],
   "references": [
     {

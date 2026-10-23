@@ -69,6 +69,22 @@ it('renders card text without HTML execution and submits form values to the orig
   expect(within(form).getByRole('textbox').closest('fieldset')!.disabled).toBe(true)
 })
 
+it('keeps Main Bot management disabled until the operator selects a Bot and specific operations', async () => {
+  let settings: import('../src/team-types.ts').TeamSettings = { revision: 0, botId: null, operations: [] }
+  const configureTeam = vi.fn(async (next: typeof settings) => { settings = { ...next, revision: next.revision + 1 } })
+  await bench({ capabilities: { catalog: async () => ({ providers: [], tools: [] }), teamView: async () => ({ settings, audit: [] }), configureTeam } as unknown as CapabilityFace })
+  fireEvent.click(screen.getByRole('button', { name: 'Chat & execution controls' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Team management' }))
+  const region = await screen.findByRole('region', { name: 'Main Bot team management' })
+  await within(region).findByRole('combobox', { name: 'Main Bot' })
+  expect((within(region).getByRole('checkbox', { name: 'Create Bots' }) as HTMLInputElement).disabled).toBe(true)
+  fireEvent.change(within(region).getByRole('combobox', { name: 'Main Bot' }), { target: { value: 'sage' } })
+  expect((within(region).getByRole('checkbox', { name: 'Create Bots' }) as HTMLInputElement).checked).toBe(false)
+  fireEvent.click(within(region).getByRole('checkbox', { name: 'Create Bots' }))
+  fireEvent.click(within(region).getByRole('button', { name: 'Save team grants' }))
+  await waitFor(() => expect(configureTeam).toHaveBeenCalledExactlyOnceWith({ revision: 0, botId: 'sage', operations: ['create-bot'] }))
+})
+
 it('opens usage from the sidebar, filters full Host totals and opens budget controls without losing the draft', async () => {
   const read = vi.fn(async () => report)
   const capabilities = { usageReport: read, catalog: async () => ({ providers: [], tools: [] }) } as unknown as CapabilityFace

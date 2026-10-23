@@ -5,6 +5,8 @@ import type { AttachmentRequest, AttachmentData, CapabilityCatalog, QuestionAnsw
 import type { Memory, MemoryAction, MemoryCatalog, MemoryListRequest, MemoryPreviewRequest, MemorySelection, SaveMemoryRequest } from '../memory-types.ts'
 import type { AnalyzeMemoriesRequest, MemoryGovernanceView, ResolveMemorySuggestion } from '../memory-types.ts'
 export interface CapabilityFace {
+  teamView(): Promise<import('../team-types.ts').TeamView>
+  configureTeam(request: import('../team-types.ts').TeamSettings): Promise<void>
   submitCard(request: import('../card-types.ts').SubmitCardRequest): Promise<string>
   accessCatalog(): Promise<import('../access-types.ts').AccessView>
   saveCapability(request: import('../access-types.ts').SaveCapability): Promise<import('../access-types.ts').BotCapability>

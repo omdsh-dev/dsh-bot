@@ -63,6 +63,34 @@ it('submits a card atomically and once, queues behind work and keeps external-gr
   await expect(b.service.submitCard({ ...request, values: { detail: 'Different' } })).rejects.toThrow('already')
 })
 
+it('applies team commands atomically under current authority and revokes active work when grants change', async () => {
+  const b = bench(), room = b.state.rooms[0]!
+  delete room.external
+  b.state.teamSettings = { revision: 1, botId: 'sage', operations: ['create-bot', 'edit-bot', 'create-group', 'edit-group', 'archive'] }
+  Reflect.get(b.service, 'config').defaultPreset = 'standard'
+  const manage = (command: import('../src/team-types.ts').TeamCommand, callId: string) => Reflect.get(b.service, 'manageTeam').call(b.service, room.id, 'attempt', 1, command, callId, new AbortController().signal)
+  const command = { operation: 'create-bot' as const, id: 'worker', name: 'Worker', instructions: 'Research' }
+  b.set.mockRejectedValueOnce(new Error('disk full'))
+  await expect(manage(command, 'create')).rejects.toThrow('disk full')
+  expect(b.service.snapshot().bots).toHaveLength(1)
+  const results = await Promise.all([manage(command, 'create'), manage(command, 'create')])
+  expect(results[0]).toEqual(results[1]); expect(b.service.snapshot().bots).toHaveLength(2)
+  expect(b.service.teamView().audit).toHaveLength(1)
+  await expect(manage({ operation: 'edit-bot', id: 'sage', name: 'New self', instructions: 'Elevate' }, 'self')).rejects.toThrow('itself')
+  await manage({ operation: 'edit-bot', id: 'worker', name: 'Researcher', instructions: 'Find evidence' }, 'edit')
+  const group = await manage({ operation: 'create-group', title: 'Research', botIds: ['worker'], defaultBot: 'worker' }, 'group')
+  await manage({ operation: 'edit-group', id: group.targetId, title: 'Evidence', botIds: ['worker'], defaultBot: 'worker' }, 'group-edit')
+  await manage({ operation: 'archive', kind: 'room', id: group.targetId, archived: true }, 'archive')
+  expect(b.service.snapshot().rooms.find(item => item.id === group.targetId)).toMatchObject({ title: 'Evidence', archived: true })
+  Reflect.get(b.service, 'running').set('attempt', b.run)
+  await b.service.configureTeam({ revision: 1, botId: null, operations: [] })
+  expect(b.run.canceled).toBe(true)
+  await expect(manage({ ...command, id: 'ungranted' }, 'late')).rejects.toThrow('grant')
+  await expect(b.service.configureTeam({ revision: 1, botId: 'sage', operations: ['create-bot'] })).rejects.toThrow('changed')
+  expect(b.service.snapshot().teamAudit).toBeUndefined()
+  expect(b.service.teamView().audit).toHaveLength(5)
+})
+
 it('uses native compaction before rotating and retains the current session when it relieves pressure', async () => {
   const b = bench(), agent = b.ctx.agents.get()
   let chars = 120000

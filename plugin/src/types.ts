@@ -6,6 +6,7 @@ import type { Memory, MemorySuggestion } from './memory-types.ts'
 import type { UsageLedger } from './usage-types.ts'
 import type { AccessState } from './access-types.ts'
 import type { ChatCard } from './card-types.ts'
+import type { TeamAudit, TeamSettings } from './team-types.ts'
 export type * from './memory-types.ts'
 
 /** Stable, case-insensitive Bot handle. */
@@ -110,6 +111,8 @@ export interface BotState {
   bots: Bot[]; rooms: Room[]
   historyVersion?: number | undefined
   access?: AccessState | undefined
+  teamSettings?: TeamSettings | undefined
+  teamAudit?: TeamAudit[] | undefined
   /** Storage-only independent accounting ledger; snapshots exclude call metadata. */
   usageLedger?: UsageLedger | undefined
   /** Storage-only records. Ordinary snapshots/feed exclude them; management uses dedicated APIs. */
@@ -203,4 +206,5 @@ export type * from './knowledge-types.ts'
 export type * from './usage-types.ts'
 export type * from './access-types.ts'
 export type * from './card-types.ts'
+export type * from './team-types.ts'
 export type { UsageReport, UsageBudget, BotUsageRow, UsageTotals } from './usage.ts'

@@ -9,6 +9,7 @@ import { usageLedgerSchema } from './usage-ledger.ts'
 import { suggestionSchema } from './memory-governance.ts'
 import { accessSchema } from './access-state.ts'
 import { cardSchema } from './cards.ts'
+import { teamSettingsSchema, teamAuditSchema } from './team.ts'
 
 const botId = z.string().transform(brandString<BotId>)
 const messageId = z.string().transform(brandString<ChatMessageId>)
@@ -35,6 +36,8 @@ const budgetSchema = z.object({ tokenLimit: z.number().nonnegative(), costLimit:
 const schema: z.ZodType<BotState> = z.object({
   historyVersion: z.number().optional(),
   access: accessSchema.optional(),
+  teamSettings: teamSettingsSchema.optional(),
+  teamAudit: z.array(teamAuditSchema).max(500).optional(),
   usageLedger: usageLedgerSchema.optional(),
   memorySuggestions: z.array(suggestionSchema).optional(),
   memories: z.array(memorySchema).optional(), memoryChunks: z.array(z.string()).optional(), retiredMemoryChunks: z.array(z.string()).optional(), memoryEpoch: z.number().int().nonnegative().optional(),

@@ -44,7 +44,9 @@
     "src/access-types.ts",
     "src/client/AccessControls.tsx",
     "src/card-types.ts",
-    "src/client/Cards.tsx"
+    "src/client/Cards.tsx",
+    "src/team-types.ts",
+    "src/client/TeamControls.tsx"
   ],
   "references": [
     {

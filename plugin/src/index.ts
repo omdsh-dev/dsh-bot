@@ -6,6 +6,8 @@ import { accessState, credentialRequest, removeAccess, saveCapability as saveCap
 import { CapabilityRuntime } from './access-runtime.ts'
 import { formValues, installCardTool } from './cards.ts'
 import type { SubmitCardRequest } from './card-types.ts'
+import { installTeamTools, teamAuthority, teamSettingsSchema } from './team.ts'
+import type { TeamCommand, TeamSettings, TeamView } from './team-types.ts'
 import type { AccessRemoval, AccessView, BotCapability, SaveCapability, SaveBotCredential } from './access-types.ts'
 import { PermanentChatError } from './external-errors.ts'
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -317,6 +319,8 @@ export class BotMode extends TypertRemoteService {
     for (const room of state.rooms) room.messageCount = (room.historyChunks?.length ?? 0) * 128 + room.messages.length
     delete state.usageLedger
     delete state.access
+    delete state.teamSettings
+    delete state.teamAudit
     delete state.memories
     delete state.memoryChunks
     delete state.retiredMemoryChunks
@@ -340,6 +344,8 @@ export class BotMode extends TypertRemoteService {
     }) })
     delete state.usageLedger
     delete state.access
+    delete state.teamSettings
+    delete state.teamAudit
     delete state.memories
     delete state.memoryChunks
     delete state.retiredMemoryChunks
@@ -858,35 +864,36 @@ export class BotMode extends TypertRemoteService {
 
   /** Archive preserves contexts; deletion removes public content, retaining only external deduplication tombstones. */
   @Remote lifecycle(request: LifecycleRequest): Promise<void> {
-    return this.change(async state => {
-      const bot = request.kind === 'bot' ? state.bots.find(item => item.id === request.id) : undefined
-      if (request.kind === 'bot' && !bot) throw new Error('Bot not found')
-      const rooms = request.kind === 'room' ? [this.room(state, brandString<RoomId>(request.id))]
-        : state.rooms.filter(room => room.members.some(member => member.botId === request.id))
-      for (const room of rooms) { this.idle(room); if (request.action === 'delete') await this.historyRoom(state, room.id) }
-      if (request.action === 'delete' && bot) {
-        if (this.infoflow?.snapshot().bindings.some(binding => binding.botId === bot.id && binding.enabled)
-          || this.feishu?.snapshot().bindings.some(binding => binding.botId === bot.id && binding.enabled)) throw new Error('Disable this Bot’s IM connections before deletion')
-        state.bots = state.bots.filter(item => item !== bot)
-        ;(state.retiredBotIds ??= []).push(bot.id)
-        for (const schedule of state.schedules ?? []) if (schedule.targets.includes(bot.id)) schedule.enabled = false
-      } else if (bot) bot.archived = request.action === 'archive'
-      for (const room of rooms) {
-        if (request.action === 'delete') {
-          if (bot && room.kind === 'group' && room.members.length > 1) {
-            room.members = room.members.filter(member => member.botId !== bot.id)
-            if (room.defaultBot === bot.id) room.defaultBot = room.members[0]!.botId
-            continue
-          }
-          if (room.external) {
-            room.deleted = true; room.archived = true
-            room.messages = room.messages.filter(message => message.external).map(message => ({ ...message, text: '', attachments: undefined }))
-          } else state.rooms = state.rooms.filter(item => item !== room)
-          state.schedules = (state.schedules ?? []).filter(schedule => schedule.roomId !== room.id)
-        } else if (!bot || room.kind === 'dm') room.archived = request.action === 'archive'
-        if (request.action !== 'restore') for (const schedule of state.schedules ?? []) if (schedule.roomId === room.id) schedule.enabled = false
-      }
-    })
+    return this.change(state => this.lifecycleState(state, request))
+  }
+  private async lifecycleState(state: BotState, request: LifecycleRequest): Promise<void> {
+    const bot = request.kind === 'bot' ? state.bots.find(item => item.id === request.id) : undefined
+    if (request.kind === 'bot' && !bot) throw new Error('Bot not found')
+    const rooms = request.kind === 'room' ? [this.room(state, brandString<RoomId>(request.id))]
+      : state.rooms.filter(room => room.members.some(member => member.botId === request.id))
+    for (const room of rooms) { this.idle(room); if (request.action === 'delete') await this.historyRoom(state, room.id) }
+    if (request.action === 'delete' && bot) {
+      if (this.infoflow?.snapshot().bindings.some(binding => binding.botId === bot.id && binding.enabled)
+        || this.feishu?.snapshot().bindings.some(binding => binding.botId === bot.id && binding.enabled)) throw new Error('Disable this Bot’s IM connections before deletion')
+      state.bots = state.bots.filter(item => item !== bot)
+      ;(state.retiredBotIds ??= []).push(bot.id)
+      for (const schedule of state.schedules ?? []) if (schedule.targets.includes(bot.id)) schedule.enabled = false
+    } else if (bot) bot.archived = request.action === 'archive'
+    for (const room of rooms) {
+      if (request.action === 'delete') {
+        if (bot && room.kind === 'group' && room.members.length > 1) {
+          room.members = room.members.filter(member => member.botId !== bot.id)
+          if (room.defaultBot === bot.id) room.defaultBot = room.members[0]!.botId
+          continue
+        }
+        if (room.external) {
+          room.deleted = true; room.archived = true
+          room.messages = room.messages.filter(message => message.external).map(message => ({ ...message, text: '', attachments: undefined }))
+        } else state.rooms = state.rooms.filter(item => item !== room)
+        state.schedules = (state.schedules ?? []).filter(schedule => schedule.roomId !== room.id)
+      } else if (!bot || room.kind === 'dm') room.archived = request.action === 'archive'
+      if (request.action !== 'restore') for (const schedule of state.schedules ?? []) if (schedule.roomId === room.id) schedule.enabled = false
+    }
   }
 
   @Remote configureBudget(request: ConfigureBudget): Promise<Budget> {
@@ -1069,22 +1076,23 @@ export class BotMode extends TypertRemoteService {
    * @returns Bot.
    */
   @Remote createBot(request: CreateBotRequest): Promise<Bot> {
-    return this.change(async (state) => {
-      const id = brandString<BotId>(request.id.trim().toLowerCase())
-      if (!/^[a-z][a-z0-9_-]{0,31}$/.test(id) || ['all', 'everyone', 'user'].includes(id)) throw new Error('Use a unique ASCII Bot handle (1–32 characters)')
-      if (state.bots.some(bot => bot.id === id) || state.retiredBotIds?.includes(id)) throw new Error('Bot handle already exists or belongs to a deleted Bot')
-      if (!request.name.trim() || request.instructions.length > 16000) {
-        throw new Error('A name and instructions of at most 16000 characters are required')
-      }
-      const bot: Bot = {
-        id, name: request.name.trim(), instructions: request.instructions,
-        preset: request.preset?.trim() || this.config.defaultPreset,
-      }
-      state.bots.push(bot)
-      state.rooms.push({ id: brandString<RoomId>(randomUUID()), title: bot.name, kind: 'dm', defaultBot: id,
-        members: this.members(state, [id], id), messages: [] })
-      return bot
-    })
+    return this.change(state => this.createBotState(state, request))
+  }
+  private createBotState(state: BotState, request: CreateBotRequest): Bot {
+    const id = brandString<BotId>(request.id.trim().toLowerCase())
+    if (!/^[a-z][a-z0-9_-]{0,31}$/.test(id) || ['all', 'everyone', 'user'].includes(id)) throw new Error('Use a unique ASCII Bot handle (1–32 characters)')
+    if (state.bots.some(bot => bot.id === id) || state.retiredBotIds?.includes(id)) throw new Error('Bot handle already exists or belongs to a deleted Bot')
+    if (!request.name.trim() || request.instructions.length > 16000) {
+      throw new Error('A name and instructions of at most 16000 characters are required')
+    }
+    const bot: Bot = {
+      id, name: request.name.trim(), instructions: request.instructions,
+      preset: request.preset?.trim() || this.config.defaultPreset,
+    }
+    state.bots.push(bot)
+    state.rooms.push({ id: brandString<RoomId>(randomUUID()), title: bot.name, kind: 'dm', defaultBot: id,
+      members: this.members(state, [id], id), messages: [] })
+    return bot
   }
 
   /**
@@ -1094,26 +1102,27 @@ export class BotMode extends TypertRemoteService {
    * @returns updated Bot.
    */
   @Remote updateBot(request: UpdateBotRequest): Promise<Bot> {
-    return this.change(async (state) => {
-      if (this.closing) throw new Error('Bot Mode is closing')
-      const bot = state.bots.find(item => item.id === request.id)
-      if (!bot) throw new Error('Bot not found')
-      const name = request.name.trim()
-      if (!name || request.instructions.length > 16000) {
-        throw new Error('A name and instructions of at most 16000 characters are required')
-      }
-      if (state.rooms.some(room => room.messages.some(message => message.botId === bot.id && message.status === 'running'))) {
-        throw new Error('Wait for or stop this Bot’s active responses first')
-      }
-      for (const room of state.rooms) {
-        // Only the canonical local DM follows the Bot's name; group and external titles are user-owned.
-        if (room.kind === 'dm' && !room.external && room.defaultBot === bot.id && room.title === bot.name) room.title = name
-      }
-      bot.name = name
-      bot.instructions = request.instructions
-      if (request.policy !== undefined) bot.policy = validatePolicy(request.policy)
-      return bot
-    })
+    return this.change(state => this.updateBotState(state, request))
+  }
+  private updateBotState(state: BotState, request: UpdateBotRequest): Bot {
+    if (this.closing) throw new Error('Bot Mode is closing')
+    const bot = state.bots.find(item => item.id === request.id)
+    if (!bot) throw new Error('Bot not found')
+    const name = request.name.trim()
+    if (!name || request.instructions.length > 16000) {
+      throw new Error('A name and instructions of at most 16000 characters are required')
+    }
+    if (state.rooms.some(room => room.messages.some(message => message.botId === bot.id && message.status === 'running'))) {
+      throw new Error('Wait for or stop this Bot’s active responses first')
+    }
+    for (const room of state.rooms) {
+      // Only the canonical local DM follows the Bot's name; group and external titles are user-owned.
+      if (room.kind === 'dm' && !room.external && room.defaultBot === bot.id && room.title === bot.name) room.title = name
+    }
+    bot.name = name
+    bot.instructions = request.instructions
+    if (request.policy !== undefined) bot.policy = validatePolicy(request.policy)
+    return bot
   }
 
   /**
@@ -1122,13 +1131,14 @@ export class BotMode extends TypertRemoteService {
    * @returns new chat.
    */
   @Remote createGroup(request: CreateGroupRequest): Promise<Room> {
-    return this.change(async (state) => {
-      if (!request.title.trim()) throw new Error('Chat title is required')
-      const room: Room = { id: brandString<RoomId>(randomUUID()), title: request.title.trim(), kind: 'group',
-        members: this.members(state, request.botIds, request.defaultBot), defaultBot: request.defaultBot, messages: [] }
-      state.rooms.push(room)
-      return room
-    })
+    return this.change(state => this.createGroupState(state, request))
+  }
+  private createGroupState(state: BotState, request: CreateGroupRequest): Room {
+    if (!request.title.trim()) throw new Error('Chat title is required')
+    const room: Room = { id: brandString<RoomId>(randomUUID()), title: request.title.trim(), kind: 'group',
+      members: this.members(state, request.botIds, request.defaultBot), defaultBot: request.defaultBot, messages: [] }
+    state.rooms.push(room)
+    return room
   }
 
   /**
@@ -1137,15 +1147,16 @@ export class BotMode extends TypertRemoteService {
    * @returns updated chat.
    */
   @Remote setMembers(request: MembersRequest): Promise<Room> {
-    return this.change(async (state) => {
-      const room = await this.historyRoom(state, request.roomId)
-      this.idle(room)
-      if (room.external) throw new Error('External chat membership is managed by its connector configuration')
-      if (room.kind !== 'group') throw new Error('A direct chat has exactly one permanent member')
-      room.members = this.members(state, request.botIds, request.defaultBot, room.members)
-      room.defaultBot = request.defaultBot
-      return room
-    })
+    return this.change(state => this.setMembersState(state, request))
+  }
+  private async setMembersState(state: BotState, request: MembersRequest): Promise<Room> {
+    const room = await this.historyRoom(state, request.roomId)
+    this.idle(room)
+    if (room.external) throw new Error('External chat membership is managed by its connector configuration')
+    if (room.kind !== 'group') throw new Error('A direct chat has exactly one permanent member')
+    room.members = this.members(state, request.botIds, request.defaultBot, room.members)
+    room.defaultBot = request.defaultBot
+    return room
   }
 
   /**
@@ -1198,6 +1209,55 @@ export class BotMode extends TypertRemoteService {
     })
     for (const attempt of result.attempts) if (attempt.status === 'running') this.launch(request.roomId, attempt)
     return result.id
+  }
+
+  @Remote teamView(): TeamView {
+    return structuredClone({ settings: this.state.teamSettings ?? { revision: 0, botId: null, operations: [] }, audit: this.state.teamAudit ?? [] })
+  }
+  @Remote async configureTeam(request: TeamSettings): Promise<void> {
+    const value = teamSettingsSchema.parse(request)
+    const targets = await this.change(state => {
+      const previous = state.teamSettings
+      if (value.revision !== (previous?.revision ?? 0)) throw new Error('Team grants changed; reload before saving')
+      if (value.botId && !state.bots.some(bot => bot.id === value.botId && !bot.archived)) throw new Error('Select an active Main Bot')
+      if (!value.botId && value.operations.length) throw new Error('Select a Main Bot before granting operations')
+      state.teamSettings = { ...value, revision: value.revision + 1, operations: [...new Set(value.operations)] }
+      return this.revokeAccess(state, [...new Set([previous?.botId, value.botId].filter((id): id is string => !!id))])
+    })
+    this.invalidateMemoryContext(targets)
+  }
+  private async manageTeam(roomId: RoomId, messageId: ChatMessageId, revision: number, command: TeamCommand, callId: string, signal: AbortSignal): Promise<{ operation: string; targetId: string }> {
+    return this.change(async state => {
+      signal.throwIfAborted()
+      if (this.closing) throw new Error('Bot Mode is closing')
+      const room = this.room(state, roomId), delivery = findMessage(room, messageId), grant = teamAuthority(state, room, delivery, revision)
+      if (!grant.operations.includes(command.operation)) throw new Error('This team operation has not been granted')
+      const id = `${messageId}:${callId}`, previous = state.teamAudit?.find(item => item.id === id)
+      if (previous) return { operation: previous.operation, targetId: previous.targetId }
+      if ((state.teamAudit ?? []).filter(item => item.messageId === messageId).length >= 20) throw new Error('Team change limit reached for this request')
+      let targetId: string
+      if (command.operation === 'create-bot') {
+        const created = this.createBotState(state, { id: command.id, name: command.name, instructions: command.instructions })
+        // New identities inherit only the operator's deployment default, never the Main Bot's grants.
+        targetId = created.id
+      } else if (command.operation === 'edit-bot') {
+        if (command.id === grant.botId) throw new Error('A Main Bot cannot edit itself')
+        targetId = this.updateBotState(state, { id: brandString<BotId>(command.id), name: command.name, instructions: command.instructions }).id
+      } else if (command.operation === 'create-group') {
+        targetId = this.createGroupState(state, { title: command.title, botIds: command.botIds.map(brandString<BotId>), defaultBot: brandString<BotId>(command.defaultBot) }).id
+      } else if (command.operation === 'edit-group') {
+        const updated = await this.setMembersState(state, { roomId: brandString<RoomId>(command.id), botIds: command.botIds.map(brandString<BotId>), defaultBot: brandString<BotId>(command.defaultBot) })
+        updated.title = command.title; targetId = updated.id
+      } else {
+        if (command.kind === 'bot' && command.id === grant.botId) throw new Error('A Main Bot cannot archive itself')
+        const affected = command.kind === 'room' ? [this.room(state, brandString<RoomId>(command.id))] : state.rooms.filter(item => item.members.some(member => member.botId === command.id))
+        if (affected.some(item => item.external)) throw new Error('External connections and chats require operator management')
+        await this.lifecycleState(state, { kind: command.kind, id: command.id, action: command.archived ? 'archive' : 'restore' }); targetId = command.id
+      }
+      signal.throwIfAborted()
+      state.teamAudit = [...state.teamAudit ?? [], { id, time: Date.now(), botId: delivery.botId!, roomId, messageId, operation: command.operation, targetId }].slice(-500)
+      return { operation: command.operation, targetId }
+    })
   }
 
   private append(state: BotState, room: Room, request: SendRequest, external?: ExternalSendRequest['external']) {
@@ -1595,6 +1655,19 @@ export class BotMode extends TypertRemoteService {
         const current = this.room(this.state, roomId), delivery = findMessage(current, attempt.id)
         if (this.canceled(run) || deadline.signal.aborted || delivery.status !== 'running') throw new Error('This delivery has ended')
         return { current, delivery, human: humanRequest(current, delivery)! }
+      }
+      let teamGrant: TeamSettings | undefined
+      try { teamGrant = teamAuthority(this.state, room, attempt) } catch { /* Normal Bots and external/delegated requests have no team authority. */ }
+      if (teamGrant) {
+        const revision = teamGrant.revision
+        cleanup.push(installTeamTools(agent, {
+          list: () => {
+            const { current, delivery } = knowledgeContext(), grant = teamAuthority(this.state, current, delivery, revision)
+            return { operations: grant.operations, bots: this.state.bots.map(({ id, name, instructions, archived }) => ({ id, name, instructions, archived: !!archived })),
+              groups: this.state.rooms.filter(item => item.kind === 'group' && !item.external && !item.deleted).map(({ id, title, members, defaultBot, archived }) => ({ id, title, botIds: members.map(member => member.botId), defaultBot, archived: !!archived })) }
+          },
+          manage: (command, callId) => { knowledgeContext(); return this.manageTeam(roomId, attempt.id, revision, command, callId, deadline.signal) },
+        }))
       }
       cleanup.push(installCardTool(agent, (id, content) => this.change(async state => {
         knowledgeContext()
