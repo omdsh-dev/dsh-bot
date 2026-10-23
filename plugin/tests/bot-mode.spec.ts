@@ -43,6 +43,26 @@ function bench() {
   return { service, state, set, close, assemble, followup, wake, ctx, variable, execute, run }
 }
 
+it('submits a card atomically and once, queues behind work and keeps external-group forms local', async () => {
+  const b = bench(), room = b.state.rooms[0]!, attempt = room.messages[1]!
+  room.kind = 'group'; room.external!.kind = 'group'; attempt.status = 'complete'
+  attempt.cards = [{ id: 'form', revision: 2, content: { kind: 'form', title: 'Confirm details', submitLabel: 'Continue', fields: [{ name: 'detail', label: 'Detail', type: 'text', required: true }] } }]
+  room.messages.push({ ...attempt, cards: undefined, id: 'other-work' as ChatMessageId, status: 'running' })
+  const request = { roomId: room.id, messageId: attempt.id, cardId: 'form', revision: 2, values: { detail: 'Chosen by operator' } }
+  await expect(b.service.submitCard({ ...request, revision: 1 })).rejects.toThrow('changed')
+  b.set.mockRejectedValueOnce(new Error('disk full'))
+  await expect(b.service.submitCard(request)).rejects.toThrow('disk full')
+  expect(b.service.snapshot().rooms[0]!.messages).toHaveLength(3)
+  const ids = await Promise.all([b.service.submitCard(request), b.service.submitCard(request)])
+  expect(ids[0]).toBe(ids[1])
+  const saved = b.service.snapshot().rooms[0]!
+  expect(saved.messages).toHaveLength(5)
+  expect(saved.messages.at(-2)).toMatchObject({ id: ids[0], botId: null, replyTo: 'attempt', localOnly: true, allowDelegation: false })
+  expect(saved.messages.at(-1)).toMatchObject({ botId: 'sage', status: 'queued', replyTo: ids[0], localOnly: true })
+  expect(saved.messages[1]!.cards![0]!.submitted).toMatchObject({ messageId: ids[0], values: request.values })
+  await expect(b.service.submitCard({ ...request, values: { detail: 'Different' } })).rejects.toThrow('already')
+})
+
 it('uses native compaction before rotating and retains the current session when it relieves pressure', async () => {
   const b = bench(), agent = b.ctx.agents.get()
   let chars = 120000

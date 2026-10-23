@@ -35,6 +35,7 @@ export async function apply(ctx: Context): Promise<void> {
         { id: 'knowledge-status', name: 'task_status', args: {} },
       ].find(call => !hasResult(call.id))
       if (content.includes('ACCESS_TOOL_FIXTURE') && !hasResult('access-inspect')) tool = { id: 'access-inspect', name: 'mcp__bot_access-fixture__inspect', args: {} }
+      if (content.includes('CARD_VIEW_FIXTURE') && !hasResult('card-view')) tool = { id: 'card-view', name: 'show_card', args: { id: 'followup', card: JSON.stringify({ kind: 'form', title: 'Native form fixture', submitLabel: 'Continue', fields: [{ name: 'detail', label: 'Detail', type: 'text', required: true }] }) } }
       if (content.includes('COLLAB_FIXTURE') && !content.includes('Delegated task from') && !hasResult('collab-delegate'))
         tool = { id: 'collab-delegate', name: 'delegate_task', args: { botId: 'collab-worker', task: 'Return a verified result for this fixture.' } }
       if (options.purpose !== 'session-title' && tool) {
@@ -287,6 +288,17 @@ export async function apply(ctx: Context): Promise<void> {
 
     }
     if (process.env.BOT_TEST_PHASE === 'first') {
+      const cardBot = await service.createBot({ id: 'card-bot', name: 'Card Bot', instructions: 'Use native cards.' }), cardRoom = await service.openDirect(cardBot.id)
+      await service.send({ roomId: cardRoom.id, text: 'CARD_VIEW_FIXTURE Ask for the next detail.' })
+      const cardMessage = (await settled(cardRoom.id)).messages.at(-1)!
+      assert.equal(cardMessage.status, 'complete', JSON.stringify(cardMessage))
+      assert.equal(cardMessage.cards?.[0]?.content.kind, 'form')
+      const submission = { roomId: cardRoom.id, messageId: cardMessage.id, cardId: 'followup', revision: 1, values: { detail: 'NATIVE_FORM_ANSWER' } }
+      const submittedId = await service.submitCard(submission)
+      assert.equal(await service.submitCard(submission), submittedId)
+      assert.equal((await settled(cardRoom.id)).messages.filter(item => item.id === submittedId).length, 1)
+      assert.ok(JSON.stringify(requests.at(-1)).includes('NATIVE_FORM_ANSWER'))
+      assert.ok((await service.exportChat({ roomId: cardRoom.id, format: 'markdown' })).includes('Native form fixture'))
       const owner = await service.createBot({ id: 'access-owner', name: 'Access owner', instructions: 'Use only granted capabilities.' })
       const outsider = await service.createBot({ id: 'access-outsider', name: 'Access outsider', instructions: 'No capability grants.' })
       const ownerRoom = await service.openDirect(owner.id), otherRoom = await service.openDirect(outsider.id)
@@ -334,6 +346,8 @@ createInterface({input:process.stdin}).on('line', line=>{
       assert.equal(requests.length, beforeRevoked, 'A missing credential blocks MCP activation before a model call')
       await service.saveBotCredential({ name: 'FIXTURE_TOKEN', description: 'Restored scoped fixture', value: 'ONLY_GRANTED_FIXTURE_TOKEN_123', botIds: [owner.id], shellBotIds: [owner.id] })
     } else if (process.env.BOT_TEST_PHASE === 'resume') {
+      const cards = service.snapshot().rooms.find(room => room.defaultBot === 'card-bot')!.messages.flatMap(message => message.cards ?? [])
+      assert.equal(cards[0]!.submitted!.values.detail, 'NATIVE_FORM_ANSWER')
       assert.ok((await service.accessCatalog()).credentials.some(item => item.name === 'FIXTURE_TOKEN' && item.configured))
       const room = service.snapshot().rooms.find(room => room.kind === 'dm' && room.defaultBot === 'access-owner')!
       await service.send({ roomId: room.id, text: 'ACCESS_TOOL_FIXTURE after restart.' })

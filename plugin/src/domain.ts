@@ -8,6 +8,7 @@ import { memorySchema } from './memory.ts'
 import { usageLedgerSchema } from './usage-ledger.ts'
 import { suggestionSchema } from './memory-governance.ts'
 import { accessSchema } from './access-state.ts'
+import { cardSchema } from './cards.ts'
 
 const botId = z.string().transform(brandString<BotId>)
 const messageId = z.string().transform(brandString<ChatMessageId>)
@@ -23,6 +24,7 @@ export const attachmentSchema = z.object({ type: z.enum(['image', 'file']), atta
 const questionItem = z.object({ id: z.string(), question: z.string(), detail: z.string().optional(), header: z.string().optional(), options: z.array(z.object({ label: z.string(), description: z.string().optional() })).optional(), multiSelect: z.boolean().optional() })
 const answerSchema = z.object({ answers: z.array(z.object({ id: z.string(), selected: z.array(z.string()), custom: z.string().optional() })) })
 export const messageSchema = z.object({ id: messageId, botId: botId.nullable(), text: z.string(),
+      cards: z.array(cardSchema).max(8).optional(),
       replyTo: messageId.nullable(), status: z.enum(['complete', 'queued', 'running', 'failed', 'canceled', 'interrupted']),
       error: z.string().nullable(), time: z.number(), external: externalMessage.optional(), allowDelegation: z.boolean().optional(),
       delegation: z.object({ rootId: messageId, task: z.string() }).optional(),

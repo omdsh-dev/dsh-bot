@@ -52,6 +52,23 @@ async function bench(overrides: Partial<PanelFace> = {}, infoflowVisible = false
   return { face, model, room, rooms, bots }
 }
 
+it('renders card text without HTML execution and submits form values to the original message once', async () => {
+  const submitCard = vi.fn(async () => 'new-human-message')
+  const b = await bench({ capabilities: { submitCard } as unknown as CapabilityFace })
+  b.room.messages[1]!.cards = [
+    { id: 'metric', revision: 1, content: { kind: 'metric', title: 'Result', value: '<img src=x onerror=alert(1)>' } },
+    { id: 'form', revision: 2, content: { kind: 'form', title: 'Next step', submitLabel: 'Confirm details', fields: [{ name: 'detail', label: 'Your detail', type: 'text', required: true }] } },
+  ]
+  b.model.replace({ bots: b.bots, rooms: b.rooms })
+  const form = await screen.findByRole('region', { name: 'Next step' })
+  expect(screen.getByText('<img src=x onerror=alert(1)>').querySelector('img')).toBeNull()
+  fireEvent.change(within(form).getByRole('textbox', { name: 'Your detail *' }), { target: { value: 'Proceed with A' } })
+  fireEvent.click(within(form).getByRole('button', { name: 'Confirm details' }))
+  await within(form).findByRole('button', { name: 'Submitted' })
+  expect(submitCard).toHaveBeenCalledExactlyOnceWith({ roomId: 'studio', messageId: 'answer', cardId: 'form', revision: 2, values: { detail: 'Proceed with A' } })
+  expect(within(form).getByRole('textbox').closest('fieldset')!.disabled).toBe(true)
+})
+
 it('opens usage from the sidebar, filters full Host totals and opens budget controls without losing the draft', async () => {
   const read = vi.fn(async () => report)
   const capabilities = { usageReport: read, catalog: async () => ({ providers: [], tools: [] }) } as unknown as CapabilityFace

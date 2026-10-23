@@ -27,6 +27,7 @@ export function exportRoom(room: Room, format: 'json' | 'markdown'): string {
   return `# ${room.title}\n\n` + room.messages.map(message =>
     `## ${message.botId ? '@' + message.botId : message.external?.sender.name ?? 'User'} · ${new Date(message.time).toISOString()} · ${message.status}\n\n${message.text}\n`
     + (message.attachments ?? []).map(item => `\nAttachment: ${JSON.stringify(item.attachment.name)} (${item.type}, ${item.attachment.bytes} bytes, ${item.attachment.attachmentId})\n`).join('')
+    + (message.cards ?? []).map(card => `\nCard:\n\n\`\`\`json\n${JSON.stringify(card, null, 2)}\n\`\`\`\n`).join('')
     + (message.error ? `\nError: ${message.error}\n` : ''),
   ).join('\n')
 }

@@ -55,7 +55,9 @@
     "src/chat-index.ts",
     "src/access-types.ts",
     "src/access-state.ts",
-    "src/access-runtime.ts"
+    "src/access-runtime.ts",
+    "src/card-types.ts",
+    "src/cards.ts"
   ],
   "references": [
     {

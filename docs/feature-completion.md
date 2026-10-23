@@ -10,13 +10,13 @@ The complete follow-up is in progress. Checkboxes below mean implemented **and v
 - [x] Memory semantic duplicate/conflict review, merge suggestions and scoped context invalidation.
 - [x] Per-response recall evidence, context occupancy, segments and handoff inspection.
 - [x] Per-Bot MCP, skills and credential capability grants/revocation.
-- [ ] Safe declarative metric/table/progress/form cards.
+- [x] Safe declarative metric/table/progress/form cards.
 - [ ] Main Bot team-management tools with explicit operator-granted authority.
 - [x] Context steward decisions using public native compaction/rotation seams.
 - [ ] macOS/Windows regression matrix, container packaging, desktop entry and isolated browser capability.
 - [ ] Final source/package checks, push, release and live Feishu media/inbound acceptance.
 
-Current checkpoint: 225 source tests across 27 files and the launcher passed. Per-Bot grants passed real native MCP process/skill scope, shell variable selection, revocation, redaction and restart checks, plus DSH 0.2 Desktop/Web/shipped-client archive checks. History/index and queued-result callback changes passed native DSH 0.2 Desktop restart, authenticated Web, shipped-client and IM delegation package checks. The prior usage/memory checkpoint also passed DSH 0.1.5 Host/client checks. macOS/Windows CI jobs are configured; remote results remain pending.
+Current checkpoint: 229 source tests across 28 files and the launcher passed. Per-Bot grants passed real native MCP process/skill scope, shell variable selection, revocation, redaction and restart checks, plus DSH 0.1.5 and 0.2 Desktop/Web/shipped-client archive checks. Declarative cards passed native tool/form/restart, atomic duplicate-submission and client rendering checks. History/index and queued-result callback changes passed native DSH 0.2 Desktop restart, authenticated Web, shipped-client and IM delegation package checks. The prior usage/memory checkpoint also passed DSH 0.1.5 Host/client checks. macOS/Windows CI jobs are configured; remote results remain pending.
 
 Legacy accounting metadata that was never saved remains unknown. Live platform acceptance requires actual tenant access; offline tests do not establish it.
 

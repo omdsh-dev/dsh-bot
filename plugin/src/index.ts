@@ -4,6 +4,8 @@ import { isDeepStrictEqual } from 'node:util'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import { accessState, credentialRequest, removeAccess, saveCapability as saveCapabilityState } from './access-state.ts'
 import { CapabilityRuntime } from './access-runtime.ts'
+import { formValues, installCardTool } from './cards.ts'
+import type { SubmitCardRequest } from './card-types.ts'
 import type { AccessRemoval, AccessView, BotCapability, SaveCapability, SaveBotCredential } from './access-types.ts'
 import { PermanentChatError } from './external-errors.ts'
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -1175,6 +1177,29 @@ export class BotMode extends TypertRemoteService {
     return user
   }
 
+  @Remote async submitCard(request: SubmitCardRequest): Promise<string> {
+    const result = await this.change(async state => {
+      const room = await this.historyRoom(state, request.roomId), message = findMessage(room, request.messageId)
+      const card = message.cards?.find(item => item.id === request.cardId)
+      if (!card || card.revision !== request.revision) throw new Error('This form changed; reload it before submitting')
+      const values = formValues(card, request.values)
+      if (card.submitted) {
+        if (!isDeepStrictEqual(card.submitted.values, values)) throw new Error('This form has already been submitted')
+        return { id: card.submitted.messageId, attempts: [] }
+      }
+      if (this.closing || room.archived || room.deleted || message.status !== 'complete' || !message.botId || room.external && !isExternalGroup(room)) throw new Error('This form is unavailable in the current chat')
+      const appended = this.append(state, room, { roomId: room.id, replyTo: message.id, targets: [message.botId],
+        text: `Submitted form: ${card.content.title}\n${JSON.stringify(values)}`, allowDelegation: false })
+      const queued = room.messages.some(item => item.status === 'running' && !appended.attempts.some(attempt => attempt.id === item.id) || item.status === 'queued')
+      if (queued) for (const attempt of appended.attempts) attempt.status = 'queued'
+      if (room.external) for (const item of [appended.user, ...appended.attempts]) item.localOnly = true
+      card.submitted = { messageId: appended.user.id, values, time: Date.now() }
+      return { id: appended.user.id, attempts: appended.attempts }
+    })
+    for (const attempt of result.attempts) if (attempt.status === 'running') this.launch(request.roomId, attempt)
+    return result.id
+  }
+
   private append(state: BotState, room: Room, request: SendRequest, external?: ExternalSendRequest['external']) {
     if ((!request.text.trim() && !request.attachments?.length) || request.text.length > 32000) throw new Error('Message must contain text or attachments, at most 32000 characters')
     if (room.deleted || room.archived) throw new PermanentChatError('Chat is archived or deleted')
@@ -1571,6 +1596,16 @@ export class BotMode extends TypertRemoteService {
         if (this.canceled(run) || deadline.signal.aborted || delivery.status !== 'running') throw new Error('This delivery has ended')
         return { current, delivery, human: humanRequest(current, delivery)! }
       }
+      cleanup.push(installCardTool(agent, (id, content) => this.change(async state => {
+        knowledgeContext()
+        if (ownTurn < 0) throw new Error('No active human delivery')
+        const delivery = findMessage(this.room(state, roomId), attempt.id), previous = delivery.cards?.find(card => card.id === id)
+        if (previous?.submitted) throw new Error('A submitted card cannot change')
+        if (!previous && (delivery.cards?.length ?? 0) >= 8) throw new Error('A response supports at most eight cards')
+        const revision = (previous?.revision ?? 0) + 1
+        delivery.cards = [...(delivery.cards ?? []).filter(card => card.id !== id), { id, revision, content }]
+        return { id, revision, status: 'displayed' }
+      })))
       cleanup.push(installKnowledgeTools(agent, {
         search: async query => {
           const { current } = knowledgeContext()

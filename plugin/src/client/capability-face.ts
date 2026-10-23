@@ -5,6 +5,7 @@ import type { AttachmentRequest, AttachmentData, CapabilityCatalog, QuestionAnsw
 import type { Memory, MemoryAction, MemoryCatalog, MemoryListRequest, MemoryPreviewRequest, MemorySelection, SaveMemoryRequest } from '../memory-types.ts'
 import type { AnalyzeMemoriesRequest, MemoryGovernanceView, ResolveMemorySuggestion } from '../memory-types.ts'
 export interface CapabilityFace {
+  submitCard(request: import('../card-types.ts').SubmitCardRequest): Promise<string>
   accessCatalog(): Promise<import('../access-types.ts').AccessView>
   saveCapability(request: import('../access-types.ts').SaveCapability): Promise<import('../access-types.ts').BotCapability>
   saveBotCredential(request: import('../access-types.ts').SaveBotCredential): Promise<void>

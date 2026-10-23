@@ -42,7 +42,9 @@
     "src/client/MemoryGovernance.tsx",
     "src/client/ContextInspector.tsx",
     "src/access-types.ts",
-    "src/client/AccessControls.tsx"
+    "src/client/AccessControls.tsx",
+    "src/card-types.ts",
+    "src/client/Cards.tsx"
   ],
   "references": [
     {

@@ -12,6 +12,7 @@ import { ContextInspector } from './ContextInspector.tsx'
 import { VoiceInput } from './VoiceInput.tsx'
 import { AttachmentView } from './Attachments.tsx'
 import { Questions } from './Questions.tsx'
+import { CardView } from './Cards.tsx'
 import type { CapabilityFace } from './capability-face.ts'
 import type { ModelSnapshot } from './model.ts'
 import type { createBotViewStore } from './view-store.ts'
@@ -246,6 +247,7 @@ export function BotPanel(props: Props) {
                         <span>{quoted.text.slice(0, 140)}</span></div>}
                       {message.text && (own ? <div className={css.body}>{message.text}</div>
                         : <MarkdownText text={message.text} labels={labels} />)}
+                      {props.capabilities && message.cards?.map(card => <CardView key={`${card.id}:${card.revision}`} card={card} roomId={room.id} messageId={message.id} face={props.capabilities!} enabled={message.status === 'complete' && !room.archived && !room.deleted && (!room.external || room.kind === 'group')} english={t('you') === 'You'}/>)}
                       {message.attachments?.map(item => props.capabilities ? <AttachmentView key={item.attachment.attachmentId} item={item} face={props.capabilities} request={{ roomId: room.id, messageId: message.id, attachmentId: item.attachment.attachmentId }}/> : <p key={item.attachment.attachmentId}>📎 {item.attachment.name}</p>)}
                       {message.toolDetails?.map((tool, index) => <details className={css.toolDetails} key={index}><summary>{tool.name}</summary><pre>{tool.arguments}</pre>{tool.result && <pre>{tool.result}</pre>}</details>)}
                       {!own && props.capabilities?.contextView && <ContextInspector face={props.capabilities} request={{ roomId: room.id, messageId: message.id }} english={t('you') === 'You'}/>}

@@ -5,6 +5,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { Memory, MemorySuggestion } from './memory-types.ts'
 import type { UsageLedger } from './usage-types.ts'
 import type { AccessState } from './access-types.ts'
+import type { ChatCard } from './card-types.ts'
 export type * from './memory-types.ts'
 
 /** Stable, case-insensitive Bot handle. */
@@ -63,6 +64,7 @@ export interface ChatMessage {
   delegation?: { rootId: ChatMessageId; task: string } | undefined
   executionSessionId?: SessionId | undefined
   context?: ContextTrace | undefined
+  cards?: ChatCard[] | undefined
   requestedTasks?: { botId: BotId; task: string }[] | undefined
   awaiting?: ChatMessageId[] | undefined
   continuedBy?: ChatMessageId | undefined
@@ -200,4 +202,5 @@ export interface CapabilityCatalog { providers: { id: string; models: { id: stri
 export type * from './knowledge-types.ts'
 export type * from './usage-types.ts'
 export type * from './access-types.ts'
+export type * from './card-types.ts'
 export type { UsageReport, UsageBudget, BotUsageRow, UsageTotals } from './usage.ts'
