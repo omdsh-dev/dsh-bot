@@ -11,7 +11,8 @@ run(process.execPath, ['scripts/setup.mjs', '--prepare-only'], { cwd: root })
 // Delete only this plugin's generated output, including incremental build metadata.
 rmSync(join(runtime, pluginPath, 'lib'), { recursive: true, force: true })
 runTool('tsc', ['-b', `${pluginPath}/tsconfig.host.json`])
-runTool('tsdown', ['--env.DSH_BUILD_FACE', 'host', '--filter', pluginPath, '--logLevel', 'warn'])
+// tsdown compares its filter with path.relative(), which uses native separators.
+runTool('tsdown', ['--env.DSH_BUILD_FACE', 'host', '--filter', join(...pluginPath.split('/')), '--logLevel', 'warn'])
 const { WorkspaceTypertGenerator } = await import(pathToFileURL(join(runtime, 'packages/typert/generator/lib/types/index.js')).href)
 const generator = new WorkspaceTypertGenerator(runtime, { checkDiagnostics: false })
 // DSH 0.1 reads codec.schema; DSH 0.2 uses codec.create(). Share the generated,
@@ -29,7 +30,7 @@ for (const artifact of generator.generate(['@deepseek-ai/dsh-experimental-bot-mo
   }
 }
 runTool('tsc', ['-b', `${pluginPath}/tsconfig.client.json`])
-runTool('tsdown', ['--env.DSH_BUILD_FACE', 'client', '--filter', pluginPath, '--logLevel', 'warn'])
+runTool('tsdown', ['--env.DSH_BUILD_FACE', 'client', '--filter', join(...pluginPath.split('/')), '--logLevel', 'warn'])
 // Full setup also type-checks tests. Keep incremental local builds on the same gate.
 runTool('tsc', ['-b', 'tsconfig.host.json', 'tsconfig.client.json'])
 // Bundler region comments can include absolute virtual CSS module paths.
