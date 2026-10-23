@@ -4,6 +4,7 @@ import { defineDomain } from '@deepseek-ai/dsh-storage-domain'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { BotId, RoomId, ChatMessageId, BotState } from './types.ts'
+import { memorySchema } from './memory.ts'
 
 const botId = z.string().transform(brandString<BotId>)
 const messageId = z.string().transform(brandString<ChatMessageId>)
@@ -21,10 +22,16 @@ const answerSchema = z.object({ answers: z.array(z.object({ id: z.string(), sele
 export const messageSchema = z.object({ id: messageId, botId: botId.nullable(), text: z.string(),
       replyTo: messageId.nullable(), status: z.enum(['complete', 'queued', 'running', 'failed', 'canceled', 'interrupted']),
       error: z.string().nullable(), time: z.number(), external: externalMessage.optional(), allowDelegation: z.boolean().optional(),
-      delegation: z.object({ rootId: messageId, task: z.string() }).optional(), localOnly: z.boolean().optional(),
+      delegation: z.object({ rootId: messageId, task: z.string() }).optional(),
+      executionSessionId: z.string().transform(SessionId).optional(), requestedTasks: z.array(z.object({ botId, task: z.string() })).optional(), awaiting: z.array(messageId).optional(), continuedBy: messageId.optional(), continuationOf: messageId.optional(), resultIds: z.array(messageId).optional(), collaborationCanceled: z.boolean().optional(), localOnly: z.boolean().optional(),
       attachments: z.array(attachmentSchema).max(8).optional(), questions: z.array(z.object({ id: z.string(), callId: z.string(), questions: z.array(questionItem) })).optional(), questionReply: z.object({ callId: z.string(), questions: z.array(questionItem), answer: answerSchema }).optional(), toolDetails: z.array(z.object({ name: z.string(), arguments: z.string(), result: z.string().optional() })).optional(), usage: usage.optional(), scheduleId: z.string().optional(), publishExternal: z.boolean().optional(), notifyBot: botId.optional() })
 const budgetSchema = z.object({ tokenLimit: z.number().nonnegative(), costLimit: z.number().nonnegative(), currency: z.string(), used: usage, since: z.number(), period: z.enum(['never', 'day', 'month']).optional(), reservationTokens: z.number().nonnegative().optional(), reservationCost: z.number().nonnegative().optional() })
 const schema: z.ZodType<BotState> = z.object({
+  memories: z.array(memorySchema).optional(), memoryChunks: z.array(z.string()).optional(), retiredMemoryChunks: z.array(z.string()).optional(), memoryEpoch: z.number().int().nonnegative().optional(),
+  knowledgeSettings: z.object({ reviewEnabled: z.boolean() }).optional(),
+  userIdentities: z.array(z.object({ id: z.string(), name: z.string(), aliases: z.array(z.string()) })).optional(),
+  maintenanceUsage: z.array(z.object({ botId: z.string(), purpose: z.enum(['memory', 'handoff']), input: z.number(), output: z.number(), cost: z.number(), calls: z.number() })).optional(),
+  memoryReviews: z.array(z.object({ id: z.string(), roomId: z.string(), messageId: z.string(), botId: z.string(), status: z.enum(['pending', 'running', 'complete', 'failed', 'skipped']), attempts: z.number().int().nonnegative(), nextAt: z.number(), createdAt: z.number(), finishedAt: z.number().optional(), error: z.string().optional(), candidates: z.number().optional() })).optional(),
   infoflowVisible: z.boolean().optional(),
   retiredBotIds: z.array(botId).optional(),
   budget: budgetSchema.optional(),
@@ -42,7 +49,7 @@ const schema: z.ZodType<BotState> = z.object({
     external: externalConversation.optional(),
     aliases: z.array(z.string().transform(brandString<RoomId>)).optional(),
     archived: z.boolean().optional(), deleted: z.boolean().optional(),
-    members: z.array(z.object({ botId, sessionId: z.string().transform(SessionId), cursor: z.number().int().nonnegative() })),
+    members: z.array(z.object({ botId, sessionId: z.string().transform(SessionId), cursor: z.number().int().nonnegative(), segments: z.array(z.object({ sessionId: z.string(), endedAt: z.number(), reason: z.string() })).optional(), handoff: z.string().optional(), memoryEpoch: z.number().int().nonnegative().optional() })),
     historyChunks: z.array(z.string()).optional(),
     messages: z.array(messageSchema),
   })),

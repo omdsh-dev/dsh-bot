@@ -110,10 +110,11 @@
 .composer textarea { display: block; box-sizing: border-box; width: 100%; min-height: 58px; max-height: 180px; field-sizing: content; resize: none; padding: 0 2px 10px; border: 0; background: none; color: var(--dsw-alias-label-primary); font: 14px/25px var(--dsw-font-family); outline: none; }
 .composer:focus-within { --dsw-elevation-stroke-color: var(--dsw-alias-border-l1); }
 .composer textarea::placeholder { color: var(--dsw-alias-label-tertiary); }
-.composerTools { display: flex; justify-content: space-between; align-items: center; }
-.composerTools > button { color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 18px; }
+.composerTools { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.composerActions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.composerActions > button { color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 18px; }
 .atMark { font-size: 17px; line-height: 20px; }
-.sendTools { display: flex; align-items: center; gap: 12px; }
+.sendTools { flex-shrink: 0; display: flex; align-items: center; gap: 12px; }
 .sendTools > span { color: var(--dsw-alias-label-tertiary); font-size: 10px; line-height: 16px; }
 .sendTools > button { width: 33px; min-width: 33px; height: 33px; border-radius: 50%; corner-shape: round; }
 .composerHint { font-size: 10px; line-height: 18px; color: var(--dsw-alias-label-tertiary); text-align: center; margin: 10px 0 0; }
@@ -139,7 +140,7 @@
 .infoActions { display: flex; flex-wrap: wrap; gap: 8px; }
 .infoMembers p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 22px; color: var(--dsw-alias-label-secondary); margin: 12px 0 8px; }
 .infoMembers button { font-size: 11px; color: var(--dsw-alias-label-secondary); }
-.dialog { width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); }
+.dialog { width: min(480px, 100%); max-height: 100%; font: 13px/20px var(--dsw-font-family); }
 .dialogContent { min-height: 0; overflow-y: auto; }
 .form { color: var(--dsw-alias-label-primary); font: 13px/20px var(--dsw-font-family); }
 .form label { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
@@ -160,7 +161,7 @@
 .member > span:not(.avatar) { display: flex; flex-direction: column; gap: 1px; }
 .member input { margin-left: auto; accent-color: var(--dsw-alias-button-primary-fill); }
 .error { margin: 12px 16px; padding: 10px 14px; color: var(--dsw-alias-state-error-primary); background: var(--dsw-alias-bg-layer-1); border-radius: 10px; font-size: 12px; line-height: 20px; overflow-wrap: anywhere; }
-.root button:focus-visible, .root textarea:focus-visible, .dialog :is(input, textarea, select, summary):focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 3px; }
+.root :is(button, input, textarea, select, summary, a):focus-visible, .dialog :is(button, input, textarea, select, summary, a):focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 3px; }
 @keyframes breathe { 0%, 80%, 100% { opacity: 0.35; } 40% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .thinkingDots i { animation: none; } .messageActions, .chat { transition: none; } }
 @media (hover: none) { .messageActions { opacity: 1; } }
@@ -212,13 +213,69 @@
 @container infoflow-config (max-width: 720px) { .integrationBody { grid-template-columns: minmax(0, 1fr); gap: 20px; }.integrationBots { flex-direction: row; overflow-x: auto; }.integrationBots > button { min-width: 160px; }.integrationEditor { max-width: none; } }
 @container infoflow-config (max-width: 420px) { .formGrid { grid-template-columns: 1fr; gap: 0; }.integrationIdentity { gap: 8px; flex-wrap: wrap; } }
 
-.controls { display: grid; gap: 16px; min-width: 0; max-height: 70vh; overflow: auto; }
-.controls nav, .inputOptions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.controls section { display: grid; gap: 12px; }
-.controls label { display: grid; gap: 6px; }
-.controls textarea, .controls select { padding: 8px; border: 1px solid var(--border-color, #8885); border-radius: 6px; background: transparent; color: inherit; }
-.controls textarea { min-height: 80px; }
-.controls article { border-bottom: 1px solid #8883; padding: 10px 0; }
-.controls article pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
-.inputOptions { padding: 8px 20px; font-size: 12px; }
-.inputOptions input[type=file] { max-width: 230px; }
+/* New capabilities share the original chat's quiet surfaces and native controls. */
+.archiveToggle { display: flex; align-items: center; gap: 8px; margin: -4px 8px 16px; color: var(--dsw-alias-label-tertiary); font-size: 11px; cursor: pointer; }
+.rosterUtilities { display: grid; gap: 4px; margin: 8px 4px 0; }
+.rosterUtilities > button { justify-content: flex-start; height: auto; min-height: 32px; padding: 6px 10px; text-align: left; white-space: normal; font-size: 11px; line-height: 18px; color: var(--dsw-alias-label-secondary); border-radius: 10px; }
+.rosterUtilities > button[aria-pressed='true'] { background: var(--dsw-alias-interactive-bg-active); color: var(--dsw-alias-label-primary); }
+.archiveToggle input, .inputOptions input, .checkOption input, .questionOption input { margin: 0; flex: 0 0 auto; width: 14px; height: 14px; accent-color: var(--dsw-alias-state-business-primary); }
+.loadEarlier { align-self: center; margin: 16px 0 8px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.inputOptions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; padding: 10px 2px 2px; border-top: 0.5px solid var(--bot-line); font: 11px/18px var(--dsw-font-family); color: var(--dsw-alias-label-secondary); }
+.inputOptions label { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+.inputOptions > span { flex-basis: 100%; color: var(--dsw-alias-label-tertiary); }
+.composerActions > .voiceButton[aria-pressed='true'] { color: var(--dsw-alias-state-error-primary); background: var(--dsw-alias-interactive-bg-hover); }
+.pendingAttachments { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; max-height: 132px; overflow-y: auto; }
+.attachmentChip { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; padding: 3px 4px 3px 9px; border: 0.5px solid var(--bot-line); border-radius: 10px; background: var(--bot-soft); color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.attachmentChip > svg { flex-shrink: 0; }
+.attachmentChip > span { min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachmentChip > button { flex-shrink: 0; }
+.attachment { margin-top: 10px; min-width: 0; }
+.attachmentPreview { display: block; width: fit-content; max-width: 100%; margin-bottom: 8px; }
+.attachmentPreview img { display: block; max-width: 100%; max-height: 320px; border-radius: 12px; }
+.attachmentDownload { justify-content: flex-start; max-width: 100%; height: auto; min-height: 36px; padding: 8px 12px; border-radius: 10px; font-size: 12px; text-align: left; }
+.attachmentDownload > span:nth-child(2) { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.attachmentDownload > small { flex-shrink: 0; font-size: 10px; color: var(--dsw-alias-label-tertiary); }
+.attachment p { font-size: 12px; line-height: 20px; }
+.toolDetails, .executionStatus, .questions { margin: 12px 0; padding: 14px 16px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 12px; font: 12px/20px var(--dsw-font-family); }
+.toolDetails summary { cursor: pointer; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
+.toolDetails pre, .executionStatus pre, .questions pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font: 12px/20px var(--dsw-font-family); }
+.executionStatus > span { color: var(--dsw-alias-label-secondary); }
+.executionStatus p { margin: 8px 0; }
+.questions legend { font-weight: 600; line-height: 22px; }
+.questions .questionOption { flex-direction: row; align-items: flex-start; gap: 10px; padding: 10px 12px; margin-bottom: 6px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 10px; cursor: pointer; }
+.questionOption:has(input:checked), .questionOption:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.questionOption input { margin-top: 3px; }
+.questionOption > span { min-width: 0; overflow-wrap: anywhere; }
+.questionOption small { display: block; margin-top: 3px; }
+.questions fieldset > label:last-child { margin: 14px 0 0; }
+.questions textarea { min-height: 70px; }
+.controlsDialog { width: min(680px, 100%); }
+.controls { display: grid; gap: 20px; min-width: 0; color: var(--dsw-alias-label-primary); font: 13px/20px var(--dsw-font-family); }
+.controls nav { display: flex; flex-wrap: wrap; gap: 4px; padding: 5px; background: var(--dsw-alias-bg-module-platform); border-radius: 12px; }
+.controls nav > button { flex: 1 0 auto; font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.controls nav > button[aria-pressed='true'] { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-base); box-shadow: var(--dsw-elevation-soft); font-weight: 600; }
+.controls section { display: grid; gap: 16px; min-width: 0; }
+.controls label { display: grid; gap: 8px; min-width: 0; }
+.controls textarea, .controls select { width: 100%; min-width: 0; padding: 10px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 10px; background: var(--dsw-alias-button-elevated-fill); color: var(--dsw-alias-label-primary); font: inherit; }
+.controls textarea { min-height: 88px; resize: vertical; }
+.controls p { margin: 0; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 21px; overflow-wrap: anywhere; }
+.controls article { min-width: 0; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 12px; padding: 14px 16px; font-size: 12px; overflow-wrap: anywhere; }
+.controls article strong { font-weight: 600; }
+.controls article pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font: 12px/21px var(--dsw-font-family); margin: 10px 0; color: var(--dsw-alias-label-secondary); }
+.controls section > button { justify-self: start; }
+.controlActions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.controls article .controlActions { margin-top: 12px; }
+.controls .checkOption { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; cursor: pointer; }
+.checkOption input { margin-top: 3px; }
+.controls details { padding: 12px; background: var(--dsw-alias-bg-module-platform); border-radius: 10px; }
+.controls details summary { cursor: pointer; font-size: 12px; }
+.controls details[open] > summary { margin-bottom: 12px; }
+.controls details .checkOption + .checkOption { margin-top: 10px; }
+.weekdays { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+.controls .dangerButton, .controls .controlError, .questions [role='alert'], .attachment [role='alert'] { color: var(--dsw-alias-state-error-primary); }
+.controls .controlError { padding: 10px 14px; background: var(--dsw-alias-bg-module-platform); border-radius: 10px; }
+@container bot-mode (max-width: 620px) { .integrationPage { padding: 24px 16px; }.integrationHeader { gap: 12px; }.integrationHeader h2 { font-size: 21px; }.integrationGroups article { flex-wrap: wrap; gap: 8px; }.composerActions { gap: 2px; } }
+@media (max-width: 520px) { .dialog .formGrid { grid-template-columns: minmax(0, 1fr); gap: 0; }.controls nav > button { flex-basis: calc(50% - 4px); }.controlActions { gap: 6px; }.controls article { padding: 12px; } }
+.memoryCard { display: flex; flex-direction: column; gap: 8px; overflow-wrap: anywhere; }
+.memoryCard p { white-space: pre-wrap; }
+.memoryCard small { opacity: .7; }

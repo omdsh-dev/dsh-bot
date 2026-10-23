@@ -1,7 +1,7 @@
 /** All Bot Mode product copy, owned by the plugin. */
 export const zh = {
   syncMessage: '同步本条文字与 Bot 回复到群', syncHint: '本条文字和 Bot 回复将同步到 IM 群；附件仅在 DSH 中可见。', recordVoice: '录制语音', stopRecording: '停止并转写', queued: '排队中', showArchived: '显示归档聊天', capabilities: '聊天与执行管理', loadEarlier: '加载更早消息',
-  allowOnce: '允许一次', reject: '拒绝', allowDelegation: '允许 Bot 在群内派活', attach: '图片 / 文件 / 语音',
+  allowOnce: '允许一次', reject: '拒绝', allowDelegation: '允许 Bot 在群内派活', attach: '图片 / 文件 / 语音', removeAttachment: '移除附件',
   attachmentLimit: '每条消息最多 8 个附件、总计 20 MiB', queueHint: '正在执行，新消息将排队',
   imTitle: 'IM 接入', imConfiguration: '连接配置', imPlatforms: 'IM 平台',
   imSubtitle: '统一管理各平台的机器人绑定、连接状态和群聊接入。',
@@ -146,7 +146,7 @@ export type BotKey = keyof typeof zh
 /** Complete English counterpart. */
 export const en = {
   syncMessage: 'Sync this text and Bot replies to the group', syncHint: 'This text and Bot replies will be sent to the IM group. Attachments remain in DSH.', recordVoice: 'Record voice', stopRecording: 'Stop and transcribe', queued: 'Queued', showArchived: 'Show archived chats', capabilities: 'Chat & execution controls', loadEarlier: 'Load earlier messages',
-  allowOnce: 'Allow once', reject: 'Reject', allowDelegation: 'Allow Bot handoffs in this group', attach: 'Images / files / audio',
+  allowOnce: 'Allow once', reject: 'Reject', allowDelegation: 'Allow Bot handoffs in this group', attach: 'Images / files / audio', removeAttachment: 'Remove attachment',
   attachmentLimit: 'At most 8 attachments and 20 MiB per message', queueHint: 'Running; new messages will be queued',
   imTitle: 'IM connections', imConfiguration: 'Connection settings', imPlatforms: 'IM platforms',
   imSubtitle: 'Manage robot bindings, connections and group access across platforms.',

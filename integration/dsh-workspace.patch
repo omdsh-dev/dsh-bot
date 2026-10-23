@@ -1,8 +1,8 @@
 diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
-index 6c7ce04..ba239c7 100644
+index 6c7ce04..cdbd79c 100644
 --- a/pnpm-lock.yaml
 +++ b/pnpm-lock.yaml
-@@ -7421,6 +7421,112 @@ importers:
+@@ -7421,6 +7421,115 @@ importers:
          specifier: workspace:*
          version: link:../../interaction/user-approval
 
@@ -93,6 +93,9 @@ index 6c7ce04..ba239c7 100644
 +      '@deepseek-ai/dsh-system-prompt':
 +        specifier: workspace:*
 +        version: link:../../core/system-prompt
++      '@deepseek-ai/dsh-tools':
++        specifier: workspace:*
++        version: link:../../core/tools
 +      '@deepseek-ai/dsh-typert-protocol':
 +        specifier: workspace:*
 +        version: link:../../typert/protocol

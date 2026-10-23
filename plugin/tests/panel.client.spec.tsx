@@ -51,6 +51,29 @@ async function bench(overrides: Partial<PanelFace> = {}, infoflowVisible = false
   return { face, model, room, rooms, bots }
 }
 
+it('manages scoped memories and previews recall through the controls panel', async () => {
+  const candidate = { id: 'memory', revision: 1, scope: 'global', ownerId: '*', kind: 'preference', subject: 'response', topic: 'language', body: 'Use Chinese', status: 'pending', access: 'scope', source: { kind: 'operator', evidence: 'confirmed request' }, createdAt: 100, updatedAt: 100 }
+  const memoryAction = vi.fn(async () => {}), saveMemory = vi.fn(async () => candidate)
+  const listMemories = vi.fn(async () => [candidate]), previewMemories = vi.fn(async () => ({ records: [], conflicts: [], omitted: 0, text: '' }))
+  const capabilities = { catalog: async () => ({ providers: [], tools: [] }), memoryCatalog: async () => ({ users: [{ id: 'local:operator', name: 'Local operator' }] }), listMemories, memoryAction, saveMemory, previewMemories } as unknown as CapabilityFace
+  await bench({ capabilities })
+  fireEvent.click(screen.getByRole('button', { name: 'Chat & execution controls' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Memory' }))
+  await waitFor(() => expect(screen.getByText('Use Chinese')).toBeTruthy())
+  fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+  await waitFor(() => expect(memoryAction).toHaveBeenCalledWith({ id: 'memory', revision: 1, action: 'approve' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Edit / share' }).hasAttribute('disabled')).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: 'Edit / share' }))
+  fireEvent.change(screen.getByRole('textbox', { name: 'Memory content' }), { target: { value: 'Use short Chinese paragraphs' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save & activate' }))
+  await waitFor(() => expect(saveMemory).toHaveBeenCalledWith(expect.objectContaining({ id: 'memory', revision: 1, body: 'Use short Chinese paragraphs', share: false })))
+  fireEvent.click(screen.getByText('Preview recall for this chat'))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Preview' }).hasAttribute('disabled')).toBe(false))
+  fireEvent.change(screen.getByRole('textbox', { name: 'Recall query' }), { target: { value: 'language' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Preview' }))
+  await waitFor(() => expect(previewMemories).toHaveBeenCalledWith({ roomId: 'studio', botId: 'sage', userId: 'local:operator', query: 'language' }))
+})
+
 it('keeps the composer available during execution and sends an explicit web delegation choice', async () => {
   const unused = vi.fn(async () => undefined)
   const capabilities = { catalog: async () => ({ providers: [], tools: [] }), openDirect: unused, history: unused, exportChat: unused, lifecycle: unused, configureBudget: unused,
@@ -100,7 +123,7 @@ it('does not attach a late upload to a different chat after navigation', async (
   const capabilities = { catalog: async () => ({ providers: [], tools: [] }), openDirect: unused, history: unused, exportChat: unused, lifecycle: unused, configureBudget: unused,
     upload, decideApproval: unused, saveSchedule: unused, deleteSchedule: unused, failures: unused, resolveFailure: unused } as unknown as CapabilityFace
   const b = await bench({ capabilities })
-  fireEvent.change(screen.getByLabelText(en.attach), { target: { files: [new File(['hello'], 'private-notes.txt', { type: 'text/plain' })] } })
+  fireEvent.change(screen.getByLabelText(en.attach, { selector: 'input' }), { target: { files: [new File(['hello'], 'private-notes.txt', { type: 'text/plain' })] } })
   await waitFor(() => expect(upload).toHaveBeenCalledOnce())
   const roster = screen.getByRole('complementary', { name: en.chats })
   fireEvent.click(within(roster).getByRole('button', { name: /Nova\s*@nova/ }))

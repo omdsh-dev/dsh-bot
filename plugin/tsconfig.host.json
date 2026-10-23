@@ -35,7 +35,17 @@
     "src/scheduling.ts",
     "src/budgets.ts",
     "src/infoflow/queues.ts",
-    "src/infoflow/archive.ts"
+    "src/infoflow/archive.ts",
+    "src/memory-types.ts",
+    "src/memory.ts",
+    "src/memory-tool.ts",
+    "src/knowledge-types.ts",
+    "src/chat-search.ts",
+    "src/run-deadline.ts",
+    "src/knowledge-tools.ts",
+    "src/memory-review.ts",
+    "src/context-continuity.ts",
+    "src/memory-store.ts"
   ],
   "references": [
     {
@@ -76,6 +86,9 @@
     },
     {
       "path": "../../../packages/interaction/user-questions"
+    },
+    {
+      "path": "../../../packages/core/tools"
     }
   ]
 }

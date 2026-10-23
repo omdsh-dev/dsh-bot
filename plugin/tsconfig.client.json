@@ -29,7 +29,11 @@
     "src/client/capability-face.ts",
     "src/client/VoiceInput.tsx",
     "src/client/Attachments.tsx",
-    "src/client/Questions.tsx"
+    "src/client/Questions.tsx",
+    "src/memory-types.ts",
+    "src/client/Memories.tsx",
+    "src/knowledge-types.ts",
+    "src/client/KnowledgeControls.tsx"
   ],
   "references": [
     {

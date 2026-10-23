@@ -53,6 +53,16 @@ function install(ctx: Context): void {
   ctx.effect(() => () => control.dispose(), 'bot-mode: state stream')
   const face: PanelFace = {
     capabilities: {
+      knowledgeStatus: () => value(ctx.remote.bots.knowledgeStatus()),
+      configureKnowledge: settings => value(ctx.remote.bots.configureKnowledge(settings)),
+      reviewAction: request => value(ctx.remote.bots.reviewAction(request)),
+      linkIdentity: request => value(ctx.remote.bots.linkIdentity(request)),
+      unlinkIdentity: request => value(ctx.remote.bots.unlinkIdentity(request)),
+      memoryCatalog: () => value(ctx.remote.bots.memoryCatalog()),
+      listMemories: request => value(ctx.remote.bots.listMemories(request)),
+      saveMemory: request => value(ctx.remote.bots.saveMemory(request)),
+      memoryAction: request => value(ctx.remote.bots.memoryAction(request)),
+      previewMemories: request => value(ctx.remote.bots.previewMemories(request)),
       attachment: request => value(ctx.remote.bots.attachment(request)),
       answerQuestion: request => value(ctx.remote.bots.answerQuestion(request)),
       catalog: botId => value(ctx.remote.bots.catalog(botId)),

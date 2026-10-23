@@ -42,6 +42,31 @@ function bench() {
   return { service, state, set, close, assemble, followup, wake, ctx, variable, execute, run }
 }
 
+it('commits memory atomically, excludes it from ordinary feeds and loads it into durable Session input', async () => {
+  const b = bench()
+  const item = await b.service.saveMemory({ scope: 'global', ownerId: '*', kind: 'preference', subject: 'response', topic: 'format', body: 'MEMORY_GLOBAL_BULLETS', evidence: '' })
+  expect(b.set.mock.calls.at(-1)![0].memories).toContainEqual(item)
+  expect(b.service.snapshot().memories).toBeUndefined()
+  expect(Reflect.get(b.service, 'clientSnapshot').call(b.service).memories).toBeUndefined()
+  await b.execute()
+  expect(b.followup.mock.calls[0]![0].content[0].text).toContain('MEMORY_GLOBAL_BULLETS')
+  expect(b.followup.mock.calls[0]![0].content[0].text).toContain(item.id)
+  b.set.mockRejectedValueOnce(new Error('disk full'))
+  await expect(b.service.memoryAction({ id: item.id, revision: 1, action: 'forget' })).rejects.toThrow('disk full')
+  expect(b.service.listMemories({})[0]!.status).toBe('active')
+  await b.service.memoryAction({ id: item.id, revision: 1, action: 'forget' })
+  expect(b.service.listMemories({})).toEqual([])
+})
+
+it('rejects the second of concurrent stale memory updates', async () => {
+  const b = bench()
+  const request = { scope: 'global' as const, ownerId: '*', kind: 'preference' as const, subject: 'response', topic: 'format', body: 'First', evidence: '' }
+  const item = await b.service.saveMemory(request)
+  const results = await Promise.allSettled(['Second', 'Third'].map(body => b.service.saveMemory({ ...request, body, id: item.id, revision: item.revision })))
+  expect(results.map(result => result.status)).toEqual(['fulfilled', 'rejected'])
+  expect(b.service.listMemories({ status: 'active' }).map(item => item.body)).toEqual(['Second'])
+})
+
 it('does not write or notify subscribers when external admission is busy or the room is unchanged', async () => {
   const b = bench()
   const room = b.state.rooms[0]!
@@ -344,4 +369,54 @@ it('resumes an expired native question once through an owned response without re
   expect(launch).toHaveBeenCalledOnce()
   expect(b.service.snapshot().rooms[0]!.messages.at(-2)!.questionReply?.callId).toBe('tool-call')
   await expect(b.service.answerQuestion({ roomId: room.id, id: 'pending', answer: { answers: [] } })).rejects.toThrow('no longer')
+})
+
+
+it('releases a stalled native Session creation at the deadline and never submits late input', async () => {
+  vi.useFakeTimers()
+  const b = bench(), gate = deferred()
+  Reflect.set(Reflect.get(b.service, 'config'), 'idleTimeoutMs', 1000)
+  b.ctx.sessionController.create.mockImplementationOnce(() => gate.promise)
+  try {
+    const execution = b.execute()
+    await vi.advanceTimersByTimeAsync(1250); await execution
+    expect(b.service.snapshot().rooms[0]!.messages[1]).toMatchObject({ status: 'failed', error: expect.stringContaining('No execution progress') })
+    gate.resolve(); await Promise.resolve()
+    expect(b.followup).not.toHaveBeenCalled()
+  } finally { vi.useRealTimers() }
+})
+
+it('uses a fresh Session without an old memory handoff after access is revoked', async () => {
+  const b = bench(), room = b.state.rooms[0]!, oldAgent = b.ctx.agents.get()
+  Reflect.set(b.state, 'memoryEpoch', 1)
+  const sessions = new Map<string, typeof oldAgent>([['session', oldAgent]])
+  Object.assign(b.ctx.agents, { get: (id: string) => sessions.get(id) })
+  b.ctx.sessionController.create.mockImplementation(async (...args: unknown[]) => {
+    const id = (args[0] as { sessionId: string }).sessionId
+    sessions.set(id, { ...oldAgent, session: { id } })
+  })
+  const next = await Reflect.get(b.service, 'prepareContext').call(b.service, room, room.members[0], b.state.bots[0], oldAgent, room.messages[1], new AbortController().signal)
+  const member = b.service.snapshot().rooms[0]!.members[0]!
+  expect(member.sessionId).not.toBe('session'); expect(next.session.id).toBe(member.sessionId)
+  expect(member).toMatchObject({ memoryEpoch: 1, cursor: room.messages.length, segments: [{ sessionId: 'session', reason: 'memory-access-changed' }] })
+  expect(member.handoff).toBeUndefined()
+})
+
+
+it('claims a pending memory review once when maintenance wakes overlap', async () => {
+  const b = bench(), agent = b.ctx.agents.get()
+  b.state.rooms[0]!.messages[1]!.status = 'complete'
+  b.state.memoryReviews = [{ id: 'review', roomId: 'room', messageId: 'user', botId: 'sage', status: 'pending', attempts: 0, nextAt: 0, createdAt: 0 }]
+  b.state.bots[0]!.policy = { provider: 'fixture', model: 'fixture' }
+  let calls = 0
+  Object.assign(agent.ctx, { llm: { async *stream() {
+    calls++; yield { type: 'text-delta', text: '{"candidates":[]}' }
+    yield { type: 'usage', usage: { inputTokens: 1, outputTokens: 1 } }
+    yield { type: 'finish', reason: { kind: 'stop' } }
+  } } })
+  const review = () => Reflect.get(b.service, 'reviewNext').call(b.service)
+  await Promise.all([review(), review()])
+  expect(calls).toBe(1)
+  expect(b.service.knowledgeStatus().reviews[0]).toMatchObject({ status: 'complete', attempts: 1 })
+  expect(b.service.knowledgeStatus().usage[0]).toMatchObject({ calls: 1, input: 1, output: 1 })
 })

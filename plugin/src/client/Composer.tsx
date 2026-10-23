@@ -1,5 +1,5 @@
 /** Chat input with keyboard-safe addressing; dispatch remains a Host command. */
-import { useId, useRef, useState } from 'react'
+import { useId, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Bot, ChatMessage } from '../types.ts'
 import type { BotKey } from './locales.ts'
@@ -11,6 +11,9 @@ interface ComposerProps {
   bots: Bot[]
   disabled: boolean
   hasAttachments?: boolean
+  toolbar?: ReactNode
+  attachmentPreview?: ReactNode
+  optionsContent?: ReactNode
   draft: string
   onDraft: (text: string) => void
   reply: ChatMessage | undefined
@@ -24,7 +27,7 @@ interface ComposerProps {
  * @param props - Room members, controlled draft, reply, and submit action.
  * @returns The composer and its inline recipient picker.
  */
-export function Composer({ bots, disabled, hasAttachments = false, draft, onDraft, reply, onCancelReply, onSend, t }: ComposerProps) {
+export function Composer({ bots, disabled, hasAttachments = false, toolbar, attachmentPreview, optionsContent, draft, onDraft, reply, onCancelReply, onSend, t }: ComposerProps) {
   const input = useRef<HTMLTextAreaElement>(null)
   const menuId = useId()
   const [caret, setCaret] = useState(0)
@@ -54,6 +57,7 @@ export function Composer({ bots, disabled, hasAttachments = false, draft, onDraf
       <button type="button" onClick={() => { invite('all') }}><span className={css.atMark}>@</span><span>{t('everyone')}</span></button>
     </div>}
     <form className={css.composer} onSubmit={(event) => { event.preventDefault(); if (!disabled && (draft.trim() || hasAttachments)) onSend() }}>
+      {attachmentPreview}
       {reply && <div className={css.replyPreview}><div><strong>{t('replying')} {bots.find(bot => bot.id === reply.botId)?.name ?? t('you')}</strong><span>{reply.text}</span></div>
         <Button size="sm" aria-label={t('removeReply')} icon={<CloseIcon />} onClick={onCancelReply} /></div>}
       {open && <div className={css.mentionMenu} role="listbox" id={menuId} aria-label={t('invite')}>
@@ -79,9 +83,13 @@ export function Composer({ bots, disabled, hasAttachments = false, draft, onDraf
           else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!disabled && (draft.trim() || hasAttachments)) onSend() }
         }} />
       <div className={css.composerTools}>
-        <Button size="sm" onClick={() => { invite() }} aria-label={t('invite')}><span className={css.atMark}>@</span>{t('invite')}</Button>
+        <div className={css.composerActions}>
+          <Button size="sm" onClick={() => { invite() }} aria-label={t('invite')}><span className={css.atMark}>@</span>{t('invite')}</Button>
+          {toolbar}
+        </div>
         <div className={css.sendTools}><span>{t('sendHint')}</span><Button type="submit" variant="primary" aria-label={t('send')} title={t('send')} disabled={disabled || (!draft.trim() && !hasAttachments)} icon={<SendIcon />} /></div>
       </div>
+      {optionsContent}
     </form>
     <p className={css.composerHint}>{t('addressHint')}</p>
   </div>

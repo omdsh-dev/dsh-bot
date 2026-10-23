@@ -5,7 +5,7 @@ import { Button, Input, MarkdownText, Modal } from '@deepseek-ai/dsh-client-ui-p
 import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import type { AttemptRequest, Bot, BotId, ChatMessage, ChatAttachment, ChatMessageId, CreateBotRequest, CreateGroupRequest, MembersRequest, Room, SendRequest, UpdateBotRequest } from '../types.ts'
+import type { StopRequest, AttemptRequest, Bot, BotId, ChatMessage, ChatAttachment, ChatMessageId, CreateBotRequest, CreateGroupRequest, MembersRequest, Room, SendRequest, UpdateBotRequest } from '../types.ts'
 import { Controls } from './Controls.tsx'
 import { VoiceInput } from './VoiceInput.tsx'
 import { AttachmentView } from './Attachments.tsx'
@@ -15,7 +15,7 @@ import type { ModelSnapshot } from './model.ts'
 import type { createBotViewStore } from './view-store.ts'
 import { Avatar } from './Avatar.tsx'
 import { Composer } from './Composer.tsx'
-import { SidebarIcon, PlusIcon, SearchIcon } from './Icons.tsx'
+import { SidebarIcon, PlusIcon, SearchIcon, AttachmentIcon, CloseIcon, ConnectionsIcon, ControlsIcon } from './Icons.tsx'
 import css from './Panel.module.css'
 import { IMPanel } from './IMPanel.tsx'
 import type { FeishuFace } from './feishu-face.ts'
@@ -32,7 +32,7 @@ export interface PanelFace {
   createGroup: (request: CreateGroupRequest) => Promise<Room>
   setMembers: (request: MembersRequest) => Promise<Room>
   send: (request: SendRequest) => Promise<unknown>
-  stop: (request: AttemptRequest) => Promise<unknown>
+  stop: (request: StopRequest) => Promise<unknown>
   retry: (request: AttemptRequest) => Promise<unknown>
   openSession: (id: SessionId) => void
   toggleSidebar: () => void
@@ -70,6 +70,7 @@ export function BotPanel(props: Props) {
   const [details, setDetails] = useState(false)
   const [controls, setControls] = useState(false)
   const [older, setOlder] = useState<ChatMessage[]>([])
+  const fileInput = useRef<HTMLInputElement>(null)
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [delegation, setDelegation] = useState(false)
   const [syncMessage, setSyncMessage] = useState(false)
@@ -162,7 +163,7 @@ export function BotPanel(props: Props) {
       <div className={css.filters} role="group" aria-label={t('filterChats')}>
         {(['all', 'group', 'dm'] as const).map(kind => <button type="button" key={kind} aria-pressed={filter === kind} onClick={() => { setFilter(kind) }}>{t(kind === 'all' ? 'allChats' : kind === 'group' ? 'groups' : 'bots')}</button>)}
       </div>
-      {props.capabilities && <label className={css.history}><input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)}/>{t('showArchived')}</label>}
+      {props.capabilities && <label className={css.archiveToggle}><input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)}/>{t('showArchived')}</label>}
       <div className={css.roomList}>
         {(['group', 'dm'] as const).filter(kind => filter === 'all' || kind === filter).map(kind => <section key={kind}>
           <div className={css.sectionLabel}><h2>{t(kind === 'dm' ? 'direct' : 'groups')}<span>{rooms.filter(item => item.kind === kind).length}</span></h2>
@@ -184,8 +185,10 @@ export function BotPanel(props: Props) {
         {!bots.length && snapshot.ready && <p className={css.searchEmpty}>{t('empty')}</p>}
       </div>
       <Button className={css.newChat} variant="outline" disabled={!snapshot.ready || !bots.length} icon={<PlusIcon />} onClick={() => { openForm('group') }}>{t('startGroup')}</Button>
-      <Button className={css.newChat} variant="outline" aria-pressed={integration} onClick={() => { setIntegration(true); setShowChats(false) }}>{t('imTitle')}</Button>
-      {props.capabilities && <Button className={css.newChat} variant="outline" onClick={() => setControls(true)}>{t('capabilities')}</Button>}
+      <div className={css.rosterUtilities}>
+        <Button size="sm" icon={<ConnectionsIcon />} aria-pressed={integration} onClick={() => { setIntegration(true); setShowChats(false) }}>{t('imTitle')}</Button>
+        {props.capabilities && <Button size="sm" icon={<ControlsIcon />} onClick={() => setControls(true)}>{t('capabilities')}</Button>}
+      </div>
       <footer className={css.rosterFooter}><span className={css.connection} data-ready={snapshot.ready && !snapshot.error} /><span>{snapshot.error ? t('disconnected') : snapshot.ready ? t('connected') : t('loading')}</span>
         <Button size="sm" title={t('toggleSidebar')} aria-label={t('toggleSidebar')} icon={<SidebarIcon />} onClick={props.toggleSidebar} /></footer>
     </aside>
@@ -209,7 +212,7 @@ export function BotPanel(props: Props) {
           if (node) follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100
         }}>
           <div className={css.transcript}>
-            {props.capabilities && room.messageCount !== undefined && room.messageCount > messages.length && <Button disabled={busy} onClick={() => { void act(async () => {
+            {props.capabilities && room.messageCount !== undefined && room.messageCount > messages.length && <Button size="sm" className={css.loadEarlier} disabled={busy} onClick={() => { void act(async () => {
               const page = await props.capabilities!.history({ roomId: room.id, ...(messages[0] ? { before: messages[0].id } : {}), limit: 50 })
               if (selection.current.revision !== revision) return
               setOlder(current => [...page.messages, ...current]); follow.current = false
@@ -237,23 +240,25 @@ export function BotPanel(props: Props) {
                       {message.text && (own ? <div className={css.body}>{message.text}</div>
                         : <MarkdownText text={message.text} labels={labels} />)}
                       {message.attachments?.map(item => props.capabilities ? <AttachmentView key={item.attachment.attachmentId} item={item} face={props.capabilities} request={{ roomId: room.id, messageId: message.id, attachmentId: item.attachment.attachmentId }}/> : <p key={item.attachment.attachmentId}>📎 {item.attachment.name}</p>)}
-                      {message.toolDetails?.map((tool, index) => <details key={index}><summary>{tool.name}</summary><pre style={{ whiteSpace: 'pre-wrap' }}>{tool.arguments}</pre>{tool.result && <pre style={{ whiteSpace: 'pre-wrap' }}>{tool.result}</pre>}</details>)}
+                      {message.toolDetails?.map((tool, index) => <details className={css.toolDetails} key={index}><summary>{tool.name}</summary><pre>{tool.arguments}</pre>{tool.result && <pre>{tool.result}</pre>}</details>)}
                       {props.capabilities && message.questions?.map(view => <Questions key={view.id} view={view} roomId={room.id} face={props.capabilities!} english={t('you') === 'You'}/>)}
                       {message.progress?.question && props.capabilities && <Questions key={message.progress.question.id} view={message.progress.question} roomId={room.id} face={props.capabilities} english={t('you') === 'You'}/>}
-                      {message.progress && <div role="status"><span>{message.progress.phase} {message.progress.tools.join(', ')}</span>
-                        {message.progress.approvalId && props.capabilities && <><p>{message.progress.reason}</p><pre style={{ whiteSpace: 'pre-wrap' }}>{message.progress.arguments}</pre>
-                          <Button disabled={busy} onClick={() => { void act(() => props.capabilities!.decideApproval({ roomId: room.id, id: message.progress!.approvalId!, allow: true })) }}>{t('allowOnce')}</Button>
-                          <Button disabled={busy} onClick={() => { void act(() => props.capabilities!.decideApproval({ roomId: room.id, id: message.progress!.approvalId!, allow: false })) }}>{t('reject')}</Button></>}
+                      {message.continuationOf && <p className={css.executionStatus}>{t('you') === 'You' ? 'Continuing with delegated results' : '已收到子任务结果，继续汇总'}</p>}
+                      {message.awaiting?.length && !message.continuedBy && !message.collaborationCanceled ? <div className={css.executionStatus} role="status"><span>{t('you') === 'You' ? 'Waiting for delegated results' : '等待子任务结果，完成后自动继续'}</span><Button size="sm" disabled={busy} onClick={() => { void act(() => props.stop({ roomId: room.id, messageId: message.id, cascade: true })) }}>{t('stop')}</Button></div> : null}
+                      {message.progress && <div className={css.executionStatus} role="status"><span>{message.progress.phase} {message.progress.tools.join(', ')}</span>
+                        {message.progress.approvalId && props.capabilities && <><p>{message.progress.reason}</p><pre>{message.progress.arguments}</pre><div className={css.controlActions}>
+                          <Button size="sm" variant="primary" disabled={busy} onClick={() => { void act(() => props.capabilities!.decideApproval({ roomId: room.id, id: message.progress!.approvalId!, allow: true })) }}>{t('allowOnce')}</Button>
+                          <Button size="sm" variant="outline" disabled={busy} onClick={() => { void act(() => props.capabilities!.decideApproval({ roomId: room.id, id: message.progress!.approvalId!, allow: false })) }}>{t('reject')}</Button></div></>}
                       </div>}
                       {message.status === 'running' &&
                         <div className={css.working} role="status"><span className={css.thinkingDots}><i /><i /><i /></span>{t('running')}</div>}
                       {message.error && <p className={css.messageError}>{message.error}</p>}
                       {!['running', 'complete'].includes(message.status) && <span className={css.status}>{t(message.status)}</span>}
                     </div>
-                    {message.status === 'running' && member && <button type="button" className={css.progress} onClick={() => { props.openSession(member.sessionId) }}>{t('progress')}<span aria-hidden="true">↗</span></button>}
+                    {message.status === 'running' && member && <button type="button" className={css.progress} onClick={() => { props.openSession(message.executionSessionId ?? member.sessionId) }}>{t('progress')}<span aria-hidden="true">↗</span></button>}
                     <div className={clsx(css.messageActions, message.status !== 'complete' && css.visibleActions)}>
                       {writable && <Button size="sm" onClick={() => { setReply(message.id) }}>{t('reply')}</Button>}
-                      {member && <Button size="sm" onClick={() => { props.openSession(member.sessionId) }}>{t('execution')}</Button>}
+                      {member && <Button size="sm" onClick={() => { props.openSession(message.executionSessionId ?? member.sessionId) }}>{t('execution')}</Button>}
                       {['queued', 'running'].includes(message.status) && <Button size="sm" disabled={busy} onClick={() => { void act(() => props.stop({ roomId: room.id, messageId: message.id })) }}>{t('stop')}</Button>}
                       {(!room.external || message.localOnly) && message.botId && !['running', 'complete'].includes(message.status) && <Button size="sm" disabled={busy} onClick={() => { void act(() => props.retry({ roomId: room.id, messageId: message.id })) }}>{t('retry')}</Button>}
                     </div>
@@ -264,30 +269,38 @@ export function BotPanel(props: Props) {
           </div>
         </div>
         {room.external && <p role="note" className={css.history}>{room.kind === 'group' ? syncMessage ? t('syncHint') : localHint : t(room.external.provider === 'feishu' ? 'fsExternalHelp' : 'externalReadOnly')}</p>}
-        {writable && props.capabilities && <div className={css.inputOptions}>
-          {room.kind === 'group' && <label><input type="checkbox" checked={delegation} onChange={event => setDelegation(event.target.checked)}/>{t('allowDelegation')}</label>}
-          {room.external && <label><input type="checkbox" checked={syncMessage} onChange={event => setSyncMessage(event.target.checked)}/>{t('syncMessage')}</label>}
-          <label>{t('attach')}<input type="file" multiple disabled={busy} onChange={event => {
-            const files = Array.from(event.target.files ?? []); event.target.value = ''
-            void act(async () => {
-              if (files.length + attachments.length > 8 || files.reduce((sum, file) => sum + file.size, 0) + attachments.reduce((sum, item) => sum + item.attachment.bytes, 0) > 20 * 1024 * 1024) throw new Error(t('attachmentLimit'))
-              const uploaded: ChatAttachment[] = []
-              for (const file of files) {
-                uploaded.push(await uploadFile(file))
-                if (selection.current.revision !== revision) return
-              }
-              setAttachments(current => [...current, ...uploaded])
-            })
-          }}/></label>
-          <VoiceInput key={room.id} disabled={busy} label={t('recordVoice')} stopLabel={t('stopRecording')} onError={setError} onAudio={file => act(async () => {
-            const attachment = await uploadFile(file)
-            if (selection.current.revision === revision) setAttachments(current => [...current, attachment])
-          })}/>
-          {attachments.map((item, index) => <Button key={index} size="sm" onClick={() => setAttachments(current => current.filter((_, i) => i !== index))}>📎 {item.attachment.name} ×</Button>)}
-          {running && <span>{t('queueHint')}</span>}
-        </div>}
         {writable && <Composer key={room.id} bots={roomBots} t={t} draft={draft} onDraft={setDraft}
           hasAttachments={attachments.length > 0}
+          toolbar={props.capabilities && <>
+            <input ref={fileInput} type="file" hidden aria-label={t('attach')} multiple disabled={busy} onChange={event => {
+              const files = Array.from(event.target.files ?? []); event.target.value = ''
+              void act(async () => {
+                if (files.length + attachments.length > 8 || files.reduce((sum, file) => sum + file.size, 0) + attachments.reduce((sum, item) => sum + item.attachment.bytes, 0) > 20 * 1024 * 1024) throw new Error(t('attachmentLimit'))
+                const uploaded: ChatAttachment[] = []
+                for (const file of files) {
+                  uploaded.push(await uploadFile(file))
+                  if (selection.current.revision !== revision) return
+                }
+                setAttachments(current => [...current, ...uploaded])
+              })
+            }}/>
+            <Button size="sm" icon={<AttachmentIcon />} aria-label={t('attach')} title={t('attach')} disabled={busy} onClick={() => fileInput.current?.click()}/>
+            <VoiceInput key={room.id} disabled={busy} label={t('recordVoice')} stopLabel={t('stopRecording')} onError={setError} onAudio={file => act(async () => {
+              const attachment = await uploadFile(file)
+              if (selection.current.revision === revision) setAttachments(current => [...current, attachment])
+            })}/>
+          </>}
+          attachmentPreview={attachments.length > 0 && <div className={css.pendingAttachments}>
+            {attachments.map((item, index) => <div className={css.attachmentChip} key={item.attachment.attachmentId}>
+              <AttachmentIcon /><span title={item.attachment.name}>{item.attachment.name}</span>
+              <Button size="sm" icon={<CloseIcon />} aria-label={`${t('removeAttachment')}: ${item.attachment.name}`} title={t('removeAttachment')} onClick={() => setAttachments(current => current.filter((_, i) => i !== index))}/>
+            </div>)}
+          </div>}
+          optionsContent={props.capabilities && (room.kind === 'group' || running) && <div className={css.inputOptions}>
+            {room.kind === 'group' && <label><input type="checkbox" checked={delegation} onChange={event => setDelegation(event.target.checked)}/>{t('allowDelegation')}</label>}
+            {room.external && <label><input type="checkbox" checked={syncMessage} onChange={event => setSyncMessage(event.target.checked)}/>{t('syncMessage')}</label>}
+            {running && <span role="status">{t('queueHint')}</span>}
+          </div>}
           disabled={busy || !snapshot.ready || !!snapshot.error || form !== null || details || controls}
           reply={room.messages.find(message => message.id === reply)}
           onCancelReply={() => { setReply(null) }}
@@ -300,10 +313,10 @@ export function BotPanel(props: Props) {
       </> : <div className={css.welcome}><Avatar id="dsh" large /><h2>{t('welcomeTitle')}</h2><p>{t('empty')}</p>
         <Button variant="primary" disabled={!snapshot.ready} onClick={() => { openForm('bot') }}>{t('newBot')}</Button></div>}
     </main>}
-    <Modal open={controls} onClose={() => setControls(false)} closeLabel={t('cancel')} title={t('capabilities')} className={clsx(css.dialog)}>
+    <Modal open={controls} onClose={() => setControls(false)} closeLabel={t('cancel')} title={t('capabilities')} className={clsx(css.dialog, css.controlsDialog)} contentClassName={clsx(css.dialogContent)}>
       {props.capabilities && <Controls key={room?.id} state={snapshot.value} room={room} face={props.capabilities} updateBot={props.updateBot} english={t('you') === 'You'} openRoom={next => { choose(next); setControls(false) }}/>}
     </Modal>
-    <Modal open={details && !!room} onClose={() => { setDetails(false) }} closeLabel={t('cancel')} title={t('chatInfo')} className={clsx(css.dialog)}>
+    <Modal open={details && !!room} onClose={() => { setDetails(false) }} closeLabel={t('cancel')} title={t('chatInfo')} className={clsx(css.dialog)} contentClassName={clsx(css.dialogContent)}>
       {room && <div className={css.roomInfo}>
         <RoomPortrait room={room} large /><h3>{room.title}</h3><p>{room.external && room.kind === 'group' ? localHint : t(room.external ? room.external.provider === 'feishu' ? 'fsExternalHelp' : 'externalHistory' : room.kind === 'group' ? 'history' : 'privateHistory')}</p>
         <div className={css.infoMembers}>{roomBots.map(bot => <section key={bot.id}>

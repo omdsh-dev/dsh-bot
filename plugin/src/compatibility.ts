@@ -37,3 +37,17 @@ export function checkIM(ctx: unknown): void {
 export function checkClient(ctx: unknown): void {
   requireMethods('Client', ctx, ['remote.$mount', 'remote.$stream', 'slots.inject', 'slots.register', 'locale.register', 'locale.bind', 'uiWorkspace.openSession', 'layout.toggleSidebar'])
 }
+
+
+/** DSH 0.1 wraps a tool result in a user-message block; 0.2 uses a tool-role message. */
+export function toolResultPayload(message: unknown): { callId: string; content: unknown[] } | undefined {
+  if (!message || typeof message !== 'object') return
+  const id: unknown = Reflect.get(message, 'toolCallId'), content: unknown = Reflect.get(message, 'content')
+  if (!Array.isArray(content)) return
+  if (typeof id === 'string') return { callId: id, content }
+  for (const block of content) {
+    if (!block || typeof block !== 'object' || Reflect.get(block, 'type') !== 'tool-result') continue
+    const id: unknown = Reflect.get(block, 'toolCallId'), content: unknown = Reflect.get(block, 'content')
+    if (typeof id === 'string' && Array.isArray(content)) return { callId: id, content }
+  }
+}

@@ -26,7 +26,7 @@ Version **0.9.1** adds chat management, automatic history segments, native model
 - Bind an InfoFlow robot through guided credential setup, control private/group access, test messaging, and optionally create an InfoFlow group.
 - For either IM platform, allow specific groups or enable **Allow mentions in all groups containing this robot** per Bot. This option defaults off and does not change private-chat access.
 
-In a connected Feishu group or connected InfoFlow group, a Bot can hand off part of a human request by writing a separate `@handle concrete task` line. The target runs in its own group Session and replies through its own robot. Markdown task lists and semicolon-separated recipients are supported. Concrete fixes can return to an earlier participant, with at most three runs per Bot and twelve handoffs per human request; duplicate tasks are not repeated. Quoted text, code, ordinary mentions and `@all` in Bot replies do not dispatch work; private chats retain human-only routing; Web groups can explicitly enable handoffs per message.
+In a connected Feishu group or connected InfoFlow group, a Bot can hand off part of a human request by writing a separate `@handle concrete task` line. The target runs in its own group Session and replies through its own robot. Markdown task lists and semicolon-separated recipients are supported. Concrete fixes can return to an earlier participant, with at most three task assignments per Bot and twelve handoffs per human request; duplicate tasks are not repeated. Quoted text, code, ordinary mentions and `@all` in Bot replies do not dispatch work; private chats retain human-only routing; Web groups can explicitly enable handoffs per message.
 
 | Entry point | How to call the Bot | Where the reply appears |
 | --- | --- | --- |
@@ -136,6 +136,8 @@ npm start -- --patch /absolute/path/bot-settings.patch.yml
 ```
 
 ## Current limits
+
+Scoped long-term memory is available under Chat & execution controls → Memory: global defaults, Bot knowledge, group conventions and individual user preferences, with automatic candidate extraction, review, recall preview and explicit account linking. Bots can search older chat messages, recall current memory and delegate concrete tasks with automatic result return. Long conversations can rotate Sessions with structured handoffs, and stalled executions have deadlines. See the [memory guide](docs/memory.md) for sharing and conflict rules.
 
 - Use the extensible `standard` preset; complete-prompt presets such as `minimal` are rejected. Bot handles and presets stay fixed after creation.
 - Native model catalogs provide names, not token prices. Budgets use configured estimates and can be exceeded by an individual call; concurrent calls reserve quota before dispatch.
