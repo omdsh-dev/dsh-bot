@@ -52,7 +52,10 @@
     "src/usage-store.ts",
     "src/memory-invalidation.ts",
     "src/memory-governance.ts",
-    "src/chat-index.ts"
+    "src/chat-index.ts",
+    "src/access-types.ts",
+    "src/access-state.ts",
+    "src/access-runtime.ts"
   ],
   "references": [
     {

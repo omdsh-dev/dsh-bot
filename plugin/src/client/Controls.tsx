@@ -5,6 +5,7 @@ import type { CapabilityCatalog, ScheduleRun, BotId, BotState, FailureView, Hist
 import type { CapabilityFace } from './capability-face.ts'
 import css from './Panel.module.css'
 import { Memories } from './Memories.tsx'
+import { AccessControls } from './AccessControls.tsx'
 
 export function download(name: string, content: string, mime: string) {
   const url = URL.createObjectURL(new Blob([content], { type: mime }))
@@ -62,7 +63,7 @@ export function Controls({ state, room, face, updateBot, english, openRoom, init
     setDate(new Date(schedule.nextAt).toISOString().slice(0, 16)); setNotify(schedule.notify); setDelegate(schedule.allowDelegation); setBotId(schedule.targets[0] ?? room?.defaultBot)
   }
   return <div className={css.controls}>
-    <nav aria-label={l('管理分类', 'Control categories')}>{[['history', l('历史', 'History')], ['memories', l('记忆', 'Memory')], ['policy', l('模型与权限', 'Model & tools')], ['budget', l('预算', 'Budget')], ['schedules', l('定时任务', 'Schedules')], ['failures', l('失败投递', 'Failed deliveries')], ['lifecycle', l('归档与删除', 'Archive & delete')]].map(([key, label]) =>
+    <nav aria-label={l('管理分类', 'Control categories')}>{[['history', l('历史', 'History')], ['memories', l('记忆', 'Memory')], ['policy', l('模型与权限', 'Model & tools')], ['access', l('能力授权', 'Capability grants')], ['budget', l('预算', 'Budget')], ['schedules', l('定时任务', 'Schedules')], ['failures', l('失败投递', 'Failed deliveries')], ['lifecycle', l('归档与删除', 'Archive & delete')]].map(([key, label]) =>
       <Button key={key} size="sm" aria-pressed={tab === key} disabled={busy} onClick={() => { setTab(key!); setError(''); if (key === 'failures') void act(async () => setFailures(await face.failures())) }}>{label}</Button>)}</nav>
     {error && <p className={css.controlError} role="alert">{error}</p>}
     {tab === 'memories' && <Memories key={room?.id ?? 'global'} state={state} room={room} face={face} english={english}/>}
@@ -76,6 +77,7 @@ export function Controls({ state, room, face, updateBot, english, openRoom, init
       {page?.messages.map(message => <article key={message.id}><strong>{message.botId ?? l('用户', 'User')} · {new Date(message.time).toLocaleString()}</strong><pre>{message.text}</pre></article>)}
       {page?.before && <Button disabled={busy} onClick={() => { void act(async () => { const next = await face.history({ roomId: room.id, query, before: page.before!, limit: 50 }); setPage({ ...next, messages: [...next.messages, ...page.messages] }) }) }}>{l('更早的结果', 'Earlier results')}</Button>}
     </section>}
+    {tab === 'access' && <AccessControls state={state} face={face} english={english}/>}
     {tab === 'policy' && <section>
       <label>Bot<select value={botId} onChange={event => setBotId(event.target.value as BotId)}>{state.bots.map(bot => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select></label>
       <label>{l('模型提供方（留空继承 DSH）', 'Provider (blank inherits DSH)')}<Input list="bot-providers" value={provider} onChange={event => setProvider(event.target.value)}/></label>

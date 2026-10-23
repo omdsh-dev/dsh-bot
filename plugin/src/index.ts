@@ -1,6 +1,10 @@
 /** Native DSH Bot Mode: durable rooms and explicit multi-Bot routing. */
 import { randomUUID } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
+import { credentialKey } from '@deepseek-ai/dsh-credentials'
+import { accessState, credentialRequest, removeAccess, saveCapability as saveCapabilityState } from './access-state.ts'
+import { CapabilityRuntime } from './access-runtime.ts'
+import type { AccessRemoval, AccessView, BotCapability, SaveCapability, SaveBotCredential } from './access-types.ts'
 import { PermanentChatError } from './external-errors.ts'
 import { Context, Service } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
@@ -88,6 +92,7 @@ export class BotMode extends TypertRemoteService {
   private usageStore?: UsageStore
   private chatSearch = new ChatSearch()
   private chatIndex?: ChatIndex
+  private capabilityRuntime?: CapabilityRuntime
   private memoryTask: Promise<void> | undefined
   private memoryController: AbortController | undefined
   private memoryReviewTarget: MemoryTarget | undefined
@@ -174,6 +179,7 @@ export class BotMode extends TypertRemoteService {
         for (const [key, call] of Object.entries(this.state.usageLedger?.pending ?? {})) if (key.startsWith('compaction:') && call.sessionId) this.ctx.agents.get(SessionId(call.sessionId))?.cancel({ kind: 'user' })
         await Promise.allSettled([...this.running.values()].map(run => run.task))
         await Promise.allSettled(this.maintenanceDone)
+        this.capabilityRuntime?.close()
         await this.tail
         for (const wake of this.watchers) wake()
         await this.domain.close()
@@ -308,6 +314,7 @@ export class BotMode extends TypertRemoteService {
     const state = structuredClone(this.state)
     for (const room of state.rooms) room.messageCount = (room.historyChunks?.length ?? 0) * 128 + room.messages.length
     delete state.usageLedger
+    delete state.access
     delete state.memories
     delete state.memoryChunks
     delete state.retiredMemoryChunks
@@ -330,6 +337,7 @@ export class BotMode extends TypertRemoteService {
       return { ...room, messageCount: (room.historyChunks?.length ?? 0) * 128 + room.messages.length, messages: room.messages.slice(start) }
     }) })
     delete state.usageLedger
+    delete state.access
     delete state.memories
     delete state.memoryChunks
     delete state.retiredMemoryChunks
@@ -517,6 +525,7 @@ export class BotMode extends TypertRemoteService {
     const original = this.state.bots.find(bot => bot.id === member?.botId)
     if (!room || !original) { yield* next(); return }
     if (this.closing) throw new Error('Bot Mode is closing')
+    options.signal?.throwIfAborted()
     const currentRoute = options.sessionId ? this.ctx.agents.get(SessionId(options.sessionId))?.session.requestContext() : undefined
     const priced = (original.policy?.provider ?? currentRoute?.provider) === options.provider && (original.policy?.model ?? currentRoute?.model) === options.model
     const bot = priced ? original : { ...original, policy: { ...original.policy, inputPrice: undefined, outputPrice: undefined } }
@@ -762,6 +771,58 @@ export class BotMode extends TypertRemoteService {
       catch { return { id: provider.id, models: [], error: 'Model discovery unavailable; enter an ID manually' } }
     }))
     return { providers, tools: (tools?.schemas?.(agent || undefined) ?? []).map(({ name, description }) => ({ name, description })) }
+  }
+
+  @Remote async accessCatalog(): Promise<AccessView> {
+    const access = this.state.access ?? { capabilities: [], credentials: [] }
+    const provider = optionalService<Context['credentials']>(this.ctx, 'credentials')
+    return { capabilities: structuredClone(access.capabilities), credentials: await Promise.all(access.credentials.map(async ({ key, ...item }) => {
+      let configured = false
+      if (/^bot-mode\/key-[a-f0-9-]{36}$/.test(key) && provider?.describeRecord) {
+        try { configured = (await provider.describeRecord(credentialKey('bot-mode', key.slice(9)))).configured } catch { /* No credential values or provider errors cross the wire. */ }
+      }
+      return { ...structuredClone(item), configured }
+    })) }
+  }
+  private revokeAccess(state: BotState, botIds: string[]): MemoryTarget[] {
+    const targets = state.rooms.flatMap(room => room.members.filter(member => botIds.includes(member.botId)).map(member => ({ roomId: room.id, botId: member.botId })))
+    invalidateMemories(state, targets); this.revokeMemoryWork(state, targets); return targets
+  }
+  @Remote async saveCapability(request: SaveCapability): Promise<BotCapability> {
+    const result = await this.change(async state => {
+      const previous = state.access?.capabilities.find(item => item.name === request.name)
+      const item = saveCapabilityState(state, request)
+      return { item, targets: this.revokeAccess(state, [...previous?.botIds ?? [], ...item.botIds]) }
+    })
+    this.invalidateMemoryContext(result.targets); return result.item
+  }
+  @Remote async saveBotCredential(request: SaveBotCredential): Promise<void> {
+    credentialRequest(structuredClone(this.state), request)
+    const provider = optionalService<Context['credentials']>(this.ctx, 'credentials')
+    if (!provider?.modifyRecord || !provider.deleteRecord) throw new Error('Enable native credential storage first')
+    const newKey = request.value ? credentialKey('bot-mode', 'key-' + randomUUID()) : undefined
+    let result: { oldKey?: string | undefined; targets: MemoryTarget[] }
+    try {
+      if (newKey) await provider.modifyRecord(newKey, async () => ({ kind: 'api-key', key: request.value! }))
+      result = await this.change(async state => {
+        const item = credentialRequest(state, request), access = accessState(state), previous = access.credentials.find(existing => existing.name === item.name)
+        const key = newKey ?? previous!.key
+        access.credentials = [...access.credentials.filter(existing => existing.name !== item.name), { ...item, key }]
+        return { oldKey: newKey ? previous?.key : undefined, targets: this.revokeAccess(state, [...previous?.botIds ?? [], ...item.botIds]) }
+      })
+    } catch (cause) { if (newKey) try { await provider.deleteRecord(newKey) } catch { this.ctx.logger.warn('Unused Bot credential cleanup failed') }; throw cause }
+    this.invalidateMemoryContext(result.targets)
+    if (result.oldKey && /^bot-mode\/key-[a-f0-9-]{36}$/.test(result.oldKey)) try { await provider.deleteRecord(credentialKey('bot-mode', result.oldKey.slice(9))) } catch { this.ctx.logger.warn('Retired Bot credential cleanup failed; its grant has been revoked') }
+  }
+  @Remote async removeAccess(request: AccessRemoval): Promise<void> {
+    const result = await this.change(async state => {
+      const previous = request.kind === 'credential' ? state.access?.credentials.find(item => item.name === request.name) : state.access?.capabilities.find(item => item.name === request.name)
+      removeAccess(state, request)
+      return { key: previous && 'key' in previous ? previous.key : undefined, targets: this.revokeAccess(state, previous?.botIds ?? []) }
+    })
+    this.invalidateMemoryContext(result.targets)
+    const provider = optionalService<Context['credentials']>(this.ctx, 'credentials')
+    if (result.key && /^bot-mode\/key-[a-f0-9-]{36}$/.test(result.key) && provider?.deleteRecord) try { await provider.deleteRecord(credentialKey('bot-mode', result.key.slice(9))) } catch { this.ctx.logger.warn('Retired Bot credential cleanup failed; its grant has been revoked') }
   }
   @Remote async scheduleRuns(request: { id: string; before?: number; limit?: number }): Promise<ScheduleRun[]> {
     const schedule = this.state.schedules?.find(item => item.id === request.id)
@@ -1351,7 +1412,7 @@ export class BotMode extends TypertRemoteService {
     const receipt = { received: false }
     let cursor = 0
     let dispose = () => {}
-    const cleanup: (() => void)[] = []
+    const cleanup: (() => unknown)[] = []
     let usage: Usage = { input: 0, output: 0, cost: 0 }
     let usageFailure: unknown
     const outputs: ChatAttachment[] = []
@@ -1372,10 +1433,17 @@ export class BotMode extends TypertRemoteService {
       checkAgent(agent)
       run.agent = agent
       const priorSessionId = member.sessionId
+      this.capabilityRuntime ??= new CapabilityRuntime(this.ctx, () => this.state)
+      const initialAccess = await deadline.wait(this.capabilityRuntime.mount(agent, bot.id, deadline.signal))
+      cleanup.push(initialAccess)
       agent = await deadline.wait(this.prepareContext(room, member, bot, agent, attempt, deadline.signal))
       room = this.room(this.state, roomId); member = this.member(room, attempt.botId)
       run.agent = agent
       if (this.canceled(run)) return
+      if (agent.session.id !== priorSessionId) {
+        await initialAccess()
+        cleanup.push(await deadline.wait(this.capabilityRuntime.mount(agent, bot.id, deadline.signal)))
+      }
       await this.change(async state => { findMessage(this.room(state, roomId), attempt.id).executionSessionId = member.sessionId })
       if (agent.status !== 'idle' || agent.inbox.nextTurn.length || agent.inbox.nextStep.length) throw new Error('This Bot Session is busy; finish its native conversation first')
       if (bot.policy?.fileMode && bot.policy.fileMode !== 'inherit') {
@@ -1599,7 +1667,7 @@ export class BotMode extends TypertRemoteService {
     } catch (cause) { error = cause instanceof Error ? cause.message : String(cause) }
     finally {
       dispose()
-      for (const stop of cleanup.reverse()) stop()
+      for (const stop of cleanup.reverse()) try { await stop() } catch { this.ctx.logger.warn('Bot capability cleanup failed') }
       this.live?.delete(attempt.id)
       if (run.agent && !deadline.signal.aborted) try { await deadline.wait(this.ctx.sessions.flush(run.agent.session)) } catch { error = 'Native Session flush failed'; status = 'failed' }
       deadline.dispose()

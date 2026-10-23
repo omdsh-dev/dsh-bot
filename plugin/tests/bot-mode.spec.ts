@@ -493,3 +493,26 @@ it('releases idle archived bodies, reads old pages on demand and retains histori
   expect((await b.service.connectorNotifications(room.id, 600)).offset).toBeGreaterThan(0)
   expect((await b.service.connectorNotifications(room.id, 0)).room.messages).toHaveLength(600)
 })
+
+it('stores credential values only in native records and rolls back failed/stale grant changes without exposing or replacing the active value', async () => {
+  const b = bench(), values = new Map<string, { kind: 'api-key'; key: string }>()
+  Object.assign(b.ctx, { credentials: {
+    modifyRecord: async (key: string, mutate: () => Promise<{ kind: 'api-key'; key: string }>) => { values.set(key, await mutate()) },
+    deleteRecord: async (key: string) => { values.delete(key) }, describeRecord: async (key: string) => ({ configured: values.has(key) }),
+  } })
+  await b.service.saveBotCredential({ name: 'API_TOKEN', value: 'INITIAL_PRIVATE_CREDENTIAL', description: 'Fixture', botIds: ['sage'], shellBotIds: [] })
+  expect(values.size).toBe(1)
+  expect(JSON.stringify(b.service.snapshot())).not.toContain('PRIVATE_CREDENTIAL')
+  expect(JSON.stringify(await b.service.accessCatalog())).not.toContain('bot-mode/')
+  expect(JSON.stringify(b.set.mock.calls)).not.toContain('INITIAL_PRIVATE_CREDENTIAL')
+  b.set.mockRejectedValueOnce(new Error('disk full'))
+  await expect(b.service.saveBotCredential({ name: 'API_TOKEN', revision: 1, value: 'NEW_PRIVATE_CREDENTIAL', description: '', botIds: ['sage'], shellBotIds: [] })).rejects.toThrow('disk full')
+  expect([...values.values()].map(item => item.key)).toEqual(['INITIAL_PRIVATE_CREDENTIAL'])
+  expect((await b.service.accessCatalog()).credentials[0]!.revision).toBe(1)
+  await b.service.saveBotCredential({ name: 'API_TOKEN', revision: 1, description: '', botIds: [], shellBotIds: [] })
+  expect((await b.service.accessCatalog()).credentials[0]!.botIds).toEqual([])
+  await expect(b.service.saveBotCredential({ name: 'API_TOKEN', revision: 1, value: 'STALE_PRIVATE_CREDENTIAL', description: '', botIds: ['sage'], shellBotIds: [] })).rejects.toThrow('changed')
+  expect([...values.values()].map(item => item.key)).toEqual(['INITIAL_PRIVATE_CREDENTIAL'])
+  await b.service.removeAccess({ name: 'API_TOKEN', revision: 2, kind: 'credential' })
+  expect(values.size).toBe(0)
+})

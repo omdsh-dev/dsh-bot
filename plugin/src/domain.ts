@@ -7,6 +7,7 @@ import type { BotId, RoomId, ChatMessageId, BotState } from './types.ts'
 import { memorySchema } from './memory.ts'
 import { usageLedgerSchema } from './usage-ledger.ts'
 import { suggestionSchema } from './memory-governance.ts'
+import { accessSchema } from './access-state.ts'
 
 const botId = z.string().transform(brandString<BotId>)
 const messageId = z.string().transform(brandString<ChatMessageId>)
@@ -31,6 +32,7 @@ export const messageSchema = z.object({ id: messageId, botId: botId.nullable(), 
 const budgetSchema = z.object({ tokenLimit: z.number().nonnegative(), costLimit: z.number().nonnegative(), currency: z.string(), used: usage, since: z.number(), period: z.enum(['never', 'day', 'month']).optional(), reservationTokens: z.number().nonnegative().optional(), reservationCost: z.number().nonnegative().optional() })
 const schema: z.ZodType<BotState> = z.object({
   historyVersion: z.number().optional(),
+  access: accessSchema.optional(),
   usageLedger: usageLedgerSchema.optional(),
   memorySuggestions: z.array(suggestionSchema).optional(),
   memories: z.array(memorySchema).optional(), memoryChunks: z.array(z.string()).optional(), retiredMemoryChunks: z.array(z.string()).optional(), memoryEpoch: z.number().int().nonnegative().optional(),

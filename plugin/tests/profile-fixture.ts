@@ -7,7 +7,7 @@ import type {} from '../src/index.ts'
 import type { RoomId } from '../src/types.ts'
 
 export const name = 'bot-mode-profile-fixture'
-export const inject = ['botMode', 'llm', 'storageDomain']
+export const inject = ['botMode', 'llm', 'storageDomain', 'agents']
 export async function apply(ctx: Context): Promise<void> {
   const requests: GenerateOptions[] = []
   let knowledgeMessageId = ''
@@ -34,6 +34,7 @@ export async function apply(ctx: Context): Promise<void> {
         { id: 'knowledge-memory', name: 'memory_recall', args: { query: 'shared-fixture' } },
         { id: 'knowledge-status', name: 'task_status', args: {} },
       ].find(call => !hasResult(call.id))
+      if (content.includes('ACCESS_TOOL_FIXTURE') && !hasResult('access-inspect')) tool = { id: 'access-inspect', name: 'mcp__bot_access-fixture__inspect', args: {} }
       if (content.includes('COLLAB_FIXTURE') && !content.includes('Delegated task from') && !hasResult('collab-delegate'))
         tool = { id: 'collab-delegate', name: 'delegate_task', args: { botId: 'collab-worker', task: 'Return a verified result for this fixture.' } }
       if (options.purpose !== 'session-title' && tool) {
@@ -284,6 +285,61 @@ export async function apply(ctx: Context): Promise<void> {
       assert.equal(service.previewMemories({ roomId: room.id, botId: bot.id, userId: 'local:operator', query: '' }).records.some(item => item.topic === 'auto-language'), false)
       await service.configureKnowledge({ reviewEnabled: false })
 
+    }
+    if (process.env.BOT_TEST_PHASE === 'first') {
+      const owner = await service.createBot({ id: 'access-owner', name: 'Access owner', instructions: 'Use only granted capabilities.' })
+      const outsider = await service.createBot({ id: 'access-outsider', name: 'Access outsider', instructions: 'No capability grants.' })
+      const ownerRoom = await service.openDirect(owner.id), otherRoom = await service.openDirect(outsider.id)
+      const script = process.env.BOT_TEST_RESULT! + '.mcp.cjs'
+      await writeFile(script, `const {createInterface}=require('node:readline');
+createInterface({input:process.stdin}).on('line', line=>{
+ const request=JSON.parse(line); if(request.id===undefined)return;
+ let result=request.method==='initialize'?{protocolVersion:request.params.protocolVersion,capabilities:{tools:{}},serverInfo:{name:'fixture',version:'1'}}:
+ request.method==='tools/list'?{tools:[{name:'inspect',description:'Inspect the fixture credential transport',inputSchema:{type:'object',properties:{}}}]}:
+ request.method==='tools/call'?{content:[{type:'text',text:'transport-ok '+process.env.FIXTURE_TOKEN}]}:{};
+ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:request.id,result})+'\\n');
+});`)
+      await service.saveBotCredential({ name: 'FIXTURE_TOKEN', description: 'Scoped fixture', value: 'ONLY_GRANTED_FIXTURE_TOKEN_123', botIds: [owner.id], shellBotIds: [owner.id] })
+      await service.saveCapability({ name: 'access-fixture', kind: 'mcp', transport: 'stdio', command: process.execPath, args: [script], env: { FIXTURE_TOKEN: '$DSH_SECRET_FIXTURE_TOKEN' }, description: 'Scoped MCP fixture', botIds: [owner.id] })
+      await service.saveCapability({ name: 'fixture-guide', kind: 'skill', content: 'ACCESS_SKILL_BODY Never share private credentials.', description: 'ACCESS_SKILL_DESCRIPTION', botIds: [owner.id] })
+      const initial = requests.length
+      await service.send({ roomId: ownerRoom.id, text: 'ACCESS_TOOL_FIXTURE inspect the granted transport.' })
+      const result = (await settled(ownerRoom.id)).messages.at(-1)!
+      assert.equal(result.status, 'complete', JSON.stringify(result))
+      assert.ok(result.toolDetails?.some(tool => tool.name === 'mcp__bot_access-fixture__inspect' && tool.result?.includes('transport-ok')), JSON.stringify(result))
+      assert.ok(JSON.stringify(requests.slice(initial)).includes('ACCESS_SKILL_DESCRIPTION'), 'Assigned skill must enter only its Bot catalog')
+      assert.ok(!JSON.stringify(requests.slice(initial)).includes('ONLY_GRANTED_FIXTURE_TOKEN_123'), 'MCP credential values must be redacted before the next model request')
+      assert.ok(!JSON.stringify(result).includes('ONLY_GRANTED_FIXTURE_TOKEN_123'), 'Public transcript cannot retain a returned credential')
+      const beforeConcurrent = requests.length
+      await service.send({ roomId: ownerRoom.id, text: 'WAIT_FOR_STOP_ACCESS Keep this granted mount active.' })
+      const concurrentDeadline = Date.now() + 10000
+      while (requests.length === beforeConcurrent) { if (Date.now() > concurrentDeadline) throw new Error('Granted mount did not start'); await new Promise(resolve => setTimeout(resolve, 20)) }
+      await service.send({ roomId: otherRoom.id, text: 'ACCESS_ISOLATION_FIXTURE ordinary response.' })
+      assert.equal((await settled(otherRoom.id)).messages.at(-1)!.status, 'complete')
+      assert.ok(!JSON.stringify(requests.at(-1)).includes('mcp__bot_access-fixture__inspect'))
+      assert.ok(!JSON.stringify(requests.at(-1)).includes('ACCESS_SKILL_DESCRIPTION'))
+      const ownerMember = service.snapshot().rooms.find(room => room.id === ownerRoom.id)!.members[0]!
+      const ownerAgent = ctx.agents.get(ownerMember.sessionId)!, otherAgent = ctx.agents.get(service.snapshot().rooms.find(room => room.id === otherRoom.id)!.members[0]!.sessionId)!
+      const shell = Reflect.get(ctx, 'get').call(ctx, 'shellEnv') as { collect(exec: { agent: unknown; arguments: unknown }): Record<string, string> }
+      assert.equal(shell.collect({ agent: ownerAgent, arguments: { command: 'echo $DSH_SECRET_FIXTURE_TOKEN' } }).DSH_SECRET_FIXTURE_TOKEN, 'ONLY_GRANTED_FIXTURE_TOKEN_123')
+      assert.equal(shell.collect({ agent: ownerAgent, arguments: { command: 'echo $env:DSH_SECRET_FIXTURE_TOKEN' } }).DSH_SECRET_FIXTURE_TOKEN, 'ONLY_GRANTED_FIXTURE_TOKEN_123')
+      assert.equal(shell.collect({ agent: ownerAgent, arguments: { command: 'echo no-secret-needed' } }).DSH_SECRET_FIXTURE_TOKEN, undefined)
+      assert.equal(shell.collect({ agent: otherAgent, arguments: { command: 'echo $DSH_SECRET_FIXTURE_TOKEN' } }).DSH_SECRET_FIXTURE_TOKEN, undefined)
+      const running = service.snapshot().rooms.find(room => room.id === ownerRoom.id)!.messages.find(message => message.status === 'running')!
+      await service.stop({ roomId: ownerRoom.id, messageId: running.id }); await settled(ownerRoom.id)
+      await service.removeAccess({ kind: 'credential', name: 'FIXTURE_TOKEN', revision: 1 })
+      const beforeRevoked = requests.length
+      await service.send({ roomId: ownerRoom.id, text: 'ACCESS_REVOKED_FIXTURE' })
+      assert.equal((await settled(ownerRoom.id)).messages.at(-1)!.status, 'failed')
+      assert.equal(requests.length, beforeRevoked, 'A missing credential blocks MCP activation before a model call')
+      await service.saveBotCredential({ name: 'FIXTURE_TOKEN', description: 'Restored scoped fixture', value: 'ONLY_GRANTED_FIXTURE_TOKEN_123', botIds: [owner.id], shellBotIds: [owner.id] })
+    } else if (process.env.BOT_TEST_PHASE === 'resume') {
+      assert.ok((await service.accessCatalog()).credentials.some(item => item.name === 'FIXTURE_TOKEN' && item.configured))
+      const room = service.snapshot().rooms.find(room => room.kind === 'dm' && room.defaultBot === 'access-owner')!
+      await service.send({ roomId: room.id, text: 'ACCESS_TOOL_FIXTURE after restart.' })
+      const result = (await settled(room.id)).messages.at(-1)!
+      assert.equal(result.status, 'complete', JSON.stringify(result))
+      assert.ok(result.toolDetails?.some(tool => tool.name === 'mcp__bot_access-fixture__inspect'))
     }
     await writeFile(process.env.BOT_TEST_RESULT!, JSON.stringify({ ok: true, requests: requests.length, state: service.snapshot() }))
   } catch (error) {

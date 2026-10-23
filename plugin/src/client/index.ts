@@ -53,6 +53,8 @@ function install(ctx: Context): void {
   ctx.effect(() => () => control.dispose(), 'bot-mode: state stream')
   const face: PanelFace = {
     capabilities: {
+      accessCatalog: () => value(ctx.remote.bots.accessCatalog()), saveCapability: request => value(ctx.remote.bots.saveCapability(request)),
+      saveBotCredential: request => value(ctx.remote.bots.saveBotCredential(request)), removeAccess: request => value(ctx.remote.bots.removeAccess(request)),
       knowledgeStatus: () => value(ctx.remote.bots.knowledgeStatus()),
       usageReport: filter => value(ctx.remote.bots.usageReport(filter)),
       contextView: request => value(ctx.remote.bots.contextView(request)),
