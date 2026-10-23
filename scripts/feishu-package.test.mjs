@@ -78,6 +78,7 @@ export async function apply(ctx) {
  const wait=async predicate=>{const end=Date.now()+15000;while(!predicate()){if(Date.now()>end)throw new Error('Feishu fixture timed out');await new Promise(resolve=>setTimeout(resolve,20));}};
  try {
   const bot=ctx.botMode,sdk=createRequire(import.meta.url)(process.env.FEISHU_SDK_FILE);
+  await ctx.botMode.configureKnowledge({reviewEnabled:false}); // Count connector deliveries independently of background memory maintenance.
   await wait(()=>bot.feishuSnapshot().available&&bot.infoflowSnapshot().available);
   assert.equal(bot.infoflowSnapshot().bindings.length,0);
   if(process.env.FEISHU_PHASE==='first') {

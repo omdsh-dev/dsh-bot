@@ -94,6 +94,7 @@ export async function apply(ctx) {
  const wait=async(predicate,label)=>{const end=Date.now()+15000;while(!predicate()){if(Date.now()>end)throw new Error('Timed out: '+label);await new Promise(resolve=>setTimeout(resolve,20));}};
  try {
   const bot=ctx.botMode,require=createRequire(import.meta.url);
+  await ctx.botMode.configureKnowledge({reviewEnabled:false}); // Count connector deliveries independently of background memory maintenance.
   const fs=require(process.env.ISOLATION_FEISHU_SDK),info=require(process.env.ISOLATION_INFOFLOW_SDK);
   const first=process.env.ISOLATION_PHASE==='first';
   const fsBinding=()=>bot.feishuSnapshot().bindings.find(b=>b.botId==='alpha');

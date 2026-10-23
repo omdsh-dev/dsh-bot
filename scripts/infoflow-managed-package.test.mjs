@@ -67,6 +67,7 @@ export async function apply(ctx) {
   const wait = async predicate => { const deadline=Date.now()+15000; while(!predicate()) { if(Date.now()>deadline) throw new Error('Managed condition timed out'); await new Promise(resolve=>setTimeout(resolve,20)); } };
   try {
     const bot=ctx.botMode;
+  await ctx.botMode.configureKnowledge({reviewEnabled:false}); // Count connector deliveries independently of background memory maintenance.
     await wait(()=>bot.infoflowSnapshot().available);
     const sdk=createRequire(import.meta.url)(process.env.MANAGED_SDK_FILE);
     if(process.env.MANAGED_PHASE === 'first') {

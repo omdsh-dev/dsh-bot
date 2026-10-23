@@ -97,6 +97,7 @@ export async function apply(ctx){
  const wait=async(p,label)=>{const end=Date.now()+5000;while(!p()){if(Date.now()>end)throw new Error(label);await new Promise(r=>setTimeout(r,20));}};
  try{
   const bot=ctx.botMode,require=createRequire(import.meta.url),fs=require('@larksuiteoapi/node-sdk'),info=require('@baidu/infoflow-sdk-nodejs');
+  await ctx.botMode.configureKnowledge({reviewEnabled:false}); // Count connector deliveries independently of background memory maintenance.
   await wait(()=>bot.feishuSnapshot().available&&bot.infoflowSnapshot().available,'managers unavailable');
   if(process.env.DELEGATION_PHASE==='first'){
    for(const id of ['alpha','beta','gamma']){
