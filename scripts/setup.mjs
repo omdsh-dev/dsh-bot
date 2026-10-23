@@ -21,6 +21,8 @@ if (!existsSync(runtime)) {
 if (lstatSync(runtime).isSymbolicLink()) throw new Error('The managed runtime cannot be a symlink to another checkout.')
 const hasHead = spawnSync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: runtime, stdio: 'ignore' }).status === 0
 if (!hasHead) {
+  // Integration patches target the upstream LF tree, including on Windows hosts.
+  run('git', ['config', 'core.autocrlf', 'false'], { cwd: runtime })
   run('git', ['fetch', '--depth', '1', 'origin', pin.commit], { cwd: runtime })
   run('git', ['checkout', '--detach', pin.commit], { cwd: runtime })
 }

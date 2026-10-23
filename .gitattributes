@@ -1,0 +1,2 @@
+# Integration patches must survive Windows checkout without CRLF conversion.
+*.patch text eol=lf
