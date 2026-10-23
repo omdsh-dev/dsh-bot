@@ -54,7 +54,11 @@ function install(ctx: Context): void {
   const face: PanelFace = {
     capabilities: {
       knowledgeStatus: () => value(ctx.remote.bots.knowledgeStatus()),
-      usageReport: () => value(ctx.remote.bots.usageReport()),
+      usageReport: filter => value(ctx.remote.bots.usageReport(filter)),
+      contextView: request => value(ctx.remote.bots.contextView(request)),
+      memoryGovernance: () => value(ctx.remote.bots.memoryGovernance()),
+      analyzeMemories: request => value(ctx.remote.bots.analyzeMemories(request)),
+      resolveMemorySuggestion: request => value(ctx.remote.bots.resolveMemorySuggestion(request)),
       configureKnowledge: settings => value(ctx.remote.bots.configureKnowledge(settings)),
       reviewAction: request => value(ctx.remote.bots.reviewAction(request)),
       linkIdentity: request => value(ctx.remote.bots.linkIdentity(request)),

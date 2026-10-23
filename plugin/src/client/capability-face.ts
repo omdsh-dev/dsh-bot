@@ -1,9 +1,15 @@
-import type { KnowledgeSettings, KnowledgeStatus } from '../knowledge-types.ts'
+import type { ContextView, KnowledgeSettings, KnowledgeStatus } from '../knowledge-types.ts'
 import type { UsageReport } from '../usage.ts'
+import type { UsageFilter } from '../usage-types.ts'
 import type { AttachmentRequest, AttachmentData, CapabilityCatalog, QuestionAnswer, ScheduleRun, BotId, Room, Budget, ChatAttachment, ConfigureBudget, FailureAction, FailureView, HistoryPage, HistoryRequest, LifecycleRequest, RoomId, SaveScheduleRequest, Schedule, UploadRequest } from '../types.ts'
 import type { Memory, MemoryAction, MemoryCatalog, MemoryListRequest, MemoryPreviewRequest, MemorySelection, SaveMemoryRequest } from '../memory-types.ts'
+import type { AnalyzeMemoriesRequest, MemoryGovernanceView, ResolveMemorySuggestion } from '../memory-types.ts'
 export interface CapabilityFace {
-  usageReport(): Promise<UsageReport>
+  usageReport(filter?: UsageFilter): Promise<UsageReport>
+  contextView(request: { roomId: RoomId; messageId: import('../types.ts').ChatMessageId }): Promise<ContextView>
+  memoryGovernance(): Promise<MemoryGovernanceView>
+  analyzeMemories(request: AnalyzeMemoriesRequest): Promise<number>
+  resolveMemorySuggestion(request: ResolveMemorySuggestion): Promise<void>
   knowledgeStatus(): Promise<KnowledgeStatus>
   configureKnowledge(settings: KnowledgeSettings): Promise<void>
   reviewAction(request: { id: string; action: 'retry' | 'skip' }): Promise<void>

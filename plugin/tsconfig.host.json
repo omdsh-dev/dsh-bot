@@ -46,7 +46,12 @@
     "src/knowledge-tools.ts",
     "src/memory-review.ts",
     "src/context-continuity.ts",
-    "src/memory-store.ts"
+    "src/memory-store.ts",
+    "src/usage-types.ts",
+    "src/usage-ledger.ts",
+    "src/usage-store.ts",
+    "src/memory-invalidation.ts",
+    "src/memory-governance.ts"
   ],
   "references": [
     {

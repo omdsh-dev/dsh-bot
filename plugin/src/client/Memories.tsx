@@ -4,6 +4,7 @@ import type { BotState, Room } from '../types.ts'
 import type { Memory, MemoryCatalog, MemoryScope, MemorySelection, MemoryStatus, SaveMemoryRequest } from '../memory-types.ts'
 import type { CapabilityFace } from './capability-face.ts'
 import { KnowledgeControls } from './KnowledgeControls.tsx'
+import { MemoryGovernance } from './MemoryGovernance.tsx'
 import css from './Panel.module.css'
 
 export function Memories({ state, room, face, english }: { state: BotState; room?: Room | undefined; face: CapabilityFace; english: boolean }) {
@@ -62,6 +63,7 @@ export function Memories({ state, room, face, english }: { state: BotState; room
     {error && <p role="alert" className={css.controlError}>{error}</p>}
     <label>{l('记忆范围', 'Memory scope')}<select disabled={busy} value={scope} onChange={event => changeScope(event.target.value as MemoryScope)}>{Object.entries(labels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
     <label>{l('所属对象', 'Memory owner')}<select disabled={busy} value={owner} onChange={event => { setOwner(event.target.value); setShare(false) }}>{owners.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+    <MemoryGovernance state={state} face={face} scope={scope} ownerId={owner} english={english} revision={refresh} refresh={() => setRefresh(value => value + 1)}/>
     <label>{l('记忆状态', 'Memory status')}<select value={status} onChange={event => setStatus(event.target.value as typeof status)}><option value="">{l('全部', 'All')}</option>{(['pending', 'active', 'superseded'] as const).map(key => <option key={key} value={key}>{statuses[key]}</option>)}</select></label>
     <label>{l('搜索记忆', 'Search memories')}<Input value={query} onChange={event => setQuery(event.target.value)}/></label>
     <Button size="sm" disabled={busy} onClick={() => setRefresh(value => value + 1)}>{l('刷新', 'Refresh')}</Button>
@@ -80,7 +82,7 @@ export function Memories({ state, room, face, english }: { state: BotState; room
       {(item.status === 'active' || item.status === 'pending') && <div className={css.controlActions}>
         {item.status === 'pending' && <Button size="sm" disabled={busy} onClick={() => { void act(() => face.memoryAction({ id: item.id, revision: item.revision, action: 'approve' })) }}>{l('确认生效', 'Approve')}</Button>}
         <Button size="sm" disabled={busy} onClick={() => edit(item)}>{l('编辑 / 共享', 'Edit / share')}</Button>
-        <Button size="sm" disabled={busy} className={css.dangerButton} onClick={() => { if (window.confirm(l('遗忘这条记忆及其旧版本？当前执行将停止，下次请求会建立新上下文。历史聊天和执行记录会保留。', 'Forget this memory and its older versions? Current executions will stop and future requests get fresh context. Existing chat and execution logs are retained.'))) void act(() => face.memoryAction({ id: item.id, revision: item.revision, action: 'forget' })) }}>{l('遗忘', 'Forget')}</Button>
+        <Button size="sm" disabled={busy} className={css.dangerButton} onClick={() => { if (window.confirm(l('遗忘这条记忆及其旧版本？受影响的 Bot 执行将停止，下次请求会建立新上下文。历史聊天和执行记录会保留。', 'Forget this memory and its older versions? Affected Bot executions will stop and future requests get fresh context. Existing chat and execution logs are retained.'))) void act(() => face.memoryAction({ id: item.id, revision: item.revision, action: 'forget' })) }}>{l('遗忘', 'Forget')}</Button>
       </div>}
     </article>)}
     <h4>{editing ? l('编辑记忆（切换范围可共享副本）', 'Edit memory (change scope to share a copy)') : l('添加记忆', 'Add memory')}</h4>

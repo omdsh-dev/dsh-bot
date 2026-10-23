@@ -5,7 +5,7 @@ import { PermanentChatError } from './external-errors.ts'
 import { Context, Service } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import type { LlmRuntime, TokenUsage, ToolCallId } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, LlmRuntime, StreamChunk, TokenUsage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -22,16 +22,22 @@ import { MemoryStore } from './memory-store.ts'
 import { HistoryStore } from './history-store.ts'
 import { actOnMemory, memoryCatalog, memoryUser, canonicalUser, linkUserIdentity, visibleMemoryKeys, MEMORY_RULES, proposeMemory, saveMemory, selectMemories } from './memory.ts'
 import { installMemoryTool } from './memory-tool.ts'
+import { invalidateMemories, memoryAudience, memoryVersion, mergeMemoryTargets, type MemoryTarget } from './memory-invalidation.ts'
+import { applySemanticSuggestions, currentSuggestion, GOVERNANCE_PROMPT, resolveSuggestion, scanMemories } from './memory-governance.ts'
+import type { AnalyzeMemoriesRequest, MemoryGovernanceView, ResolveMemorySuggestion } from './memory-types.ts'
 import { ChatSearch } from './chat-search.ts'
 import { installKnowledgeTools } from './knowledge-tools.ts'
 import { RunDeadline } from './run-deadline.ts'
 import { applyMemoryReview, eligibleForReview, failMemoryReview, queueMemoryReview, REVIEW_PROMPT } from './memory-review.ts'
-import { contextPressure, handoffEvidence, handoffNote, HANDOFF_PROMPT } from './context-continuity.ts'
-import type { KnowledgeSettings, KnowledgeStatus } from './knowledge-types.ts'
+import { contextAction, contextPressure, handoffEvidence, handoffNote, HANDOFF_PROMPT } from './context-continuity.ts'
+import type { ContextView, KnowledgeSettings, KnowledgeStatus } from './knowledge-types.ts'
 import type { Memory, MemoryAction, MemoryCatalog, MemoryListRequest, MemoryPreviewRequest, MemorySelection, SaveMemoryRequest } from './memory-types.ts'
 import { nextCalendar, validateCalendar } from './scheduling.ts'
 import { resetPeriod, needsBudgetReset, reserveBudget, addUsage } from './budgets.ts'
-import { usageReport, type UsageReport } from './usage.ts'
+import { usageReport, ledgerReport, type UsageReport } from './usage.ts'
+import { beginUsage, finishUsage, migrateUsage } from './usage-ledger.ts'
+import { UsageStore } from './usage-store.ts'
+import type { UsageCall, UsageFilter } from './usage-types.ts'
 import type {} from '@deepseek-ai/dsh-user-questions'
 import type { QuestionView, QuestionAnswer, AttachmentRequest, AttachmentData, CapabilityCatalog, ScheduleRun } from './types.ts'
 import { historyPage, exportRoom, validatePolicy } from './capabilities.ts'
@@ -78,9 +84,14 @@ export class BotMode extends TypertRemoteService {
   private domain!: Domain<typeof botDomain>
   private historyStore?: HistoryStore
   private memoryStore?: MemoryStore
+  private usageStore?: UsageStore
   private chatSearch = new ChatSearch()
   private memoryTask: Promise<void> | undefined
   private memoryController: AbortController | undefined
+  private memoryReviewTarget: MemoryTarget | undefined
+  private governanceControllers = new Set<AbortController>()
+  private maintenanceDone = new Set<Promise<void>>()
+  private ownAuxiliary = new WeakSet<object>()
   private questions = new Map<string, { roomId: RoomId; messageId: ChatMessageId; view: QuestionView; resolve(answer: QuestionAnswer): void; cancel(): void }>()
   private state: BotState = { bots: [], rooms: [] }
   private tail: Promise<unknown> = Promise.resolve()
@@ -108,9 +119,11 @@ export class BotMode extends TypertRemoteService {
     try {
       this.historyStore = new HistoryStore(spec => this.ctx.storageDomain.open(spec))
       this.memoryStore = new MemoryStore(spec => this.ctx.storageDomain.open(spec))
+      this.usageStore = new UsageStore(spec => this.ctx.storageDomain.open(spec))
       this.state = await this.memoryStore.hydrate(await this.historyStore.hydrate(this.domain.global.get()))
+      migrateUsage(this.state)
       // Unknown in-flight usage is charged conservatively on restart, never silently refunded.
-      for (const id of Object.keys(this.state.budgetReservations ?? {})) this.settleReservation(this.state, id)
+      for (const id of new Set([...Object.keys(this.state.budgetReservations ?? {}), ...Object.keys(this.state.usageLedger?.pending ?? {})])) this.settleReservation(this.state, id)
       // Do not replay uncertain requests after a process crash. DSH retains the
       // input/output log; users can inspect it before explicitly retrying.
       for (const room of this.state.rooms) for (const message of room.messages) {
@@ -122,6 +135,7 @@ export class BotMode extends TypertRemoteService {
         for (const chatId of new Set(this.state.rooms.filter(room => isExternalGroup(room) && room.external!.provider === provider).map(room => room.external!.id))) mergeExternalRooms(this.state, chatId, provider)
       }
       await this.persist(this.state)
+      this.ctx.on('llm/stream', (options, next) => this.meterNativeCompaction(options, next), { global: true, prepend: true })
       this.ctx.on('agent/created', ({ agent }) => { this.installIdentity(agent) })
       for (const room of this.state.rooms) for (const member of room.members) {
         const agent = this.ctx.agents.get(member.sessionId)
@@ -137,13 +151,16 @@ export class BotMode extends TypertRemoteService {
         this.closing = true
         await this.schedulerTask
         this.memoryController?.abort()
+        for (const controller of this.governanceControllers) controller.abort()
         await this.memoryTask
         for (const pending of this.questions?.values() ?? []) pending.cancel()
         this.questions?.clear()
         for (const pending of this.approvals.values()) pending.resolve('cancelled')
         this.approvals.clear()
         for (const run of this.running.values()) { run.canceled = true; run.deadline?.abort(); run.agent?.cancel({ kind: 'user' }) }
+        for (const [key, call] of Object.entries(this.state.usageLedger?.pending ?? {})) if (key.startsWith('compaction:') && call.sessionId) this.ctx.agents.get(SessionId(call.sessionId))?.cancel({ kind: 'user' })
         await Promise.allSettled([...this.running.values()].map(run => run.task))
+        await Promise.allSettled(this.maintenanceDone)
         await this.tail
         for (const wake of this.watchers) wake()
         await this.domain.close()
@@ -180,7 +197,8 @@ export class BotMode extends TypertRemoteService {
 
   private persist(state: BotState): Promise<void> {
     const commit = (value: BotState) => this.historyStore ? this.historyStore.persist(value, manifest => this.domain.global.set(manifest)) : this.domain.global.set(value)
-    return this.memoryStore ? this.memoryStore.persist(state, commit) : commit(state)
+    const memories = (value: BotState) => this.memoryStore ? this.memoryStore.persist(value, commit) : commit(value)
+    return this.usageStore ? this.usageStore.persist(state, memories) : memories(state)
   }
   private activeCount(room: Room): number { return room.messages.filter(message => message.status === 'running' || message.status === 'queued').length }
 
@@ -246,10 +264,12 @@ export class BotMode extends TypertRemoteService {
    */
   @Remote snapshot(): BotState {
     const state = structuredClone(this.state)
+    delete state.usageLedger
     delete state.memories
     delete state.memoryChunks
     delete state.retiredMemoryChunks
     delete state.memoryReviews
+    delete state.memorySuggestions
     delete state.userIdentities
     if (state.infoflowVisible === undefined) {
       const configured = this.infoflow?.snapshot()
@@ -266,10 +286,12 @@ export class BotMode extends TypertRemoteService {
       const start = Math.max(0, Math.min(room.messages.length - 50, active < 0 ? room.messages.length : active - 1))
       return { ...room, messageCount: room.messages.length, messages: room.messages.slice(start) }
     }) })
+    delete state.usageLedger
     delete state.memories
     delete state.memoryChunks
     delete state.retiredMemoryChunks
     delete state.memoryReviews
+    delete state.memorySuggestions
     delete state.userIdentities
     state.rooms = state.rooms.filter(room => !room.deleted)
     for (const room of state.rooms) {
@@ -296,24 +318,95 @@ export class BotMode extends TypertRemoteService {
       && (!request.status || item.status === request.status) && (!query || `${item.subject} ${item.topic} ${item.body}`.toLowerCase().includes(query)))
       .sort((a, b) => b.updatedAt - a.updatedAt))
   }
-  @Remote saveMemory(request: SaveMemoryRequest): Promise<Memory> { return this.change(state => saveMemory(state, request)) }
-  @Remote async memoryAction(request: MemoryAction): Promise<void> {
-    await this.change(state => {
-      actOnMemory(state, request)
-      if (request.action === 'forget') this.revokeMemoryWork(state)
+  @Remote async saveMemory(request: SaveMemoryRequest): Promise<Memory> {
+    const result = await this.change(state => {
+      const previous = state.memories?.find(memory => memory.id === request.id)
+      const targets = previous ? memoryAudience(state, [previous]) : []
+      const item = saveMemory(state, request)
+      if (previous?.status === 'superseded') { invalidateMemories(state, targets); this.revokeMemoryWork(state, targets) }
+      return { item, targets: previous?.status === 'superseded' ? targets : [] }
     })
-    if (request.action === 'forget') this.invalidateMemoryContext()
+    this.invalidateMemoryContext(result.targets)
+    return result.item
+  }
+  @Remote async memoryAction(request: MemoryAction): Promise<void> {
+    const targets = await this.change(state => {
+      const item = state.memories?.find(memory => memory.id === request.id)
+      const targets = request.action === 'forget' && item ? memoryAudience(state, [item]) : []
+      actOnMemory(state, request)
+      if (targets.length) { invalidateMemories(state, targets); this.revokeMemoryWork(state, targets) }
+      return targets
+    })
+    this.invalidateMemoryContext(targets)
   }
   @Remote previewMemories(request: MemoryPreviewRequest): MemorySelection {
     const room = this.room(this.state, request.roomId as RoomId)
     if (!room.members.some(member => member.botId === request.botId)) throw new Error('Bot is not a member of this chat')
     return selectMemories(this.state, room, request.botId, request.userId, request.query)
   }
+  @Remote async memoryGovernance(): Promise<MemoryGovernanceView> {
+    await this.change(state => scanMemories(state))
+    const suggestions = (this.state.memorySuggestions ?? []).filter(suggestion => suggestion.status === 'pending' && currentSuggestion(this.state, suggestion))
+    const ids = new Set(suggestions.flatMap(suggestion => [suggestion.left.id, suggestion.right.id]))
+    return structuredClone({ suggestions, records: (this.state.memories ?? []).filter(memory => ids.has(memory.id)) })
+  }
+  @Remote async analyzeMemories(request: AnalyzeMemoriesRequest): Promise<number> {
+    if (this.closing) throw new Error('Bot Mode is closing')
+    const bot = this.state.bots.find(bot => bot.id === request.botId && !bot.archived)
+    const room = this.state.rooms.find(room => room.kind === 'dm' && !room.external && !room.deleted && room.defaultBot === bot?.id)
+    if (!bot || !room) throw new Error('Select an active Bot with a local direct chat for the analysis')
+    const records = structuredClone((this.state.memories ?? []).filter(memory => memory.scope === request.scope && memory.ownerId === request.ownerId && ['active', 'pending'].includes(memory.status)))
+    if (records.length < 2) return 0
+    if (records.length > 80) throw new Error('Semantic review supports up to 80 records in one scope; resolve existing suggestions first')
+    this.governanceControllers ??= new Set()
+    if (this.governanceControllers.size) throw new Error('A semantic memory review is already running')
+    const controller = new AbortController(); this.governanceControllers.add(controller)
+    let done!: () => void
+    const settled = new Promise<void>(resolve => { done = resolve }); this.maintenanceDone.add(settled)
+    try {
+      const member = this.member(room, bot.id)
+      await this.ctx.sessionController.create({ sessionId: member.sessionId, cwd: this.config.cwd, agentPreset: bot.preset })
+      const agent = this.ctx.agents.get(member.sessionId)
+      if (!agent) throw new Error('Bot Session is unavailable')
+      const input = JSON.stringify(records.map(memory => ({ id: memory.id, kind: memory.kind, subject: memory.subject, topic: memory.topic,
+        body: memory.body, evidence: memory.reviewEvidence ?? memory.source.evidence, effectiveAt: memory.effectiveAt, expiresAt: memory.expiresAt })))
+      if (input.length > 100000) throw new Error('Selected memory evidence is too large for one analysis')
+      const text = await this.auxiliary(agent, bot, 'memory', GOVERNANCE_PROMPT, input, controller.signal)
+      if (controller.signal.aborted || this.closing) throw new Error('Semantic review canceled')
+      return await this.change(state => applySemanticSuggestions(state, records, text))
+    } finally { this.governanceControllers.delete(controller); done(); this.maintenanceDone.delete(settled) }
+  }
+  @Remote async resolveMemorySuggestion(request: ResolveMemorySuggestion): Promise<void> {
+    const targets = await this.change(state => {
+      const affected = resolveSuggestion(state, request), targets = memoryAudience(state, affected)
+      invalidateMemories(state, targets); this.revokeMemoryWork(state, targets); return targets
+    })
+    this.invalidateMemoryContext(targets)
+  }
   @Remote knowledgeStatus(): KnowledgeStatus {
     return structuredClone({ settings: this.state.knowledgeSettings ?? { reviewEnabled: true }, reviews: (this.state.memoryReviews ?? []).slice(-200).reverse(),
       identities: this.state.userIdentities ?? [], usage: this.state.maintenanceUsage ?? [] })
   }
-  @Remote usageReport(): UsageReport { return usageReport(this.state) }
+  @Remote async usageReport(filter?: UsageFilter): Promise<UsageReport> {
+    const state = this.state
+    if (!state.usageLedger) return usageReport(state)
+    return ledgerReport(state, this.usageStore ? this.usageStore.read(state.usageLedger) : state.usageLedger.tail, filter)
+  }
+  @Remote contextView(request: AttemptRequest): ContextView {
+    const room = this.room(this.state, request.roomId), message = findMessage(room, request.messageId)
+    if (room.deleted || !message.botId) throw new Error('Select an available Bot response')
+    const member = room.members.find(member => member.botId === message.botId), bot = this.state.bots.find(bot => bot.id === message.botId)
+    const sessionId = message.executionSessionId ?? member?.sessionId ?? ''
+    const agent = sessionId ? this.ctx.agents.get(SessionId(sessionId)) : undefined
+    const pressure = agent && bot ? contextPressure(agent, bot) : undefined
+    return structuredClone({ botId: message.botId, sessionId, trace: message.context ?? null,
+      current: pressure ? { tokens: pressure.tokens, window: pressure.window, measurement: pressure.measurement } : null,
+      memories: (message.context?.memories ?? []).map(ref => {
+        const memory = this.state.memories?.find(memory => memory.id === ref.id)
+        return { id: ref.id, revision: ref.revision, status: memory?.status ?? 'unavailable', scope: memory?.scope ?? '',
+          subject: memory?.subject ?? '', topic: memory?.topic ?? '', body: memory?.body ?? '' }
+      }), segments: member?.segments ?? [], pendingHandoff: member?.handoff ?? null, decisions: member?.contextDecisions ?? [] })
+  }
   @Remote async configureKnowledge(settings: KnowledgeSettings): Promise<void> {
     await this.change(state => { state.knowledgeSettings = { reviewEnabled: settings.reviewEnabled } })
     if (!settings.reviewEnabled) this.memoryController?.abort()
@@ -327,33 +420,83 @@ export class BotMode extends TypertRemoteService {
     })
   }
   @Remote async linkIdentity(request: { id?: string; name: string; aliases: string[] }): Promise<void> {
-    await this.change(state => { linkUserIdentity(state, request); this.revokeMemoryWork(state) }); this.invalidateMemoryContext()
+    const targets = await this.change(state => {
+      const old = state.userIdentities?.find(person => person.id === request.id)
+      const users = [...request.aliases, ...(old ? [old.id, ...old.aliases] : [])]
+      const before = memoryAudience(state, [], users)
+      linkUserIdentity(state, request)
+      const targets = mergeMemoryTargets(before, memoryAudience(state, [], users))
+      invalidateMemories(state, targets); this.revokeMemoryWork(state, targets); return targets
+    })
+    this.invalidateMemoryContext(targets)
   }
   @Remote async unlinkIdentity(request: { id: string }): Promise<void> {
-    await this.change(state => {
-      if (!state.userIdentities?.some(person => person.id === request.id)) throw new Error('Unknown linked identity')
-      state.userIdentities = state.userIdentities.filter(person => person.id !== request.id)
-      state.memoryEpoch = (state.memoryEpoch ?? 0) + 1
-      this.revokeMemoryWork(state)
+    const targets = await this.change(state => {
+      const person = state.userIdentities?.find(person => person.id === request.id)
+      if (!person) throw new Error('Unknown linked identity')
+      const before = memoryAudience(state, [], [person.id, ...person.aliases])
+      state.userIdentities = state.userIdentities!.filter(person => person.id !== request.id)
+      const targets = mergeMemoryTargets(before, memoryAudience(state, [], person.aliases))
+      invalidateMemories(state, targets); this.revokeMemoryWork(state, targets); return targets
     })
-    this.invalidateMemoryContext()
+    this.invalidateMemoryContext(targets)
   }
-  private revokeMemoryWork(state: BotState): void {
-    for (const room of state.rooms) for (const message of room.messages) {
+  private revokeMemoryWork(state: BotState, targets: MemoryTarget[]): void {
+    const affected = (roomId: string, botId: string | null) => targets.some(target => target.roomId === roomId && target.botId === botId)
+    for (const room of state.rooms) for (const message of room.messages) if (affected(room.id, message.botId)) {
+        delete message.questions
         if (message.awaiting?.length) message.collaborationCanceled = true
         if (message.status === 'running' || message.status === 'queued') {
           const root = humanRequest(room, message); if (root) root.allowDelegation = false
           if (message.status === 'queued') { message.status = 'canceled'; message.error = 'Memory access changed; start a fresh request' }
         }
       }
-    for (const room of state.rooms) for (const message of room.messages) delete message.questions
-    for (const review of state.memoryReviews ?? []) if (['pending', 'running'].includes(review.status)) { review.status = 'skipped'; review.finishedAt = Date.now(); review.error = 'Memory access changed; review manually before retrying' }
+    for (const review of state.memoryReviews ?? []) if (affected(review.roomId, review.botId) && ['pending', 'running'].includes(review.status)) { review.status = 'skipped'; review.finishedAt = Date.now(); review.error = 'Memory access changed; review manually before retrying' }
   }
-  private invalidateMemoryContext(): void {
-    this.memoryController?.abort()
-    for (const [id, question] of this.questions ?? []) { question.cancel(); this.questions.delete(id) }
-    for (const [id, approval] of this.approvals ?? []) { approval.resolve('cancelled'); this.approvals.delete(id) }
-    for (const run of this.running.values()) { run.canceled = true; run.deadline?.abort('Memory access changed; start a fresh request'); run.agent?.cancel({ kind: 'user' }) }
+  private invalidateMemoryContext(targets: MemoryTarget[]): void {
+    const affected = (roomId: string, botId: string | null) => targets.some(target => target.roomId === roomId && target.botId === botId)
+    const attempts = new Set(this.state.rooms.flatMap(room => room.messages.filter(message => affected(room.id, message.botId)).map(message => message.id)))
+    if (this.memoryReviewTarget && affected(this.memoryReviewTarget.roomId, this.memoryReviewTarget.botId)) this.memoryController?.abort()
+    for (const [id, question] of this.questions ?? []) if (attempts.has(question.messageId)) { question.cancel(); this.questions.delete(id) }
+    for (const [id, approval] of this.approvals ?? []) if (attempts.has(approval.messageId)) { approval.resolve('cancelled'); this.approvals.delete(id) }
+    for (const [id, run] of this.running) if (attempts.has(id)) { run.canceled = true; run.deadline?.abort('Memory access changed; start a fresh request'); run.agent?.cancel({ kind: 'user' }) }
+  }
+
+  /** Native compaction uses the documented LLM waterfall; it is charged separately from chat steps. */
+  private async *meterNativeCompaction(options: GenerateOptions, next: () => AsyncIterable<StreamChunk>): AsyncIterable<StreamChunk> {
+    if (options.purpose !== 'compaction' || this.ownAuxiliary.has(options)) { yield* next(); return }
+    const room = this.state.rooms.find(room => !room.deleted && room.members.some(member => member.sessionId === options.sessionId))
+    const member = room?.members.find(member => member.sessionId === options.sessionId)
+    const original = this.state.bots.find(bot => bot.id === member?.botId)
+    if (!room || !original) { yield* next(); return }
+    if (this.closing) throw new Error('Bot Mode is closing')
+    const currentRoute = options.sessionId ? this.ctx.agents.get(SessionId(options.sessionId))?.session.requestContext() : undefined
+    const priced = (original.policy?.provider ?? currentRoute?.provider) === options.provider && (original.policy?.model ?? currentRoute?.model) === options.model
+    const bot = priced ? original : { ...original, policy: { ...original.policy, inputPrice: undefined, outputPrice: undefined } }
+    const id = `compaction:${randomUUID()}`
+    await this.reserveCall(id, bot, { purpose: 'handoff', provider: options.provider, model: options.model, roomId: room.id, sessionId: options.sessionId ?? null })
+    let done!: () => void
+    const settled = new Promise<void>(resolve => { done = resolve }); this.maintenanceDone.add(settled)
+    let measured: TokenUsage | undefined
+    try { for await (const chunk of next()) { if (chunk.type === 'usage') measured = chunk.usage; yield chunk } }
+    finally {
+      try {
+        await this.change(state => {
+          const usage = measured ? { input: measured.inputTokens + (measured.cacheReadTokens ?? 0) + (measured.cacheWriteTokens ?? 0), output: measured.outputTokens, cost: 0 } : undefined
+          if (usage) usage.cost = (usage.input * (bot.policy?.inputPrice ?? 0) + usage.output * (bot.policy?.outputPrice ?? 0)) / 1000000
+          this.settleReservation(state, id, usage, measured)
+          if (usage) {
+            state.budget ??= { tokenLimit: 0, costLimit: 0, currency: state.botBudgets?.[bot.id]?.currency ?? 'USD', used: { input: 0, output: 0, cost: 0 }, since: Date.now() }
+            resetPeriod(state.budget, Date.now()); addUsage(state.budget, usage)
+            const quota = state.botBudgets?.[bot.id]; if (quota) { resetPeriod(quota, Date.now()); addUsage(quota, usage) }
+          }
+          const rows = state.maintenanceUsage ??= []
+          let row = rows.find(row => row.botId === bot.id && row.purpose === 'handoff')
+          if (!row) { row = { botId: bot.id, purpose: 'handoff', input: 0, output: 0, cost: 0, calls: 0 }; rows.push(row) }
+          row.calls++; if (usage) { row.input += usage.input; row.output += usage.output; row.cost += usage.cost }
+        })
+      } finally { done(); this.maintenanceDone.delete(settled) }
+    }
   }
 
   /** Tool-free auxiliary calls use the Bot's route and the same durable budget reservations. */
@@ -364,7 +507,8 @@ export class BotMode extends TypertRemoteService {
     if (!llm || !provider || !model) throw new Error('No resolved Bot model route is available for maintenance')
     const id = `maintenance:${randomUUID()}`
     if (signal.aborted || this.closing) throw new Error('Maintenance canceled')
-    await this.reserveCall(id, bot)
+    const room = this.state.rooms.find(room => room.members.some(member => member.sessionId === agent.session.id))
+    await this.reserveCall(id, bot, { purpose, provider, model, sessionId: agent.session.id, roomId: room?.id ?? null })
     let measured: TokenUsage | undefined, invoked = false
     const timeout = AbortSignal.any([signal, AbortSignal.timeout(60000)])
     let onAbort = () => {}
@@ -373,7 +517,9 @@ export class BotMode extends TypertRemoteService {
       const collect = async () => {
         invoked = true
         let text = '', finished = false
-        for await (const chunk of llm.stream({ provider, model, system, messages: [{ role: 'user', content: [{ type: 'text', text: input }] }], maxTokens: 4096, signal: timeout, sessionId: agent.session.id, purpose: 'compaction' })) {
+        const options: GenerateOptions = { provider, model, system, messages: [{ role: 'user', content: [{ type: 'text', text: input }] }], maxTokens: 4096, signal: timeout, sessionId: agent.session.id, purpose: 'compaction' }
+        this.ownAuxiliary ??= new WeakSet(); this.ownAuxiliary.add(options)
+        for await (const chunk of llm.stream(options)) {
           if (timeout.aborted) throw new Error('Maintenance canceled')
           if (chunk.type === 'text-delta') text += chunk.text
           if (chunk.type === 'usage') measured = chunk.usage
@@ -390,11 +536,11 @@ export class BotMode extends TypertRemoteService {
       await this.change(state => {
         const usage = measured ? { input: measured.inputTokens + (measured.cacheReadTokens ?? 0) + (measured.cacheWriteTokens ?? 0), output: measured.outputTokens, cost: 0 } : undefined
         if (usage) usage.cost = (usage.input * (bot.policy?.inputPrice ?? 0) + usage.output * (bot.policy?.outputPrice ?? 0)) / 1000000
-        this.settleReservation(state, id, usage ?? (invoked ? undefined : { input: 0, output: 0, cost: 0 }))
+        this.settleReservation(state, id, usage ?? (invoked ? undefined : { input: 0, output: 0, cost: 0 }), measured, invoked)
         if (usage) {
-          state.budget ??= { tokenLimit: 0, costLimit: 0, currency: 'USD', used: { input: 0, output: 0, cost: 0 }, since: Date.now() }
-          addUsage(state.budget, usage)
-          if (state.botBudgets?.[bot.id]) addUsage(state.botBudgets[bot.id]!, usage)
+          state.budget ??= { tokenLimit: 0, costLimit: 0, currency: state.botBudgets?.[bot.id]?.currency ?? 'USD', used: { input: 0, output: 0, cost: 0 }, since: Date.now() }
+          resetPeriod(state.budget, Date.now()); addUsage(state.budget, usage)
+          if (state.botBudgets?.[bot.id]) { resetPeriod(state.botBudgets[bot.id]!, Date.now()); addUsage(state.botBudgets[bot.id]!, usage) }
         }
         if (invoked) {
           const rows = state.maintenanceUsage ??= []
@@ -420,8 +566,8 @@ export class BotMode extends TypertRemoteService {
       job.status = 'running'; job.attempts++; delete job.error; return job
     })
     if (!job) return
-    const controller = new AbortController(); this.memoryController = controller
-    const epoch = this.state.memoryEpoch ?? 0
+    const controller = new AbortController(); this.memoryController = controller; this.memoryReviewTarget = { roomId: job.roomId, botId: job.botId }
+    const epoch = memoryVersion(this.state, this.room(this.state, job.roomId as RoomId), job.botId)
     const deadline = new RunDeadline({ idleMs: 90000, totalMs: 90000, approvalMs: 90000 }, reason => controller.abort(reason))
     const cancel = () => deadline.abort('Maintenance canceled')
     controller.signal.addEventListener('abort', cancel, { once: true })
@@ -440,23 +586,37 @@ export class BotMode extends TypertRemoteService {
       const text = await this.auxiliary(agent, bot, 'memory', REVIEW_PROMPT, input, controller.signal)
       await this.change(state => {
         const saved = state.memoryReviews!.find(item => item.id === job.id)!
-        if (saved.status !== 'running' || controller.signal.aborted || state.knowledgeSettings?.reviewEnabled === false || (state.memoryEpoch ?? 0) !== epoch) throw new Error('Memory access changed during review')
+        if (saved.status !== 'running' || controller.signal.aborted || state.knowledgeSettings?.reviewEnabled === false || memoryVersion(state, this.room(state, job.roomId as RoomId), job.botId) !== epoch) throw new Error('Memory access changed during review')
         const current = this.room(state, room.id), human = findMessage(current, user.id)
         if (!state.bots.some(item => item.id === bot.id && !item.archived) || !current.members.some(item => item.botId === bot.id)) throw new Error('The reviewing Bot is no longer a member')
         saved.candidates = applyMemoryReview(state, current, human, saved, text); saved.status = 'complete'; saved.finishedAt = Date.now()
       })
     } catch (cause) {
       await this.change(state => { const saved = state.memoryReviews?.find(item => item.id === job.id); if (saved?.status === 'running') failMemoryReview(saved, cause instanceof Error ? cause.message : 'Memory review failed') })
-    } finally { deadline.dispose(); controller.signal.removeEventListener('abort', cancel); if (this.memoryController === controller) this.memoryController = undefined }
+    } finally { deadline.dispose(); controller.signal.removeEventListener('abort', cancel); if (this.memoryController === controller) { this.memoryController = undefined; this.memoryReviewTarget = undefined } }
   }
 
   /** New Session and its handoff are committed together; delivery always reads the committed membership. */
   private async prepareContext(room: Room, member: Member, bot: Bot, agent: Agent, attempt: ChatMessage, signal: AbortSignal): Promise<Agent> {
-    const epoch = this.state.memoryEpoch ?? 0
+    const epoch = memoryVersion(this.state, room, bot.id)
     const invalidated = (member.memoryEpoch ?? 0) !== epoch
-    const pressure = contextPressure(agent, bot)
-    if (!invalidated && (!pressure.rotate || humanRequest(room, attempt)?.questionReply || room.messages.some(message => message.botId === bot.id && message.questions?.length))) return agent
+    let pressure = contextPressure(agent, bot)
+    const compaction = optionalService<{ compactNow?(agent: Agent, signal: AbortSignal): Promise<unknown> }>(agent.ctx, 'compaction')
+    const action = contextAction(pressure, invalidated, !!humanRequest(room, attempt)?.questionReply || room.messages.some(message => message.botId === bot.id && !!message.questions?.length), typeof compaction?.compactNow === 'function')
+    if (action === 'keep') return agent
     if (agent.status !== 'idle' || agent.inbox.nextStep.length || agent.inbox.nextTurn.length) throw new Error('Wait for the native Session before switching context')
+    if (action === 'compact') {
+      const before = pressure.tokens
+      try { await compaction!.compactNow!(agent, signal); await this.ctx.sessions.flush(agent.session) }
+      catch (cause) { if (signal.aborted) throw cause; this.ctx.logger.warn('Bot compaction could not reduce context: %s', String(cause)) }
+      pressure = contextPressure(agent, bot)
+      await this.change(state => {
+        const current = this.member(this.room(state, room.id), bot.id)
+        if (memoryVersion(state, this.room(state, room.id), bot.id) !== epoch || signal.aborted) throw new Error('Context compaction was invalidated')
+        current.contextDecisions = [...(current.contextDecisions ?? []), { time: Date.now(), action: pressure.rotate ? 'compact-then-rotate' : 'compact', before, after: pressure.tokens, window: pressure.window }].slice(-40)
+      })
+      if (!pressure.rotate) return agent
+    }
     let note: string | undefined
     if (!invalidated) {
       const evidence = handoffEvidence(room, member, !!attempt.localOnly)
@@ -473,10 +633,10 @@ export class BotMode extends TypertRemoteService {
     const next = this.ctx.agents.get(sessionId)
     if (!next) throw new Error('New Bot Session is unavailable')
     await this.change(state => {
-      if (signal.aborted || this.closing || (state.memoryEpoch ?? 0) !== epoch) throw new Error('Context switch was invalidated')
+      if (signal.aborted || this.closing || memoryVersion(state, this.room(state, room.id), bot.id) !== epoch) throw new Error('Context switch was invalidated')
       const currentRoom = this.room(state, room.id), current = this.member(currentRoom, bot.id)
       if (current.sessionId !== member.sessionId || currentRoom.deleted || !state.bots.some(item => item.id === bot.id && !item.archived)) throw new Error('Bot membership changed during context switch')
-      current.segments = [...(current.segments ?? []), { sessionId: current.sessionId, endedAt: Date.now(), reason: invalidated ? 'memory-access-changed' : 'context-pressure' }]
+      current.segments = [...(current.segments ?? []), { sessionId: current.sessionId, nextSessionId: sessionId, endedAt: Date.now(), reason: invalidated ? 'memory-access-changed' : 'context-pressure', handoff: note }]
       current.sessionId = sessionId; current.memoryEpoch = epoch; current.handoff = note
       if (invalidated) { current.cursor = currentRoom.messages.length; for (const message of currentRoom.messages) if (message.botId === bot.id) delete message.questions }
     })
@@ -639,7 +799,8 @@ export class BotMode extends TypertRemoteService {
     })
   }
 
-  private settleReservation(state: BotState, id: string, usage?: Usage): void {
+  private settleReservation(state: BotState, id: string, usage?: Usage, tokens?: TokenUsage, invoked = true): void {
+    finishUsage(state, id, usage, tokens, invoked)
     for (const reservation of state.budgetReservations?.[id] ?? []) {
       const budget = reservation.scope === '*' ? state.budget : state.botBudgets?.[reservation.scope]
       if (budget && !usage) addUsage(budget, { input: reservation.tokens, output: 0, cost: reservation.cost })
@@ -647,7 +808,7 @@ export class BotMode extends TypertRemoteService {
     if (state.budgetReservations) delete state.budgetReservations[id]
   }
 
-  private reserveCall(id: string, bot: Bot): Promise<void> {
+  private reserveCall(id: string, bot: Bot, context: Partial<UsageCall> = {}): Promise<void> {
     return this.change(state => {
       // A prior attempt with no usage report is accounted for conservatively.
       this.settleReservation(state, id)
@@ -662,6 +823,7 @@ export class BotMode extends TypertRemoteService {
         reservations.push({ scope, ...reserveBudget(budget, reserved) })
       }
       state.budgetReservations ??= {}; state.budgetReservations[id] = reservations
+      beginUsage(state, id, bot, context)
     })
   }
 
@@ -699,8 +861,13 @@ export class BotMode extends TypertRemoteService {
         this.memoryTask = this.reviewNext().catch(cause => this.ctx.logger.error('Memory maintenance: %s', String(cause))).finally(() => { this.memoryTask = undefined })
       }
       if (this.state.memories?.some(item => item.status === 'active' && item.expiresAt !== undefined && item.expiresAt <= Date.now())) {
-        await this.change(state => { for (const item of state.memories ?? []) if (item.status === 'active' && item.expiresAt !== undefined && item.expiresAt <= Date.now()) actOnMemory(state, { id: item.id, revision: item.revision, action: 'forget' }) })
-        this.memoryController?.abort()
+        const targets = await this.change(state => {
+          const expired = (state.memories ?? []).filter(item => item.status === 'active' && item.expiresAt !== undefined && item.expiresAt <= Date.now())
+          const targets = memoryAudience(state, expired)
+          for (const item of expired) actOnMemory(state, { id: item.id, revision: item.revision, action: 'forget' })
+          invalidateMemories(state, targets); this.revokeMemoryWork(state, targets); return targets
+        })
+        this.invalidateMemoryContext(targets)
       }
       if (!(this.state.schedules ?? []).some(item => item.enabled && item.nextAt <= Date.now())) return
       const batches = await this.change(state => {
@@ -1059,7 +1226,7 @@ export class BotMode extends TypertRemoteService {
       if (room.external && !old.localOnly) throw new Error('Inspect the native Session before retrying external work; automatic replay is disabled')
       if (!old.botId || !old.replyTo || old.status === 'complete' || !room.members.some(member => member.botId === old.botId)) throw new Error('Only unsuccessful current-member responses can be retried')
       if (this.activeCount(room) >= this.config.maxMessages) throw new Error('Chat pending-response limit reached')
-      const next: ChatMessage = { ...old, awaiting: undefined, continuedBy: undefined, requestedTasks: undefined, collaborationCanceled: undefined, id: brandString<ChatMessageId>(randomUUID()), status: 'running', text: '', error: null, time: Date.now() }
+      const next: ChatMessage = { ...old, context: undefined, usage: undefined, executionSessionId: undefined, awaiting: undefined, continuedBy: undefined, requestedTasks: undefined, collaborationCanceled: undefined, id: brandString<ChatMessageId>(randomUUID()), status: 'running', text: '', error: null, time: Date.now() }
       room.messages.push(next)
       return next
     })
@@ -1206,7 +1373,8 @@ export class BotMode extends TypertRemoteService {
           if (usageFailure) throw new Error('Usage could not be persisted; model calls paused')
           const config = await next()
           if (run.canceled) throw new Error('Bot request canceled')
-          try { await this.reserveCall(attempt.id, bot) } catch (cause) { error = cause instanceof Error ? cause.message : String(cause); throw cause }
+          try { await this.reserveCall(attempt.id, bot, { purpose: 'conversation', roomId, messageId: attempt.id, sessionId: agent.session.id,
+            provider: bot.policy?.provider ?? config.provider, model: bot.policy?.model ?? config.model }) } catch (cause) { error = cause instanceof Error ? cause.message : String(cause); throw cause }
           if (!bot.policy?.provider || !bot.policy.model) return config
           const { reasoningEffort: _effort, ...base } = config
           return { ...base, provider: bot.policy.provider, model: bot.policy.model }
@@ -1266,6 +1434,13 @@ export class BotMode extends TypertRemoteService {
       const user = humanRequest(room, attempt)
       if (!user) throw new Error('Response has no human request')
       const memories = selectMemories(this.state, room, bot.id, memoryUser(room, user, this.state), user.text)
+      const pressure = contextPressure(agent, bot)
+      await this.change(state => {
+        if (this.canceled(run)) throw new Error('Delivery canceled before context assembly')
+        findMessage(this.room(state, roomId), attempt.id).context = { sessionId: agent.session.id, measuredAt: Date.now(), tokens: pressure.tokens,
+          window: pressure.window, measurement: pressure.measurement, memories: memories.records.map(memory => ({ id: memory.id, revision: memory.revision })),
+          conflicts: memories.conflicts, omitted: memories.omitted, recalls: 1 }
+      })
       cleanup.push(installMemoryTool(agent, args => this.change(state => {
         if (this.canceled(run) || ownTurn < 0) throw new Error('No active human delivery')
         const current = this.room(state, roomId), delivery = findMessage(current, attempt.id)
@@ -1281,7 +1456,19 @@ export class BotMode extends TypertRemoteService {
       cleanup.push(installKnowledgeTools(agent, {
         search: query => { const { current } = knowledgeContext(); return this.chatSearch.query(current, !!attempt.localOnly, query) },
         read: id => { const { current } = knowledgeContext(); return this.chatSearch.read(current, !!attempt.localOnly, id) },
-        recall: query => { const { current, human } = knowledgeContext(); if (query.length > 300) throw new Error('Query is too long'); return selectMemories(this.state, current, bot.id, memoryUser(current, human, this.state), query) },
+        recall: async query => {
+          const { current, human } = knowledgeContext()
+          if (query.length > 300) throw new Error('Query is too long')
+          const selection = selectMemories(this.state, current, bot.id, memoryUser(current, human, this.state), query)
+          await this.change(state => {
+            knowledgeContext()
+            const trace = findMessage(this.room(state, roomId), attempt.id).context!
+            const refs = [...new Map([...trace.memories, ...selection.records.map(memory => ({ id: memory.id, revision: memory.revision }))].map(ref => [ref.id, ref])).values()]
+            trace.memories = refs.slice(-80); trace.omitted += selection.omitted + Math.max(0, refs.length - 80); trace.recalls++
+            trace.conflicts = [...new Map([...trace.conflicts, ...selection.conflicts].map(ids => [JSON.stringify([...ids].sort()), ids])).values()].slice(-40)
+          })
+          return selection
+        },
         tasks: () => { const { current, human } = knowledgeContext(); return current.messages.filter(item => item.replyTo === human.id || item.delegation?.rootId === human.id).slice(-60).map(item => ({ id: item.id, botId: item.botId, status: item.status, waiting: item.awaiting, resultIds: item.resultIds, error: item.error })) },
         delegate: (botId, task) => this.change(state => {
           knowledgeContext()
@@ -1326,11 +1513,13 @@ export class BotMode extends TypertRemoteService {
             const cost = (input * (bot.policy?.inputPrice ?? 0) + output * (bot.policy?.outputPrice ?? 0)) / 1000000
             usage = { input: usage.input + input, output: usage.output + output, cost: usage.cost + cost }
             void this.change(state => {
-              state.budget ??= { tokenLimit: 0, costLimit: 0, currency: 'USD', used: { input: 0, output: 0, cost: 0 }, since: Date.now() }
-              this.settleReservation(state, attempt.id, { input, output, cost })
+              state.budget ??= { tokenLimit: 0, costLimit: 0, currency: state.botBudgets?.[bot.id]?.currency ?? 'USD', used: { input: 0, output: 0, cost: 0 }, since: Date.now() }
+              this.settleReservation(state, attempt.id, { input, output, cost }, tokens)
               resetPeriod(state.budget, Date.now()); addUsage(state.budget, { input, output, cost })
               const quota = state.botBudgets?.[bot.id]; if (quota) { resetPeriod(quota, Date.now()); addUsage(quota, { input, output, cost }) }
               findMessage(this.room(state, roomId), attempt.id).usage = { ...usage }
+              const trace = findMessage(this.room(state, roomId), attempt.id).context
+              if (trace) { trace.tokens = input; trace.measurement = 'provider'; trace.measuredAt = Date.now() }
             }).catch(cause => { usageFailure = cause; run.agent?.cancel({ kind: 'user' }) })
           }
         }

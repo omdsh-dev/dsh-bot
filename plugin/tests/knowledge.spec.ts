@@ -8,7 +8,7 @@ import { linkUserIdentity, memoryUser, saveMemory, selectMemories } from '../src
 import { MemoryStore } from '../src/memory-store.ts'
 import { actOnMemory } from '../src/memory.ts'
 import { RunDeadline } from '../src/run-deadline.ts'
-import { handoffNote, contextPressure } from '../src/context-continuity.ts'
+import { contextAction, handoffNote, contextPressure } from '../src/context-continuity.ts'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { BotState, Room, ChatMessage, BotId, RoomId, ChatMessageId } from '../src/types.ts'
 
@@ -148,6 +148,10 @@ it('validates structured handoffs and retains an independent hard pressure thres
   const agent = { session: { requestContext: () => ({ provider: 'p', model: 'm', contextWindow: 128000 }), deriveMessages: () => [{ text: 'x'.repeat(120000) }] }, ctx: { get: () => undefined } } as unknown as Agent
   const pressure = contextPressure(agent, setup().state.bots[0]!)
   expect(pressure).toMatchObject({ rotate: true, hard: true })
+  expect(contextAction(pressure, false, false, true)).toBe('compact')
+  expect(contextAction(pressure, false, false, false)).toBe('rotate')
+  expect(contextAction(pressure, false, true, true)).toBe('keep')
+  expect(contextAction(pressure, true, true, true)).toBe('reset')
 })
 
 

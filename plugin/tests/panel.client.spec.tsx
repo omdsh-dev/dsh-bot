@@ -16,7 +16,7 @@ import { registerPanel } from '../src/client/registration.ts'
 import { en, zh } from '../src/client/locales.ts'
 import type { FeishuState } from '../src/feishu/types.ts'
 import type { CapabilityFace } from '../src/client/capability-face.ts'
-import { usageReport } from '../src/usage.ts'
+import { ledgerReport, usageReport } from '../src/usage.ts'
 
 const runtimes = new Set<SlotTestRuntime>()
 afterEach(async () => { for (const runtime of runtimes) await runtime.dispose(); runtimes.clear(); cleanup(); vi.restoreAllMocks() })
@@ -88,6 +88,32 @@ it('shows a retryable usage failure rather than inventing zero totals and suppor
   await screen.findByText('No Bot usage records yet. Start a conversation to see usage here.')
   expect(screen.queryByRole('alert')).toBeNull()
   expect(screen.queryByRole('progressbar')).toBeNull()
+})
+
+it('sends ledger filters to the Host and distinguishes cached tokens from unreported reservations', async () => {
+  const report = await ledgerReport({ bots: [], rooms: [] }, [{ id: 'call', botId: 'sage', roomId: 'studio', messageId: 'answer', sessionId: 'session', purpose: 'conversation',
+    startedAt: Date.parse('2026-10-23T10:00:00Z'), completedAt: Date.parse('2026-10-23T10:00:01Z'), provider: 'p', model: 'm', currency: 'USD', inputPrice: 1, outputPrice: 2,
+    input: 100, output: 10, cacheRead: 80, cacheWrite: 0, cost: 0.00012, records: 1, status: 'reported' }])
+  const read = vi.fn(async () => report)
+  await bench({ capabilities: { usageReport: read } as unknown as CapabilityFace })
+  fireEvent.click(screen.getByRole('button', { name: 'Usage' }))
+  await screen.findByRole('region', { name: 'Call ledger' })
+  expect(screen.getAllByText('80 / 0').length).toBeGreaterThan(0)
+  fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-10-23' } })
+  await waitFor(() => expect(read).toHaveBeenLastCalledWith(expect.objectContaining({ from: Date.parse('2026-10-23T00:00:00Z') })))
+  fireEvent.change(screen.getByRole('combobox', { name: 'Model' }), { target: { value: '["p","m"]' } })
+  await waitFor(() => expect(read).toHaveBeenLastCalledWith(expect.objectContaining({ provider: 'p', model: 'm' })))
+})
+
+it('loads per-response context only when opened and shows forgotten memories without their contents', async () => {
+  const contextView = vi.fn(async () => ({ botId: 'sage', sessionId: 'sage-group', trace: { sessionId: 'sage-group', measuredAt: 1, tokens: 80, window: 1000, measurement: 'provider', memories: [{ id: 'forgotten', revision: 1 }], conflicts: [], omitted: 0, recalls: 1 }, current: null,
+    memories: [{ id: 'forgotten', revision: 1, status: 'forgotten', scope: 'bot', subject: '', topic: '', body: '' }], segments: [], pendingHandoff: null, decisions: [] }))
+  await bench({ capabilities: { contextView } as unknown as CapabilityFace })
+  expect(contextView).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByText('Memory & context'))
+  await screen.findByText('Content forgotten or unavailable')
+  expect(contextView).toHaveBeenCalledWith({ roomId: 'studio', messageId: 'answer' })
+  expect(screen.getByRole('progressbar', { name: 'Context occupancy' }).getAttribute('value')).toBe('80')
 })
 
 it('manages scoped memories and previews recall through the controls panel', async () => {

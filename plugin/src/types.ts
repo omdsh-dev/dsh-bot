@@ -1,8 +1,9 @@
-import type { ContextSegment, KnowledgeSettings, MaintenanceUsage, MemoryReview, UserIdentity } from './knowledge-types.ts'
+import type { ContextSegment, ContextTrace, KnowledgeSettings, MaintenanceUsage, MemoryReview, UserIdentity } from './knowledge-types.ts'
 /** Serializable Bot Mode domain and Remote contract. */
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import type { Memory } from './memory-types.ts'
+import type { Memory, MemorySuggestion } from './memory-types.ts'
+import type { UsageLedger } from './usage-types.ts'
 export type * from './memory-types.ts'
 
 /** Stable, case-insensitive Bot handle. */
@@ -44,7 +45,7 @@ export interface Usage { input: number; output: number; cost: number }
 export interface Budget { tokenLimit: number; costLimit: number; currency: string; used: Usage; since: number; period?: 'never' | 'day' | 'month' | undefined; reservationTokens?: number | undefined; reservationCost?: number | undefined }
 export interface ConfigureBudget { tokenLimit: number; costLimit: number; currency: string; reset?: boolean; botId?: BotId; period?: 'never' | 'day' | 'month'; reservationTokens?: number; reservationCost?: number }
 /** One Bot's persistent context and consumed public-history position. */
-export interface Member { botId: BotId; sessionId: SessionId; cursor: number; segments?: ContextSegment[] | undefined; handoff?: string | undefined; memoryEpoch?: number | undefined }
+export interface Member { botId: BotId; sessionId: SessionId; cursor: number; segments?: ContextSegment[] | undefined; handoff?: string | undefined; memoryEpoch?: number | undefined; requiredMemoryEpoch?: number | undefined; contextDecisions?: { time: number; action: string; before: number; after: number; window: number }[] | undefined }
 /** A public user message or one Bot's response attempt. */
 export interface ChatMessage {
   id: ChatMessageId
@@ -60,6 +61,7 @@ export interface ChatMessage {
   /** Child reply belongs to its Bot parent and retains the original human authority. */
   delegation?: { rootId: ChatMessageId; task: string } | undefined
   executionSessionId?: SessionId | undefined
+  context?: ContextTrace | undefined
   requestedTasks?: { botId: BotId; task: string }[] | undefined
   awaiting?: ChatMessageId[] | undefined
   continuedBy?: ChatMessageId | undefined
@@ -101,8 +103,11 @@ export interface Room {
 /** Atomic persisted state; also the detached Client baseline. */
 export interface BotState {
   bots: Bot[]; rooms: Room[]
+  /** Storage-only independent accounting ledger; snapshots exclude call metadata. */
+  usageLedger?: UsageLedger | undefined
   /** Storage-only records. Ordinary snapshots/feed exclude them; management uses dedicated APIs. */
   memories?: Memory[] | undefined
+  memorySuggestions?: MemorySuggestion[] | undefined
   memoryChunks?: string[] | undefined
   retiredMemoryChunks?: string[] | undefined
   memoryEpoch?: number | undefined
@@ -188,4 +193,5 @@ export interface AttachmentData { name: string; mediaType: string; base64: strin
 export interface CapabilityCatalog { providers: { id: string; models: { id: string; name: string }[]; error?: string | undefined }[]; tools: { name: string; description: string }[] }
 
 export type * from './knowledge-types.ts'
+export type * from './usage-types.ts'
 export type { UsageReport, UsageBudget, BotUsageRow, UsageTotals } from './usage.ts'

@@ -5,6 +5,8 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { BotId, RoomId, ChatMessageId, BotState } from './types.ts'
 import { memorySchema } from './memory.ts'
+import { usageLedgerSchema } from './usage-ledger.ts'
+import { suggestionSchema } from './memory-governance.ts'
 
 const botId = z.string().transform(brandString<BotId>)
 const messageId = z.string().transform(brandString<ChatMessageId>)
@@ -24,9 +26,12 @@ export const messageSchema = z.object({ id: messageId, botId: botId.nullable(), 
       error: z.string().nullable(), time: z.number(), external: externalMessage.optional(), allowDelegation: z.boolean().optional(),
       delegation: z.object({ rootId: messageId, task: z.string() }).optional(),
       executionSessionId: z.string().transform(SessionId).optional(), requestedTasks: z.array(z.object({ botId, task: z.string() })).optional(), awaiting: z.array(messageId).optional(), continuedBy: messageId.optional(), continuationOf: messageId.optional(), resultIds: z.array(messageId).optional(), collaborationCanceled: z.boolean().optional(), localOnly: z.boolean().optional(),
+      context: z.object({ sessionId: z.string(), measuredAt: z.number(), tokens: z.number(), window: z.number(), measurement: z.enum(['provider', 'meter', 'characters', 'unknown']), memories: z.array(z.object({ id: z.string(), revision: z.number() })), conflicts: z.array(z.array(z.string())), omitted: z.number(), recalls: z.number() }).optional(),
       attachments: z.array(attachmentSchema).max(8).optional(), questions: z.array(z.object({ id: z.string(), callId: z.string(), questions: z.array(questionItem) })).optional(), questionReply: z.object({ callId: z.string(), questions: z.array(questionItem), answer: answerSchema }).optional(), toolDetails: z.array(z.object({ name: z.string(), arguments: z.string(), result: z.string().optional() })).optional(), usage: usage.optional(), scheduleId: z.string().optional(), publishExternal: z.boolean().optional(), notifyBot: botId.optional() })
 const budgetSchema = z.object({ tokenLimit: z.number().nonnegative(), costLimit: z.number().nonnegative(), currency: z.string(), used: usage, since: z.number(), period: z.enum(['never', 'day', 'month']).optional(), reservationTokens: z.number().nonnegative().optional(), reservationCost: z.number().nonnegative().optional() })
 const schema: z.ZodType<BotState> = z.object({
+  usageLedger: usageLedgerSchema.optional(),
+  memorySuggestions: z.array(suggestionSchema).optional(),
   memories: z.array(memorySchema).optional(), memoryChunks: z.array(z.string()).optional(), retiredMemoryChunks: z.array(z.string()).optional(), memoryEpoch: z.number().int().nonnegative().optional(),
   knowledgeSettings: z.object({ reviewEnabled: z.boolean() }).optional(),
   userIdentities: z.array(z.object({ id: z.string(), name: z.string(), aliases: z.array(z.string()) })).optional(),
@@ -49,7 +54,7 @@ const schema: z.ZodType<BotState> = z.object({
     external: externalConversation.optional(),
     aliases: z.array(z.string().transform(brandString<RoomId>)).optional(),
     archived: z.boolean().optional(), deleted: z.boolean().optional(),
-    members: z.array(z.object({ botId, sessionId: z.string().transform(SessionId), cursor: z.number().int().nonnegative(), segments: z.array(z.object({ sessionId: z.string(), endedAt: z.number(), reason: z.string() })).optional(), handoff: z.string().optional(), memoryEpoch: z.number().int().nonnegative().optional() })),
+    members: z.array(z.object({ botId, sessionId: z.string().transform(SessionId), cursor: z.number().int().nonnegative(), segments: z.array(z.object({ sessionId: z.string(), endedAt: z.number(), reason: z.string(), nextSessionId: z.string().optional(), handoff: z.string().optional() })).optional(), handoff: z.string().optional(), memoryEpoch: z.number().int().nonnegative().optional(), requiredMemoryEpoch: z.number().int().nonnegative().optional(), contextDecisions: z.array(z.object({ time: z.number(), action: z.string(), before: z.number(), after: z.number(), window: z.number() })).optional() })),
     historyChunks: z.array(z.string()).optional(),
     messages: z.array(messageSchema),
   })),

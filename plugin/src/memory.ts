@@ -12,7 +12,7 @@ export const memorySchema: z.ZodType<Memory> = z.object({
   source: z.object({ kind: z.enum(['operator', 'conversation']), roomId: z.string().optional(), messageId: z.string().optional(),
     userId: z.string().optional(), botId: z.string().optional(), evidence: z.string() }),
   createdAt: z.number(), updatedAt: z.number(), effectiveAt: z.number().optional(), expiresAt: z.number().optional(),
-  supersedes: z.string().optional(), reviewedAt: z.number().optional(), reviewEvidence: z.string().optional(),
+  supersedes: z.string().optional(), mergedFrom: z.array(z.string()).optional(), reviewedAt: z.number().optional(), reviewEvidence: z.string().optional(),
 })
 
 /** Provider/account/sender IDs are namespaced, never display names. A merged group may have several receipts. */
@@ -103,10 +103,17 @@ export function actOnMemory(state: BotState, request: MemoryAction, now = Date.n
     const erase = (memory: Memory): void => {
       memory.status = 'forgotten'; memory.body = ''; memory.topic = ''; memory.subject = ''; memory.source.evidence = ''; delete memory.reviewEvidence
       memory.updatedAt = now; memory.revision++
-      const previous = state.memories?.find(value => value.id === memory.supersedes)
-      if (previous && previous.scope === memory.scope && previous.ownerId === memory.ownerId && previous.status === 'superseded') erase(previous)
+      for (const id of new Set([memory.supersedes, ...(memory.mergedFrom ?? [])])) {
+        const previous = state.memories?.find(value => value.id === id)
+        if (previous && previous.scope === memory.scope && previous.ownerId === memory.ownerId && previous.status === 'superseded') erase(previous)
+      }
     }
-    erase(item); state.memoryEpoch = (state.memoryEpoch ?? 0) + 1; return
+    erase(item)
+    const forgotten = new Set(state.memories?.filter(memory => memory.status === 'forgotten').map(memory => memory.id))
+    for (const suggestion of state.memorySuggestions ?? []) if (forgotten.has(suggestion.left.id) || forgotten.has(suggestion.right.id)) {
+      suggestion.status = 'stale'; suggestion.reason = ''; suggestion.proposedBody = ''
+    }
+    return
   }
   item.updatedAt = now; item.revision++
 }
@@ -202,5 +209,4 @@ export function linkUserIdentity(state: BotState, request: { id?: string; name: 
   if (request.id && !state.userIdentities?.some(person => person.id === id)) throw new Error('Unknown linked identity')
   if (state.userIdentities?.some(person => person.id !== id && person.aliases.some(alias => aliases.includes(alias)))) throw new Error('An account is already linked; unlink it first')
   state.userIdentities = (state.userIdentities ?? []).filter(person => person.id !== id).concat({ id, name: request.name.trim(), aliases })
-  state.memoryEpoch = (state.memoryEpoch ?? 0) + 1
 }

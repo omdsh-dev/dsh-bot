@@ -8,6 +8,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { StopRequest, AttemptRequest, Bot, BotId, ChatMessage, ChatAttachment, ChatMessageId, CreateBotRequest, CreateGroupRequest, MembersRequest, Room, SendRequest, UpdateBotRequest } from '../types.ts'
 import { Controls } from './Controls.tsx'
 import { UsagePage } from './UsagePage.tsx'
+import { ContextInspector } from './ContextInspector.tsx'
 import { VoiceInput } from './VoiceInput.tsx'
 import { AttachmentView } from './Attachments.tsx'
 import { Questions } from './Questions.tsx'
@@ -247,6 +248,7 @@ export function BotPanel(props: Props) {
                         : <MarkdownText text={message.text} labels={labels} />)}
                       {message.attachments?.map(item => props.capabilities ? <AttachmentView key={item.attachment.attachmentId} item={item} face={props.capabilities} request={{ roomId: room.id, messageId: message.id, attachmentId: item.attachment.attachmentId }}/> : <p key={item.attachment.attachmentId}>📎 {item.attachment.name}</p>)}
                       {message.toolDetails?.map((tool, index) => <details className={css.toolDetails} key={index}><summary>{tool.name}</summary><pre>{tool.arguments}</pre>{tool.result && <pre>{tool.result}</pre>}</details>)}
+                      {!own && props.capabilities?.contextView && <ContextInspector face={props.capabilities} request={{ roomId: room.id, messageId: message.id }} english={t('you') === 'You'}/>}
                       {props.capabilities && message.questions?.map(view => <Questions key={view.id} view={view} roomId={room.id} face={props.capabilities!} english={t('you') === 'You'}/>)}
                       {message.progress?.question && props.capabilities && <Questions key={message.progress.question.id} view={message.progress.question} roomId={room.id} face={props.capabilities} english={t('you') === 'You'}/>}
                       {message.continuationOf && <p className={css.executionStatus}>{t('you') === 'You' ? 'Continuing with delegated results' : '已收到子任务结果，继续汇总'}</p>}

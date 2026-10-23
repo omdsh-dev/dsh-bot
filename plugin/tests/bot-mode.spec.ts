@@ -3,6 +3,7 @@ import { expect, it, vi } from 'vitest'
 import { Service } from '@deepseek-ai/cordis'
 import { BotMode } from '../src/index.ts'
 import type { BotState, RoomId, ChatMessageId, BotId } from '../src/types.ts'
+import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 
 function deferred() {
   let resolve!: () => void
@@ -33,7 +34,7 @@ function bench() {
   // Bypass Cordis registration only; all methods under test are the actual service implementation.
   const service: BotMode = Object.create(BotMode.prototype)
   Object.assign(service, { ctx, state, config: { cwd: '.', historyMessages: 80, maxBots: 8, maxMessages: 1000 },
-    domain: { global: { get: () => state, set }, close }, tail: Promise.resolve(), running: new Map(), watchers: new Set([wake]), closing: false, live: new Map(), approvals: new Map(), queues: new Map() })
+    domain: { global: { get: () => state, set }, close }, tail: Promise.resolve(), running: new Map(), watchers: new Set([wake]), closing: false, live: new Map(), approvals: new Map(), queues: new Map(), governanceControllers: new Set(), maintenanceDone: new Set(), ownAuxiliary: new WeakSet() })
   const run = { task: Promise.resolve(), canceled: false }
   const execute = () => {
     run.task = Reflect.get(service, 'execute').call(service, 'room', state.rooms[0]!.messages.find(message => message.id === 'attempt')!, run)
@@ -41,6 +42,56 @@ function bench() {
   }
   return { service, state, set, close, assemble, followup, wake, ctx, variable, execute, run }
 }
+
+it('uses native compaction before rotating and retains the current session when it relieves pressure', async () => {
+  const b = bench(), agent = b.ctx.agents.get()
+  let chars = 120000
+  Object.assign(agent.session, { requestContext: () => ({ provider: 'p', model: 'm', contextWindow: 128000 }), deriveMessages: () => [{ text: 'x'.repeat(chars) }] })
+  const compactNow = vi.fn(async () => { chars = 3000; return {} })
+  Object.assign(agent.ctx, { compaction: { compactNow } })
+  await b.execute()
+  expect(compactNow).toHaveBeenCalledOnce()
+  expect(b.service.snapshot().rooms[0]!.members[0]).toMatchObject({ sessionId: 'session', contextDecisions: [{ action: 'compact', window: 128000 }] })
+  expect(b.followup).toHaveBeenCalledOnce()
+})
+
+it('accounts native compaction through the public stream seam without double-counting owned auxiliary calls', async () => {
+  const b = bench(), bot = b.state.bots[0]!, agent = b.ctx.agents.get()
+  bot.policy = { provider: 'p', model: 'm', inputPrice: 1, outputPrice: 2 }
+  Object.assign(agent.session, { requestContext: () => ({ provider: 'p', model: 'm' }) })
+  const options: GenerateOptions = { provider: 'p', model: 'm', messages: [], purpose: 'compaction', sessionId: 'session' as never }
+  const stream = async function* (): AsyncIterable<StreamChunk> { yield { type: 'usage', usage: { inputTokens: 10, cacheReadTokens: 20, outputTokens: 2 } }; yield { type: 'finish', reason: { kind: 'stop' } } }
+  const run = async () => { for await (const _chunk of Reflect.get(b.service, 'meterNativeCompaction').call(b.service, options, stream)) {} }
+  await run()
+  const report = await b.service.usageReport()
+  expect(report.ledger!.totals).toMatchObject({ input: 30, output: 2, cacheRead: 20, records: 1 })
+  expect(report.bots[0]!.handoff.records).toBe(1)
+  expect(report.budgets[0]!.budget.used).toMatchObject({ input: 30, output: 2 })
+  Reflect.get(b.service, 'ownAuxiliary').add(options)
+  await run()
+  expect((await b.service.usageReport()).ledger!.totals.records).toBe(1)
+  expect(b.service.snapshot().usageLedger).toBeUndefined()
+})
+
+it('forgetting scoped memory leaves unrelated runs and membership generations intact', async () => {
+  const b = bench()
+  const bot = await b.service.createBot({ id: 'other', name: 'Other', instructions: '' })
+  const otherRoom = b.service.snapshot().rooms.find(room => room.defaultBot === bot.id)!
+  const affected = { task: Promise.resolve(), canceled: false, agent: { cancel: vi.fn() } }
+  const unrelated = { task: Promise.resolve(), canceled: false, agent: { cancel: vi.fn() } }
+  Reflect.get(b.service, 'running').set('attempt', affected)
+  await Reflect.get(b.service, 'change').call(b.service, (state: BotState) => {
+    state.rooms.find(room => room.id === otherRoom.id)!.messages.push({ id: 'other-attempt' as ChatMessageId, botId: bot.id, text: '', replyTo: null, status: 'running', time: 0, error: null })
+  })
+  Reflect.get(b.service, 'running').set('other-attempt', unrelated)
+  const memory = await b.service.saveMemory({ scope: 'bot', ownerId: 'sage', kind: 'preference', subject: 'reply', topic: 'style', body: 'Be concise', evidence: '' })
+  await b.service.memoryAction({ id: memory.id, revision: 1, action: 'forget' })
+  expect(affected.canceled).toBe(true)
+  expect(unrelated.canceled).toBe(false)
+  const snapshot = b.service.snapshot()
+  expect(snapshot.rooms[0]!.members[0]!.requiredMemoryEpoch).toBe(1)
+  expect(snapshot.rooms.find(room => room.id === otherRoom.id)!.members[0]!.requiredMemoryEpoch).toBeUndefined()
+})
 
 it('commits memory atomically, excludes it from ordinary feeds and loads it into durable Session input', async () => {
   const b = bench()
@@ -51,11 +102,13 @@ it('commits memory atomically, excludes it from ordinary feeds and loads it into
   await b.execute()
   expect(b.followup.mock.calls[0]![0].content[0].text).toContain('MEMORY_GLOBAL_BULLETS')
   expect(b.followup.mock.calls[0]![0].content[0].text).toContain(item.id)
+  expect(b.service.contextView({ roomId: 'room' as RoomId, messageId: 'attempt' as ChatMessageId }).memories[0]).toMatchObject({ id: item.id, body: 'MEMORY_GLOBAL_BULLETS', revision: 1 })
   b.set.mockRejectedValueOnce(new Error('disk full'))
   await expect(b.service.memoryAction({ id: item.id, revision: 1, action: 'forget' })).rejects.toThrow('disk full')
   expect(b.service.listMemories({})[0]!.status).toBe('active')
   await b.service.memoryAction({ id: item.id, revision: 1, action: 'forget' })
   expect(b.service.listMemories({})).toEqual([])
+  expect(b.service.contextView({ roomId: 'room' as RoomId, messageId: 'attempt' as ChatMessageId }).memories[0]).toMatchObject({ id: item.id, body: '', status: 'forgotten' })
 })
 
 it('rejects the second of concurrent stale memory updates', async () => {

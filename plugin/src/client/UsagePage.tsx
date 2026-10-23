@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { UsageReport, UsageTotals } from '../usage.ts'
 import type { CapabilityFace } from './capability-face.ts'
+import type { UsageFilter } from '../usage-types.ts'
+import { UsageLedger } from './UsageLedger.tsx'
 import css from './Panel.module.css'
 
 /** Budget counters and retained-record totals have different lifetimes; never add them together. */
@@ -11,19 +13,20 @@ export function UsagePage({ face, english, connectionError, back, openBudget }: 
   const l = (zh: string, en: string) => english ? en : zh
   const [report, setReport] = useState<UsageReport>(), [error, setError] = useState(''), [loading, setLoading] = useState(true)
   const [refresh, setRefresh] = useState(0), [botId, setBotId] = useState('*')
+  const [filter, setFilter] = useState<UsageFilter>({})
   useEffect(() => {
     let live = true, pending = false
     const load = async () => {
       if (pending) return
       pending = true; setLoading(true)
-      try { const next = await face.usageReport(); if (live) { setReport(next); setError('') } }
+      try { const next = await face.usageReport({ ...filter, botId: botId === '*' ? undefined : botId }); if (live) { setReport(next); setError('') } }
       catch (cause) { if (live) setError(cause instanceof Error ? cause.message : String(cause)) }
       finally { pending = false; if (live) setLoading(false) }
     }
     void load()
     const timer = setInterval(() => { void load() }, 15000)
     return () => { live = false; clearInterval(timer) }
-  }, [face, refresh])
+  }, [face, refresh, filter, botId])
   const number = (value: number) => value.toLocaleString(english ? 'en-US' : 'zh-CN')
   const cost = (value: number, currency: string) => `${currency} ${value.toLocaleString(english ? 'en-US' : 'zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
   const tokens = (total: UsageTotals) => total.input + total.output
@@ -63,7 +66,7 @@ export function UsagePage({ face, english, connectionError, back, openBudget }: 
       </section>
       <section className={css.usageSection} aria-label={l('累计已记录用量', 'Retained usage records')}>
         <div className={css.usageSectionHeading}><h3>{l('累计已记录用量', 'Retained usage records')}</h3><label>{l('筛选 Bot', 'Filter Bot')}<select value={selected} onChange={event => setBotId(event.target.value)}><option value="*">{l('全部 Bot', 'All Bots')}</option>{report.bots.map(bot => <option key={bot.botId} value={bot.botId}>{bot.name} · @{bot.botId}</option>)}</select></label></div>
-        <p className={css.integrationHint}>{l('统计全部保留的聊天用量和累计辅助调用，包含归档聊天。此处不随预算重置；删除聊天会减少聊天明细，不影响预算已记账用量。', 'Includes all retained chat usage, archived chats and cumulative auxiliary calls. These records do not reset with budgets. Deleting chats reduces their detail totals, but does not reduce accounted budget usage.')}</p>
+        <p className={css.integrationHint}>{report.ledger ? l('当前筛选范围内的独立账本统计；删除聊天或重置预算不会删除用量记录。', 'Independent ledger totals for the current filters. Deleting chats or resetting budgets preserves usage records.') : l('统计全部保留的聊天用量和累计辅助调用，包含归档聊天。', 'Includes all retained chat usage, archived chats and cumulative auxiliary calls.')}</p>
         <div className={css.usageSources}>{purposes.map(purpose => {
           const total = rows.reduce((sum, row) => ({ input: sum.input + row[purpose.key].input, output: sum.output + row[purpose.key].output, records: sum.records + row[purpose.key].records }), { input: 0, output: 0, records: 0 })
           return <article key={purpose.key}><span>{purpose.name}</span><strong>{number(tokens(total))} <small>tokens</small></strong><p>{number(total.records)} {purpose.unit}</p></article>
@@ -76,8 +79,9 @@ export function UsagePage({ face, english, connectionError, back, openBudget }: 
           <td>{number(tokens(bot.conversation) + tokens(bot.memory) + tokens(bot.handoff))}</td><td>{number(tokens(bot.memory) + tokens(bot.handoff))}</td>
           <td>{number(bot.conversation.records)} / {number(bot.memory.records + bot.handoff.records)}{bot.unreported > 0 && <small>{number(bot.unreported)} {l('条回复尚无用量报告', 'responses without usage reports')}</small>}</td>
         </tr>)}</tbody></table></div> : <p className={css.usageEmpty}>{l('暂无 Bot 用量记录。开始一次对话后，可在这里查看。', 'No Bot usage records yet. Start a conversation to see usage here.')}</p>}
-        <p className={css.integrationHint}>{l('辅助 Token 已包含在合计中。回复条数不等于模型调用次数；辅助调用次数包含失败调用，Token 仅累计已报告值。', 'Auxiliary tokens are already included in totals. Response counts are not model call counts. Auxiliary call counts include failures; token totals include only reported usage.')}</p>
+        <p className={css.integrationHint}>{l('辅助 Token 已包含在合计中。新记录按模型调用计数，旧记录按回复计数；Token 仅累计已报告值。', 'Auxiliary tokens are included in totals. New records count model calls; legacy records count responses. Tokens include reported values only.')}</p>
       </section>
+      {report.ledger && <UsageLedger detail={report.ledger} filter={filter} change={setFilter} english={english}/>}
       <section className={css.usageSection} aria-label={l('预算进度', 'Budget progress')}><h3>{l('预算进度', 'Budget progress')}</h3><p className={css.integrationHint}>{l('执行中的预留额度单独显示。总预算与 Bot 预算分别限制同一笔消耗，不应相加。', 'Active reservations are shown separately. Overall and Bot budgets apply to the same spending and must not be added together.')}</p>
         {report.budgets.length ? <div className={css.usageBudgets}>{report.budgets.filter(item => selected === '*' || item.scope === '*' || item.scope === selected).map(item => <article key={item.scope}>
           <h4>{item.scope === '*' ? l('总预算', 'Overall budget') : `${item.name} · @${item.scope}`}</h4><p>{period(item.budget.period)} · {new Date(item.budget.since).toLocaleDateString()}</p>

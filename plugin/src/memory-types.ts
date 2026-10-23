@@ -24,6 +24,7 @@ export interface Memory {
   createdAt: number; updatedAt: number
   effectiveAt?: number | undefined; expiresAt?: number | undefined
   supersedes?: string | undefined
+  mergedFrom?: string[] | undefined
   reviewedAt?: number | undefined
   /** Operator evidence added on revision; the original conversation quotation remains intact. */
   reviewEvidence?: string | undefined
@@ -49,3 +50,11 @@ export interface MemorySelection {
   text: string
 }
 export interface MemoryPreviewRequest { roomId: string; botId: string; userId?: string; query: string }
+export interface MemorySuggestion {
+  id: string; left: { id: string; revision: number }; right: { id: string; revision: number }
+  relation: 'duplicate' | 'conflict'; reason: string; proposedBody: string; createdAt: number
+  status: 'pending' | 'applied' | 'dismissed' | 'stale'; source: 'exact' | 'semantic'
+}
+export interface MemoryGovernanceView { suggestions: MemorySuggestion[]; records: Memory[] }
+export interface AnalyzeMemoriesRequest { botId: string; scope: MemoryScope; ownerId: string }
+export interface ResolveMemorySuggestion { id: string; action: 'merge' | 'keep-left' | 'keep-right' | 'dismiss'; body?: string }

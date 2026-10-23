@@ -36,7 +36,11 @@
     "src/client/KnowledgeControls.tsx",
     "src/client/UsagePage.tsx",
     "src/usage.ts",
-    "src/budgets.ts"
+    "src/budgets.ts",
+    "src/usage-types.ts",
+    "src/client/UsageLedger.tsx",
+    "src/client/MemoryGovernance.tsx",
+    "src/client/ContextInspector.tsx"
   ],
   "references": [
     {

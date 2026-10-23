@@ -88,3 +88,39 @@ jobs:
       - run: npm run test:package
       - run: npm run test:feishu-package
       - run: npm run test:infoflow-managed-package
+
+  desktop-platforms:
+    needs: build-and-test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: npm install --global pnpm@11.7.0
+      - run: npm run setup
+      - run: npm test
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: dsh-bot-package
+          path: dist
+      - run: npm run test:client-package
+      - run: npm run test:package
+      - run: npm run test:feishu-package
+      - run: npm run test:infoflow-managed-package
+      - run: npm run test:im-isolation-package
+
+  result:
+    if: always()
+    needs: [build-and-test, older-runtime, node-22, desktop-platforms]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every platform check to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: node -e 'const jobs=JSON.parse(process.env.RESULTS); if(Object.values(jobs).some(job=>job.result!=="success")) process.exit(1)'

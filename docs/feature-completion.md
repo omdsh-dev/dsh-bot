@@ -1,5 +1,25 @@
 # Bot capability completion
 
+## Full parity follow-up (2026-10-23)
+
+The complete follow-up is in progress. Checkboxes below mean implemented **and verified**, not planned or merely exposed in the UI.
+
+- [x] Usage overview page and budget visibility (commit `117b936`; 199 source tests and native Host/client package checks).
+- [x] Independent per-call usage ledger, date/model/provider/room/purpose queries and cache accounting.
+- [ ] Persistent full-text index and lazy historical transcript loading.
+- [x] Memory semantic duplicate/conflict review, merge suggestions and scoped context invalidation.
+- [x] Per-response recall evidence, context occupancy, segments and handoff inspection.
+- [ ] Per-Bot MCP, skills and credential capability grants/revocation.
+- [ ] Safe declarative metric/table/progress/form cards.
+- [ ] Main Bot team-management tools with explicit operator-granted authority.
+- [x] Context steward decisions using public native compaction/rotation seams.
+- [ ] macOS/Windows regression matrix, container packaging, desktop entry and isolated browser capability.
+- [ ] Final source/package checks, push, release and live Feishu media/inbound acceptance.
+
+Current checkpoint: 214 source tests across 25 files and the launcher passed; the built archive passed DSH 0.1.5 Desktop restart, authenticated Web and shipped-client checks. macOS/Windows CI jobs are configured; remote results remain pending.
+
+Legacy accounting metadata that was never saved remains unknown. Live platform acceptance requires actual tenant access; offline tests do not establish it.
+
 Release set: Bot 0.9.1, Feishu 0.5.1, InfoFlow 0.6.1.
 This ledger describes implemented source and verification scope; publication is a separate step.
 

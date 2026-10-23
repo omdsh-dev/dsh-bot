@@ -29,7 +29,7 @@ export function KnowledgeControls({ face, english, catalog, refresh }: { face: C
       </div>}
     </article>)}
     <h4>{l('关联同一用户的账号', 'Link accounts belonging to one user')}</h4>
-    <p>{l('关联后，这些账号可在各自私聊中召回同一人的个人记忆。只关联已核实为同一人的账号。变更关联会停止当前执行并重建上下文；解除后，共同身份下的记忆保留在管理页，不再自动召回。', 'Link only verified accounts of the same person. Changes stop current work and refresh context. Unlinking stops shared recall; memories remain available for operator review.')}</p>
+    <p>{l('关联后，这些账号可在各自私聊中召回同一人的个人记忆。只关联已核实为同一人的账号。变更关联只会停止相关聊天的执行并重建上下文；解除后，共同身份下的记忆保留在管理页，不再自动召回。', 'Link only verified accounts of the same person. Changes stop work in affected chats and refresh their context. Unlinking stops shared recall; memories remain available for operator review.')}</p>
     <label>{l('用户名称', 'Person name')}<Input value={name} maxLength={100} onChange={event => setName(event.target.value)}/></label>
     <label>{l('账号一', 'First account')}<select value={first} onChange={event => setFirst(event.target.value)}><option value="">{l('选择账号', 'Select an account')}</option>{accounts.map(user => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
     <label>{l('账号二', 'Second account')}<select value={second} onChange={event => setSecond(event.target.value)}><option value="">{l('选择账号', 'Select an account')}</option>{accounts.map(user => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
