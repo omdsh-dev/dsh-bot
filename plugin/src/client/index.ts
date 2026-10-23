@@ -54,6 +54,7 @@ function install(ctx: Context): void {
   const face: PanelFace = {
     capabilities: {
       knowledgeStatus: () => value(ctx.remote.bots.knowledgeStatus()),
+      usageReport: () => value(ctx.remote.bots.usageReport()),
       configureKnowledge: settings => value(ctx.remote.bots.configureKnowledge(settings)),
       reviewAction: request => value(ctx.remote.bots.reviewAction(request)),
       linkIdentity: request => value(ctx.remote.bots.linkIdentity(request)),

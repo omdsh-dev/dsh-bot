@@ -11,11 +11,11 @@ export function download(name: string, content: string, mime: string) {
   const a = document.createElement('a'); a.href = url; a.download = name; a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
-export function Controls({ state, room, face, updateBot, english, openRoom }: {
-  state: BotState; room: Room | undefined; face: CapabilityFace; updateBot(request: UpdateBotRequest): Promise<unknown>; english: boolean; openRoom(room: Room): void
+export function Controls({ state, room, face, updateBot, english, openRoom, initialTab = 'history' }: {
+  state: BotState; room: Room | undefined; face: CapabilityFace; updateBot(request: UpdateBotRequest): Promise<unknown>; english: boolean; openRoom(room: Room): void; initialTab?: string
 }) {
   const l = (zh: string, en: string) => english ? en : zh
-  const [tab, setTab] = useState('history')
+  const [tab, setTab] = useState(initialTab)
   const [error, setError] = useState(''), [busy, setBusy] = useState(false)
   const [query, setQuery] = useState(''), [page, setPage] = useState<HistoryPage>()
   const [botId, setBotId] = useState<BotId | undefined>(room?.defaultBot ?? state.bots[0]?.id)

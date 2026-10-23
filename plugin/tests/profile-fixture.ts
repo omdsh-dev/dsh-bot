@@ -277,6 +277,10 @@ export async function apply(ctx: Context): Promise<void> {
       }
       assert.equal(service.listMemories({ status: 'pending' }).find(item => item.topic === 'auto-language')?.body, 'Use Chinese for future replies.')
       assert.ok(service.knowledgeStatus().usage.some(item => item.purpose === 'memory' && item.input === 5 && item.output === 4), JSON.stringify(service.knowledgeStatus()))
+      const usage = service.usageReport()
+      assert.ok(usage.bots.some(row => row.botId === bot.id && row.memory.input === 5 && row.memory.output === 4))
+      assert.ok(usage.budgets.some(row => row.scope === '*' && row.budget.used.input > 0))
+      assert.ok(!JSON.stringify(usage).includes('PRIVATE_MEMORY_FIXTURE'), 'Usage reporting exposes totals, not conversation or memory content')
       assert.equal(service.previewMemories({ roomId: room.id, botId: bot.id, userId: 'local:operator', query: '' }).records.some(item => item.topic === 'auto-language'), false)
       await service.configureKnowledge({ reviewEnabled: false })
 

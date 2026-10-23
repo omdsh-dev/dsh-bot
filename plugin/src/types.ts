@@ -188,3 +188,4 @@ export interface AttachmentData { name: string; mediaType: string; base64: strin
 export interface CapabilityCatalog { providers: { id: string; models: { id: string; name: string }[]; error?: string | undefined }[]; tools: { name: string; description: string }[] }
 
 export type * from './knowledge-types.ts'
+export type { UsageReport, UsageBudget, BotUsageRow, UsageTotals } from './usage.ts'

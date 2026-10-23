@@ -1,7 +1,9 @@
 import type { KnowledgeSettings, KnowledgeStatus } from '../knowledge-types.ts'
+import type { UsageReport } from '../usage.ts'
 import type { AttachmentRequest, AttachmentData, CapabilityCatalog, QuestionAnswer, ScheduleRun, BotId, Room, Budget, ChatAttachment, ConfigureBudget, FailureAction, FailureView, HistoryPage, HistoryRequest, LifecycleRequest, RoomId, SaveScheduleRequest, Schedule, UploadRequest } from '../types.ts'
 import type { Memory, MemoryAction, MemoryCatalog, MemoryListRequest, MemoryPreviewRequest, MemorySelection, SaveMemoryRequest } from '../memory-types.ts'
 export interface CapabilityFace {
+  usageReport(): Promise<UsageReport>
   knowledgeStatus(): Promise<KnowledgeStatus>
   configureKnowledge(settings: KnowledgeSettings): Promise<void>
   reviewAction(request: { id: string; action: 'retry' | 'skip' }): Promise<void>

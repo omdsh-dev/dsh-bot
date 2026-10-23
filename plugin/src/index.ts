@@ -31,6 +31,7 @@ import type { KnowledgeSettings, KnowledgeStatus } from './knowledge-types.ts'
 import type { Memory, MemoryAction, MemoryCatalog, MemoryListRequest, MemoryPreviewRequest, MemorySelection, SaveMemoryRequest } from './memory-types.ts'
 import { nextCalendar, validateCalendar } from './scheduling.ts'
 import { resetPeriod, needsBudgetReset, reserveBudget, addUsage } from './budgets.ts'
+import { usageReport, type UsageReport } from './usage.ts'
 import type {} from '@deepseek-ai/dsh-user-questions'
 import type { QuestionView, QuestionAnswer, AttachmentRequest, AttachmentData, CapabilityCatalog, ScheduleRun } from './types.ts'
 import { historyPage, exportRoom, validatePolicy } from './capabilities.ts'
@@ -312,6 +313,7 @@ export class BotMode extends TypertRemoteService {
     return structuredClone({ settings: this.state.knowledgeSettings ?? { reviewEnabled: true }, reviews: (this.state.memoryReviews ?? []).slice(-200).reverse(),
       identities: this.state.userIdentities ?? [], usage: this.state.maintenanceUsage ?? [] })
   }
+  @Remote usageReport(): UsageReport { return usageReport(this.state) }
   @Remote async configureKnowledge(settings: KnowledgeSettings): Promise<void> {
     await this.change(state => { state.knowledgeSettings = { reviewEnabled: settings.reviewEnabled } })
     if (!settings.reviewEnabled) this.memoryController?.abort()

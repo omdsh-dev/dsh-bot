@@ -16,6 +16,7 @@ import { registerPanel } from '../src/client/registration.ts'
 import { en, zh } from '../src/client/locales.ts'
 import type { FeishuState } from '../src/feishu/types.ts'
 import type { CapabilityFace } from '../src/client/capability-face.ts'
+import { usageReport } from '../src/usage.ts'
 
 const runtimes = new Set<SlotTestRuntime>()
 afterEach(async () => { for (const runtime of runtimes) await runtime.dispose(); runtimes.clear(); cleanup(); vi.restoreAllMocks() })
@@ -50,6 +51,44 @@ async function bench(overrides: Partial<PanelFace> = {}, infoflowVisible = false
   runtime.renderRoot()
   return { face, model, room, rooms, bots }
 }
+
+it('opens usage from the sidebar, filters full Host totals and opens budget controls without losing the draft', async () => {
+  const read = vi.fn(async () => report)
+  const capabilities = { usageReport: read, catalog: async () => ({ providers: [], tools: [] }) } as unknown as CapabilityFace
+  const b = await bench({ capabilities })
+  const report = usageReport({ bots: b.bots, rooms: [], budget: { tokenLimit: 1000, costLimit: 2, currency: 'USD', since: 1000, used: { input: 600, output: 100, cost: 0.25 } },
+    maintenanceUsage: [{ botId: 'sage', purpose: 'memory', input: 200, output: 20, cost: 0.01, calls: 2 }, { botId: 'nova', purpose: 'handoff', input: 300, output: 30, cost: 0.01, calls: 1 }],
+    budgetReservations: { call: [{ scope: '*', tokens: 100, cost: 0.1 }] } }, 2000)
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'Keep this draft' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Usage' }))
+  await screen.findByRole('table', { name: 'Usage by Bot' })
+  expect(read).toHaveBeenCalledOnce()
+  const summary = screen.getByRole('region', { name: 'Overall budget usage' })
+  expect(within(summary).getByText('700')).toBeTruthy()
+  expect(within(summary).getByText('USD 0.25')).toBeTruthy()
+  expect(screen.getByRole('progressbar', { name: 'Overall budget Token' }).getAttribute('value')).toBe('800')
+  fireEvent.change(screen.getByRole('combobox', { name: 'Filter Bot' }), { target: { value: 'nova' } })
+  const table = screen.getByRole('table', { name: 'Usage by Bot' })
+  expect(within(table).queryByText('Sage')).toBeNull()
+  expect(within(table).getAllByText('330')).toHaveLength(2)
+  fireEvent.click(screen.getByRole('button', { name: 'Manage budgets' }))
+  expect(screen.getByRole('spinbutton', { name: 'Total token limit (0 unlimited)' })).toBeTruthy()
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Back to chat' }))
+  expect((screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement).value).toBe('Keep this draft')
+})
+
+it('shows a retryable usage failure rather than inventing zero totals and supports an empty deployment', async () => {
+  const read = vi.fn<CapabilityFace['usageReport']>().mockRejectedValueOnce(new Error('temporarily offline')).mockResolvedValue(usageReport({ bots: [], rooms: [] }))
+  await bench({ capabilities: { usageReport: read } as unknown as CapabilityFace })
+  fireEvent.click(screen.getByRole('button', { name: 'Usage' }))
+  expect((await screen.findByRole('alert')).textContent).toContain('temporarily offline')
+  expect(screen.queryByRole('region', { name: 'Overall budget usage' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh usage' }))
+  await screen.findByText('No Bot usage records yet. Start a conversation to see usage here.')
+  expect(screen.queryByRole('alert')).toBeNull()
+  expect(screen.queryByRole('progressbar')).toBeNull()
+})
 
 it('manages scoped memories and previews recall through the controls panel', async () => {
   const candidate = { id: 'memory', revision: 1, scope: 'global', ownerId: '*', kind: 'preference', subject: 'response', topic: 'language', body: 'Use Chinese', status: 'pending', access: 'scope', source: { kind: 'operator', evidence: 'confirmed request' }, createdAt: 100, updatedAt: 100 }

@@ -33,7 +33,10 @@
     "src/memory-types.ts",
     "src/client/Memories.tsx",
     "src/knowledge-types.ts",
-    "src/client/KnowledgeControls.tsx"
+    "src/client/KnowledgeControls.tsx",
+    "src/client/UsagePage.tsx",
+    "src/usage.ts",
+    "src/budgets.ts"
   ],
   "references": [
     {

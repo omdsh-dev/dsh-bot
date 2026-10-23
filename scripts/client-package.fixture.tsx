@@ -33,6 +33,7 @@ it('mounts the archive UI, renders native controls, and sends through its Remote
     members: [{ botId: bot.id, sessionId: 'session', cursor: 0 }], messages: [] }] }
   const send = vi.fn(async () => ({ ok: true, value: {} }))
   const createBot = vi.fn(async request => ({ ok: true, value: request }))
+  const usageReport = vi.fn(async () => ({ ok: true, value: { generatedAt: 1000, bots: [], budgets: [] } }))
   // Validate shipped codecs with the actual runtime registry, including 0.1's schema contract.
   const mount = vi.fn(async contribution => {
     const ctx = new Context()
@@ -48,14 +49,14 @@ it('mounts the archive UI, renders native controls, and sends through its Remote
     ctx.slots.installLocale(locale)
     ctx.provide('layout', { toggleSidebar() {} })
     ctx.provide('uiWorkspace', { openSession() {} })
-    const remote = { bots: { send, createBot }, $mount: mount, $stream: () => ({
+    const remote = { bots: { send, createBot, usageReport }, $mount: mount, $stream: () => ({
       async *[Symbol.asyncIterator]() { yield { generation: 1, value: { type: 'baseline', value: state }, accept() {} } },
       async dispose() {}, restart() {},
     }) }
     // DSH 0.2's slot harness already owns a Remote double; 0.1 does not.
     if (runtime.remote) Object.assign(runtime.remote, remote)
     else ctx.provide('remote', remote)
-    ctx.provide('remote.bots', { send, createBot })
+    ctx.provide('remote.bots', { send, createBot, usageReport })
     await client.apply(ctx)
   } })
   await runtime.root.declare({ main: { kind: 'keyed', scope: 'root' }, 'sidebar.panellist': { kind: 'list', scope: 'root' } },
@@ -65,6 +66,10 @@ it('mounts the archive UI, renders native controls, and sends through its Remote
   await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeDefined())
   expect(mount).toHaveBeenCalledOnce()
   expect(screen.getByRole('button', { name: 'Send' }).querySelector('svg')).not.toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Usage' }))
+  await screen.findByText('No Bot usage records yet. Start a conversation to see usage here.')
+  expect(usageReport).toHaveBeenCalledOnce()
+  fireEvent.click(screen.getByRole('button', { name: 'Back to chat' }))
   fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'Archive compatibility check' } })
   expect(screen.getByRole('button', { name: 'Send' }).disabled).toBe(false)
   fireEvent.click(screen.getByRole('button', { name: 'Send' }))

@@ -139,6 +139,8 @@ npm start -- --patch /absolute/path/bot-settings.patch.yml
 
 Scoped long-term memory is available under Chat & execution controls → Memory: global defaults, Bot knowledge, group conventions and individual user preferences, with automatic candidate extraction, review, recall preview and explicit account linking. Bots can search older chat messages, recall current memory and delegate concrete tasks with automatic result return. Long conversations can rotate Sessions with structured handoffs, and stalled executions have deadlines. See the [memory guide](docs/memory.md) for sharing and conflict rules.
 
+The sidebar **Usage** page shows current budget usage, estimated costs, active reservations and per-Bot retained token totals, with separate memory-review and context-handoff breakdowns. It refreshes every 15 seconds. See the [capability guide](docs/capabilities.md) for accounting periods and reporting limits.
+
 - Use the extensible `standard` preset; complete-prompt presets such as `minimal` are rejected. Bot handles and presets stay fixed after creation.
 - Native model catalogs provide names, not token prices. Budgets use configured estimates and can be exceeded by an individual call; concurrent calls reserve quota before dispatch.
 - History and receipt windows use immutable segments with atomic manifests. The Host still hydrates history in memory; storage retention and native execution logs remain deployment-managed.

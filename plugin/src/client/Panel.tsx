@@ -7,6 +7,7 @@ import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { StopRequest, AttemptRequest, Bot, BotId, ChatMessage, ChatAttachment, ChatMessageId, CreateBotRequest, CreateGroupRequest, MembersRequest, Room, SendRequest, UpdateBotRequest } from '../types.ts'
 import { Controls } from './Controls.tsx'
+import { UsagePage } from './UsagePage.tsx'
 import { VoiceInput } from './VoiceInput.tsx'
 import { AttachmentView } from './Attachments.tsx'
 import { Questions } from './Questions.tsx'
@@ -15,7 +16,7 @@ import type { ModelSnapshot } from './model.ts'
 import type { createBotViewStore } from './view-store.ts'
 import { Avatar } from './Avatar.tsx'
 import { Composer } from './Composer.tsx'
-import { SidebarIcon, PlusIcon, SearchIcon, AttachmentIcon, CloseIcon, ConnectionsIcon, ControlsIcon } from './Icons.tsx'
+import { SidebarIcon, PlusIcon, SearchIcon, AttachmentIcon, CloseIcon, ConnectionsIcon, ControlsIcon, UsageIcon } from './Icons.tsx'
 import css from './Panel.module.css'
 import { IMPanel } from './IMPanel.tsx'
 import type { FeishuFace } from './feishu-face.ts'
@@ -55,6 +56,8 @@ export function BotPanel(props: Props) {
   const select = props.actions.select
   const [form, setForm] = useState<'bot' | 'edit' | 'group' | 'members' | null>(null)
   const [integration, setIntegration] = useState(false)
+  const [usagePage, setUsagePage] = useState(false)
+  const [controlsTab, setControlsTab] = useState('history')
   const [syncGroup, setSyncGroup] = useState<'none' | 'infoflow' | 'feishu'>('none')
   const [groupOwner, setGroupOwner] = useState('')
   const [humanMembers, setHumanMembers] = useState('')
@@ -127,7 +130,7 @@ export function BotPanel(props: Props) {
     setMembers(ids); setDefault(next === 'members' ? room?.defaultBot : ids[0])
   }
   const choose = (next: Room) => {
-    setIntegration(false); select(next.id); setReply(null); setDraft(''); setError(null); setShowChats(false); setDetails(false); follow.current = true
+    setIntegration(false); setUsagePage(false); select(next.id); setReply(null); setDraft(''); setError(null); setShowChats(false); setDetails(false); follow.current = true
   }
   const botName = (id: BotId | null) => id === null ? t('you') : bots.find(bot => bot.id === id)?.name ?? id
   const groupLocked = busy || groupSubmitted
@@ -186,13 +189,16 @@ export function BotPanel(props: Props) {
       </div>
       <Button className={css.newChat} variant="outline" disabled={!snapshot.ready || !bots.length} icon={<PlusIcon />} onClick={() => { openForm('group') }}>{t('startGroup')}</Button>
       <div className={css.rosterUtilities}>
-        <Button size="sm" icon={<ConnectionsIcon />} aria-pressed={integration} onClick={() => { setIntegration(true); setShowChats(false) }}>{t('imTitle')}</Button>
-        {props.capabilities && <Button size="sm" icon={<ControlsIcon />} onClick={() => setControls(true)}>{t('capabilities')}</Button>}
+        <Button size="sm" icon={<ConnectionsIcon />} aria-pressed={integration} onClick={() => { setIntegration(true); setUsagePage(false); setShowChats(false) }}>{t('imTitle')}</Button>
+        {props.capabilities && <>
+          <Button size="sm" icon={<UsageIcon />} aria-pressed={usagePage} onClick={() => { setUsagePage(true); setIntegration(false); setShowChats(false) }}>{t('usage')}</Button>
+          <Button size="sm" icon={<ControlsIcon />} onClick={() => { setControlsTab('history'); setControls(true) }}>{t('capabilities')}</Button>
+        </>}
       </div>
       <footer className={css.rosterFooter}><span className={css.connection} data-ready={snapshot.ready && !snapshot.error} /><span>{snapshot.error ? t('disconnected') : snapshot.ready ? t('connected') : t('loading')}</span>
         <Button size="sm" title={t('toggleSidebar')} aria-label={t('toggleSidebar')} icon={<SidebarIcon />} onClick={props.toggleSidebar} /></footer>
     </aside>
-    {integration ? <IMPanel bots={bots} feishu={props.feishu} infoflow={props.infoflow} infoflowVisible={infoflowVisible}
+    {usagePage && props.capabilities ? <UsagePage face={props.capabilities} english={t('you') === 'You'} connectionError={snapshot.error} back={() => setUsagePage(false)} openBudget={() => { setControlsTab('budget'); setControls(true) }}/> : integration ? <IMPanel bots={bots} feishu={props.feishu} infoflow={props.infoflow} infoflowVisible={infoflowVisible}
       setInfoflowVisible={props.setInfoflowVisible} settingsDisabled={!snapshot.ready || !!snapshot.error}
       t={t} back={() => { setIntegration(false) }} openRoom={choose} selectRoom={id => { const target = rooms.find(item => item.id === id || item.aliases?.includes(id)); if (target) choose(target) }} createFeishuGroup={(id, failed) => {
       if (failed && (failed.status !== 'failed' || failed.chatId)) return
@@ -314,7 +320,7 @@ export function BotPanel(props: Props) {
         <Button variant="primary" disabled={!snapshot.ready} onClick={() => { openForm('bot') }}>{t('newBot')}</Button></div>}
     </main>}
     <Modal open={controls} onClose={() => setControls(false)} closeLabel={t('cancel')} title={t('capabilities')} className={clsx(css.dialog, css.controlsDialog)} contentClassName={clsx(css.dialogContent)}>
-      {props.capabilities && <Controls key={room?.id} state={snapshot.value} room={room} face={props.capabilities} updateBot={props.updateBot} english={t('you') === 'You'} openRoom={next => { choose(next); setControls(false) }}/>}
+      {props.capabilities && <Controls key={`${room?.id}:${controlsTab}`} initialTab={controlsTab} state={snapshot.value} room={room} face={props.capabilities} updateBot={props.updateBot} english={t('you') === 'You'} openRoom={next => { choose(next); setControls(false) }}/>}
     </Modal>
     <Modal open={details && !!room} onClose={() => { setDetails(false) }} closeLabel={t('cancel')} title={t('chatInfo')} className={clsx(css.dialog)} contentClassName={clsx(css.dialogContent)}>
       {room && <div className={css.roomInfo}>

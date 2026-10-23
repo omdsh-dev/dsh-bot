@@ -13,3 +13,4 @@ export function AttachmentIcon() { return <Icon><path d="m5.5 9.5 5-5a1.8 1.8 0 
 export function MicrophoneIcon() { return <Icon><rect x="5.5" y="1.5" width="5" height="8" rx="2.5" /><path d="M3 7.5a5 5 0 0 0 10 0M8 12.5v2M5.5 14.5h5" /></Icon> }
 export function ConnectionsIcon() { return <Icon><rect x="1.5" y="2" width="9" height="7" rx="2" /><path d="m4 9-1 3 4-3M10.5 5H12a2 2 0 0 1 2 2v4l-2-1H9" /></Icon> }
 export function ControlsIcon() { return <Icon><path d="M2 4h3m3 0h6M2 12h6m3 0h3" /><circle cx="6.5" cy="4" r="1.5" /><circle cx="9.5" cy="12" r="1.5" /></Icon> }
+export function UsageIcon() { return <Icon><path d="M2 2v12h12M5 10V7m4 3V3m4 7V5" /></Icon> }

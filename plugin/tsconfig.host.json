@@ -34,6 +34,7 @@
     "src/history-store.ts",
     "src/scheduling.ts",
     "src/budgets.ts",
+    "src/usage.ts",
     "src/infoflow/queues.ts",
     "src/infoflow/archive.ts",
     "src/memory-types.ts",
