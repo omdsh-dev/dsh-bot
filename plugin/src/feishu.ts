@@ -2,7 +2,7 @@
 import { PermanentChatError } from './external-errors.ts'
 import Schema from '@deepseek-ai/schemastery'
 import type { BridgeConfig } from './infoflow/bridge.ts'
-import { checkIM } from './compatibility.ts'
+import { checkIM, CONNECTOR_PROTOCOL } from './compatibility.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { createHash } from 'node:crypto'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
@@ -80,11 +80,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       ...config, provider: 'feishu', accountId: binding.appId, botIds: [binding.botId], defaultBot: binding.botId,
       allowUsers: binding.allowUsers, allowGroups: binding.allowGroups, admins: binding.admins,
     })
-  })
+  }, CONNECTOR_PROTOCOL)
   const abort = new AbortController()
   const wake = async () => { await Promise.all([...connections.values()].map(item => item.bridge.wake())) }
   let feed: Promise<void> | undefined, timer: ReturnType<typeof setInterval> | undefined
-  const detach = ctx.botMode.attachFeishu(manager)
+  const detach = ctx.botMode.attachFeishu(manager, CONNECTOR_PROTOCOL)
   ctx.effect(() => async () => {
     detach(); detachDiscovery(); abort.abort(); if (timer) clearInterval(timer)
     await manager.close(); await Promise.all([...connections.keys()].map(stop)); await feed; await queues.close(); await settings.close()

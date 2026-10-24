@@ -1,4 +1,5 @@
 /** Queue storage outlives network connections, so disabled robots remain recoverable. */
+import { CONNECTOR_PROTOCOL } from '../compatibility.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import { BridgeArchive } from './archive.ts'
@@ -49,7 +50,7 @@ export class QueueRegistry {
   bind(id: string, name: string, bridge: InfoFlowBridge): void {
     this.detach.get(name)?.()
     this.bridges.set(name, bridge)
-    this.detach.set(name, this.ctx.botMode.attachQueue(this.provider, id, bridge))
+    this.detach.set(name, this.ctx.botMode.attachQueue(this.provider, id, bridge, CONNECTOR_PROTOCOL))
   }
   async offline(id: string, name: string, config: BridgeConfig): Promise<void> {
     if (this.bridges.has(name) || this.mounting.has(name)) return

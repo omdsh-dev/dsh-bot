@@ -12,7 +12,7 @@
 
 **如流入口默认隐藏：** 新用户默认隐藏如流配置和建群选项。内部用户可在 **IM 接入 → 高级设置 → 显示如流接入（内部用户）** 开启，设置保存在当前 DSH profile。已有如流绑定或聊天记录的用户升级后保留入口；关闭显示不会停用连接或删除记录。开启显示后仍需安装如流配套插件并配置企业 SDK。
 
-**0.9.1** 增加了聊天管理、历史自动分段、模型和工具候选项、每 Bot 周期预算与并发预留、附件收发与下载、内联问答与审批、离线失败恢复和带时区的日历任务。下表为本次发布包；发布进度及实机验收范围见[完成记录](docs/feature-completion.md)，配置见[功能使用说明](docs/capabilities.md)。
+**0.10.0** 增加了聊天管理、历史自动分段、模型和工具候选项、每 Bot 周期预算与并发预留、附件收发与下载、内联问答与审批、离线失败恢复和带时区的日历任务。下表为本次发布包；发布进度及实机验收范围见[完成记录](docs/feature-completion.md)，配置见[功能使用说明](docs/capabilities.md)。
 
 ## 能做什么
 
@@ -47,30 +47,30 @@
 
 | 包 | 版本 | 用途 |
 | --- | --- | --- |
-| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.9.1` | 必装主包，提供 Web 聊天和 IM 配置面板 |
-| [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.5.1` | 可选，提供飞书连接和建群能力 |
-| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.6.1` | 可选，提供如流连接；需能获取企业 SDK |
+| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.10.0` | 必装主包，提供 Web 聊天和 IM 配置面板 |
+| [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.6.0` | 可选，提供飞书连接和建群能力 |
+| [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.7.0` | 可选，提供如流连接；需能获取企业 SDK |
 
 **安装时请指定版本号或 `@next`。** 下方命令固定安装本次版本；要安装当前 `next` 标签对应的版本，可使用 `@zzzpyyy/dsh-bot@next`、`@zzzpyyy/dsh-bot-feishu@next` 或 `@zzzpyyy/dsh-bot-infoflow@next`。只填写包名会使用 `latest`，截至 **2026-10-21**，该标签仍指向旧版。
 
-上面同一套包已覆盖 DSH **0.1.5-rc.2** 与 **0.2.0-rc.2**，无需为它们选择不同的插件版本。更高 DSH 版本不会仅因版本号变化被拒绝，但尚未验证的版本不等于保证可用；如果上游删除或改变核心接口，仍需适配。飞书和如流包接受主包 `>=0.9.0 <1.0.0`，无需随主包的每次更新同步升级。详见[兼容策略与测试](docs/compatibility.md)。
+上面同一套包已覆盖 DSH **0.1.5-rc.2** 与 **0.2.0-rc.2**，无需为它们选择不同的插件版本。更高 DSH 版本不会仅因版本号变化被拒绝，但尚未验证的版本不等于保证可用；如果上游删除或改变核心接口，仍需适配。飞书和如流包接受主包 `>=0.10.0 <1.0.0`，可接受此协议范围内的兼容更新。从 0.9 升级到 0.10 时须同时升级连接器，历史按需加载需要新的通知游标协议。详见[兼容策略与测试](docs/compatibility.md)。
 
-在 **Desktop → 插件管理器** 安装 `@zzzpyyy/dsh-bot@0.9.1`，再按需向同一个 profile 添加配套插件。
+在 **Desktop → 插件管理器** 安装 `@zzzpyyy/dsh-bot@0.10.0`，再按需向同一个 profile 添加配套插件。
 
 飞书安装若报 `ERR_PNPM_IGNORED_BUILDS: protobufjs`，按[飞书安装说明](docs/feishu.zh.md#安装与开发)在目标 profile 中明确禁用该可选安装脚本，再重试。
 
 已有兼容版本的 **DSH CLI Web profile** 可执行：
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot@0.9.1
+dsh plugin --profile web add @zzzpyyy/dsh-bot@0.10.0
 # 可选：接入飞书
-dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.5.1
+dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.6.0
 ```
 
 如流额外依赖企业 SDK `@baidu/infoflow-sdk-nodejs@2026.8.28`。先在目标 profile 的包管理环境中配置组织授权的 `@baidu` registry，再安装如流配套包；公共包不附带私有 SDK 或凭据：
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.6.1
+dsh plugin --profile web add @zzzpyyy/dsh-bot-infoflow@0.7.0
 ```
 
 使用与当前服务相同的 `DSH_HOME` 和 profile。升级时先备份数据目录，等待正在执行的回复完成，停止 Host，将主包和已安装的配套包更新到上表版本，再重启。Bot 身份、绑定和历史继续保存在同一数据目录。安装配套包只提供配置入口，不自动创建机器人或启用尚未配置的连接。权限及配置步骤见[飞书接入](docs/feishu.zh.md)和[如流接入](docs/infoflow.zh.md)。
@@ -173,3 +173,7 @@ npm run test:im-delegation-package
 ## 许可
 
 [MIT](LICENSE)。DeepSeek Harness 保留原项目许可和版权声明，详见 [NOTICE](NOTICE)。
+
+## 原生桌面与 Docker
+
+源码构建后运行 `npm run desktop` 可打开 macOS／Windows 原生窗口，`npm run desktop:entry` 可生成本机双击入口。入口依赖当前源码目录和已准备的运行时，说明见[功能指南](docs/capabilities.md#原生桌面入口)。容器部署、持久化目录和验收命令见[Docker 指南](docs/container.md)。

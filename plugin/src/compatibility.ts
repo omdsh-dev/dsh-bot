@@ -30,7 +30,7 @@ export function checkAgent(agent: unknown): void {
 
 /** Both IM connectors use the same native credential and storage contract. */
 export function checkIM(ctx: unknown): void {
-  requireMethods('IM Host', ctx, ['storageDomain.open', 'credentials.resolve', 'credentials.set', 'botMode.snapshot', 'botMode.ensureExternalRoom', 'botMode.submitExternalMessage', 'botMode.follow', 'botMode.attachQueue', 'botMode.upload'])
+  requireMethods('IM Host', ctx, ['storageDomain.open', 'credentials.resolve', 'credentials.set', 'botMode.snapshot', 'botMode.ensureExternalRoom', 'botMode.submitExternalMessage', 'botMode.follow', 'botMode.attachQueue', 'botMode.upload', 'botMode.connectorRoom', 'botMode.connectorNotifications'])
 }
 
 /** Check the Client services before mounting a Remote namespace or UI slots. */
@@ -50,4 +50,10 @@ export function toolResultPayload(message: unknown): { callId: string; content: 
     const id: unknown = Reflect.get(block, 'toolCallId'), content: unknown = Reflect.get(block, 'content')
     if (typeof id === 'string' && Array.isArray(content)) return { callId: id, content }
   }
+}
+
+/** Lazy transcript snapshots require offset-aware notification readers on both sides. */
+export const CONNECTOR_PROTOCOL = 2
+export function requireConnectorProtocol(version: number | undefined): void {
+  if (version !== CONNECTOR_PROTOCOL) throw new Error('DSH Bot connector protocol changed. Upgrade Feishu to 0.6 or InfoFlow to 0.7 together with Bot 0.10 before enabling IM connections.')
 }

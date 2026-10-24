@@ -1,5 +1,5 @@
 /** Optional native InfoFlow plugin; credentials, storage and execution remain DSH-owned. */
-import { checkIM } from './compatibility.ts'
+import { checkIM, CONNECTOR_PROTOCOL } from './compatibility.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { createHash } from 'node:crypto'
 import Schema from '@deepseek-ai/schemastery'
@@ -78,7 +78,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const owner = new InfoFlowBridge(ctx.botMode, store, connection,
     { ...config, notifyScheduled: true, botIds: config.botIds.map(brandString<BotId>), defaultBot: brandString<BotId>(config.defaultBot), labelReplies: config.botIds.length > 1 }, report)
   bridge = owner
-  detachQueue = ctx.botMode.attachQueue('infoflow', 'legacy', owner)
+  detachQueue = ctx.botMode.attachQueue('infoflow', 'legacy', owner, CONNECTOR_PROTOCOL)
   ctx.on('session/event', (session, event) => {
     if (event.type === 'approval/asked') void owner.attention(session.id, `approval:${event.data.id}`).catch(() => { report('InfoFlow approval notice could not be persisted') })
   })

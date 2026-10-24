@@ -11,3 +11,4 @@ lib/
 .DS_Store
 dist/
 .pnpm-store/
+.container/

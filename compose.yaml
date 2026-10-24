@@ -1,0 +1,17 @@
+services:
+  bot:
+    build: .
+    image: dsh-bot:local
+    init: true
+    ports:
+      - "127.0.0.1:3093:3093"
+    volumes:
+      - bot-data:/data
+      - bot-workspace:/workspace
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    shm_size: 1gb
+    restart: unless-stopped
+volumes:
+  bot-data:
+  bot-workspace:

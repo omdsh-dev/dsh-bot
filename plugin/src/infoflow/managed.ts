@@ -1,4 +1,5 @@
 /** Cordis-owned multi-robot runtime: independent connections, shared group receipts and native credentials. */
+import { CONNECTOR_PROTOCOL } from '../compatibility.ts'
 import { PermanentChatError } from '../external-errors.ts'
 import { createHash } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
@@ -121,11 +122,11 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
       ...config, accountId: `group:${group.groupId}`, botIds: group.botIds, defaultBot: group.defaultBot,
       allowUsers: [], allowGroups: [group.groupId], admins: [group.owner],
     })
-  })
+  }, CONNECTOR_PROTOCOL)
   const abort = new AbortController()
   let feed: Promise<void> | undefined
   let timer: ReturnType<typeof setInterval> | undefined
-  const detach = ctx.botMode.attachInfoFlow(manager)
+  const detach = ctx.botMode.attachInfoFlow(manager, CONNECTOR_PROTOCOL)
   ctx.effect(() => async () => {
     detach(); detachDiscovery(); abort.abort(); if (timer) clearInterval(timer)
     await manager.close()

@@ -1,6 +1,6 @@
 # Compatibility policy / 兼容策略
 
-DSH Bot separates the revision used to **build** from the versions allowed to **run**. One set of Bot `0.9.1`, Feishu `0.5.1` and InfoFlow `0.6.1` archives is tested on DSH `0.1.5-rc.2` and `0.2.0-rc.2`. A routine DSH update does not require a new Bot release.
+DSH Bot separates the revision used to **build** from the versions allowed to **run**. One set of Bot `0.10.0`, Feishu `0.6.0` and InfoFlow `0.7.0` archives is tested on DSH `0.1.5-rc.2` and `0.2.0-rc.2`. A routine DSH update does not require a new Bot release.
 
 构建版本固定在 [dsh-version.json](../dsh-version.json)，用于复现编译结果；安装范围集中在 [compatibility.json](../compatibility.json)，不再由构建版本生成精确依赖。三个安装包使用同一份兼容策略。
 
@@ -8,10 +8,10 @@ DSH Bot separates the revision used to **build** from the versions allowed to **
 | --- | --- |
 | DSH 及其共享模块 | `>=0.1.5-rc.2 \|\| >=0.2.0-0 \|\| >=0.2.1-0 \|\| >=0.3.0-0`；无上限，允许后续版本尝试加载 |
 | Cordis / Schemastery | 分别为 `^4.0.2` / `^3.18.2`，保持已验证的框架主版本 |
-| IM 插件依赖的 DSH Bot | `>=0.9.0 <1.0.0`；新连接器使用媒体和失败队列接口 |
+| IM 插件依赖的 DSH Bot | `>=0.10.0 <1.0.0`；连接器使用按需历史与绝对通知游标接口 |
 | 已验证的 DSH | `0.1.5-rc.2`、`0.2.0-rc.2` 的固定提交 |
 
-上表对应飞书 `0.5.1` 和如流 `0.6.1`；旧版飞书 `0.4.1`、如流 `0.5.1` 的主包依赖范围为 `>=0.8.0 <1.0.0`。安装时应先升级主包，再升级连接器；发布与实机验收状态见[完成记录](feature-completion.md)。
+上表对应飞书 `0.6.0` 和如流 `0.7.0`；旧版飞书 `0.4.1`、如流 `0.5.1` 的主包依赖范围为 `>=0.8.0 <1.0.0`。安装时应先升级主包，再升级连接器；发布与实机验收状态见[完成记录](feature-completion.md)。
 
 DSH 范围显式列出 0.2.0、0.2.1 和 0.3.0 的预发布基线，普通 npm semver 校验也会接受 `0.2.1-rc.1`。semver 不会自动接受所有未知版本的预发布；增加新的预发布基线时需要更新范围并验证，新版 DSH 启用 includePrerelease 的加载检查不受此限制。允许安装与已验证兼容是不同含义。没有任何机制能够保证未来被删除的模块、改变语义的事件或协议继续兼容。
 
@@ -47,3 +47,5 @@ DSH_BOT_TEST_VERSION=0.2.0-rc.2 npm run test:registry
 registry 检查覆盖主包和飞书包；如流 SDK 需要组织授权，CI 只替换该 SDK。GitHub Actions 构建一次，将同一组压缩包交给旧版运行环境测试。增加验证版本只需记录提交并扩展矩阵；只有接口不兼容才需要改插件实现和发布适配版。
 
 源码构建使用 Node 24；发布包另在 Node 22 上运行 Desktop/Web、飞书和如流管理模式测试。CI actions 固定到完整 commit SHA。
+
+Bot 0.10 的空闲快照只包含近期历史。请同时升级 Feishu 0.6／InfoFlow 0.7：新连接器启动前检查按需历史接口，主包注册队列或管理器时检查协议 2。旧连接器会被明确拒绝，不会把历史尾部当作完整聊天继续计算通知游标。升级时停止 Host、保留全部数据目录并一次安装完整包组，再重启；不要在主包升级后单独启动旧连接器。

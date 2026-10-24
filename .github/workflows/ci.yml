@@ -110,6 +110,8 @@ jobs:
         with:
           name: dsh-bot-package
           path: dist
+      - run: npm run test:desktop
+      - run: npm run desktop:entry
       - run: npm run test:client-package
       - run: npm run test:package
       - run: npm run test:browser
@@ -117,9 +119,21 @@ jobs:
       - run: npm run test:infoflow-managed-package
       - run: npm run test:im-isolation-package
 
+  container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: npm run container:prepare
+      - run: docker build -t dsh-bot:parity-test .
+      - run: npm run test:container
+
   result:
     if: always()
-    needs: [build-and-test, older-runtime, node-22, desktop-platforms]
+    needs: [build-and-test, older-runtime, node-22, desktop-platforms, container]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every platform check to succeed

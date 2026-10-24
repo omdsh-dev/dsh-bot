@@ -21,7 +21,7 @@ import { assembleContextFor, type Agent } from '@deepseek-ai/dsh-agent'
 import type { Domain } from '@deepseek-ai/dsh-storage-domain'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-system-prompt'
-import { checkHost, checkAgent, optionalService, toolResultPayload } from './compatibility.ts'
+import { checkHost, checkAgent, optionalService, toolResultPayload, requireConnectorProtocol } from './compatibility.ts'
 import { botDomain } from './domain.ts'
 import { isExternalGroup, mergeExternalRooms } from './external-rooms.ts'
 import { findMessage, route } from './routing.ts'
@@ -708,12 +708,13 @@ export class BotMode extends TypertRemoteService {
     return next
   }
 
-  attachQueue(provider: 'infoflow' | 'feishu', id: string, queue: { failures(queue: string): FailureView[]; resolveFailure(id: string, action: 'retry' | 'discard'): Promise<void> }): () => void {
+  attachQueue(provider: 'infoflow' | 'feishu', id: string, queue: { failures(queue: string): FailureView[]; resolveFailure(id: string, action: 'retry' | 'discard'): Promise<void> }, protocol?: number): () => void {
+    requireConnectorProtocol(protocol)
     const key = `${provider}:${id}`
     this.queues.set(key, queue)
     return () => { if (this.queues.get(key) === queue) this.queues.delete(key) }
   }
-  attachQueueDiscovery(discover: () => Promise<void>): () => void { this.queueDiscoveries.add(discover); return () => { this.queueDiscoveries.delete(discover) } }
+  attachQueueDiscovery(discover: () => Promise<void>, protocol?: number): () => void { requireConnectorProtocol(protocol); this.queueDiscoveries.add(discover); return () => { this.queueDiscoveries.delete(discover) } }
   @Remote async failures(): Promise<FailureView[]> { for (const discover of this.queueDiscoveries ?? []) await discover(); return [...this.queues.entries()].flatMap(([key, queue]) => queue.failures(key.slice(key.indexOf(':') + 1))).sort((a, b) => b.time - a.time) }
   @Remote resolveFailure(request: FailureAction): Promise<void> {
     const queue = this.queues.get(`${request.provider}:${request.queue}`)
@@ -1019,7 +1020,8 @@ export class BotMode extends TypertRemoteService {
   }
 
   /** Register the optional connector for the lifetime of its Host scope. */
-  attachInfoFlow(control: InfoFlowControl): () => void {
+  attachInfoFlow(control: InfoFlowControl, protocol?: number): () => void {
+    requireConnectorProtocol(protocol)
     if (this.infoflow) throw new Error('InfoFlow manager is already installed')
     this.infoflow = control
     for (const wake of this.watchers) wake()
@@ -1050,7 +1052,8 @@ export class BotMode extends TypertRemoteService {
   @Remote resumeInfoflowGroup(requestId: string): Promise<Room> { return this.connector().resumeGroup(requestId) }
 
   /** The optional Feishu manager has its own lifetime and credentials. */
-  attachFeishu(control: FeishuControl): () => void {
+  attachFeishu(control: FeishuControl, protocol?: number): () => void {
+    requireConnectorProtocol(protocol)
     if (this.feishu) throw new Error('Feishu manager is already installed')
     this.feishu = control
     return () => { if (this.feishu === control) this.feishu = undefined }

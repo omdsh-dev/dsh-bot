@@ -8,6 +8,7 @@ import { LlmAdapter, ToolCallId, type GenerateOptions, type StreamChunk } from '
 import type {} from '../src/index.ts'
 import type { RoomId } from '../src/types.ts'
 
+const CONNECTOR_PROTOCOL = 2
 export const name = 'bot-mode-profile-fixture'
 export const inject = ['botMode', 'llm', 'storageDomain', 'agents']
 export async function apply(ctx: Context): Promise<void> {
@@ -156,7 +157,8 @@ export async function apply(ctx: Context): Promise<void> {
           error: null, allowUsers: [], allowGroups: [], admins: [], credentialsConfigured: true }] }),
         save: unused, verify: unused, toggle: unused, testMessage: unused, createGroup: unused, resumeGroup: unused, attachGroup: unused,
       }
-      const detach = service.attachInfoFlow(legacyControl)
+      assert.throws(() => service.attachInfoFlow(legacyControl), /Upgrade Feishu/)
+      const detach = service.attachInfoFlow(legacyControl, CONNECTOR_PROTOCOL)
       assert.equal(service.snapshot().infoflowVisible, true, 'Upgrades retain access to saved bindings')
       await service.setInfoflowVisible(false)
       assert.equal(service.snapshot().infoflowVisible, false, 'Explicit choice takes precedence over saved bindings')

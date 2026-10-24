@@ -1,6 +1,6 @@
 {
   "name": "dsh-bot",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "description": "Persistent AI teammates and multi-Bot chats, as a native DeepSeek Harness plugin.",
@@ -31,6 +31,10 @@
     "test:client-package": "node scripts/test-client-package.mjs",
     "browser:install": "node scripts/browser-install.mjs",
     "test:browser": "node scripts/test-browser.mjs",
-    "test:container": "node scripts/test-container.mjs"
+    "test:container": "node scripts/test-container.mjs",
+    "container:prepare": "node scripts/prepare-container.mjs",
+    "desktop": "node scripts/start-desktop.mjs",
+    "test:desktop": "node scripts/test-desktop.mjs",
+    "desktop:entry": "node scripts/create-desktop-entry.mjs"
   }
 }

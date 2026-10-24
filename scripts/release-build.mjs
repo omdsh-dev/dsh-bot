@@ -1,6 +1,6 @@
 /** Verify the source snapshot and generated codecs before admitting any archive. */
 import { createHash } from 'node:crypto'
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { root, runtime, pluginPath, run } from './common.mjs'
 
@@ -23,6 +23,8 @@ export function sourceDigest() {
 }
 
 export function provenance() {
+  // Source archives and container contexts have no Git metadata. Never present them as clean releases.
+  if (!existsSync(join(root, '.git'))) return { commit: null, dirty: true, sourceSha256: sourceDigest() }
   return { commit: run('git', ['rev-parse', 'HEAD'], { cwd: root, stdio: 'pipe' }),
     dirty: !!run('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: root, stdio: 'pipe' }), sourceSha256: sourceDigest() }
 }

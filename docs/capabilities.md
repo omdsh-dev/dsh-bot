@@ -1,6 +1,6 @@
-# 0.9 功能使用说明 / Capability guide
+# 0.10 功能使用说明 / Capability guide
 
-本页适用于主包 `0.9.1`、飞书 `0.5.1`、如流 `0.6.1`。发布进度与验收范围见[完成记录](feature-completion.md)。
+本页适用于主包 `0.10.0`、飞书 `0.6.0`、如流 `0.7.0`。发布进度与验收范围见[完成记录](feature-completion.md)。
 
 ## 聊天、历史与协作
 
@@ -111,3 +111,10 @@ The Main Bot cannot change its own identity, presets, model/tool/file policies, 
 「管理 → 工具与凭据」可添加「隔离浏览器」并逐个授权 Bot。运行 `npm run browser:install` 安装固定 Playwright 版本的 Chromium，或填写已有 Chrome/Chromium 的绝对可执行路径。这里使用独立的无头浏览器进程，每次回复从空白浏览器状态开始；不会连接用户日常浏览器、读取个人登录目录，或在不同 Bot 之间复用 Cookie。停止、撤权和回复结束均销毁本次浏览器实例。
 
 浏览器基于固定的 `@playwright/mcp`，工具由原生 MCP 加载。它可以访问当前部署可访问的网络，导航与点击仍属于该 Bot 的工具权限范围。需要保持登录的任务须在同一回复内完成；不支持跨回复保存登录状态。环境中的 `PLAYWRIGHT_MCP_*` 设置不会覆盖这一隔离模式。
+
+
+## 原生桌面入口
+
+macOS 和 Windows 在完成 `npm run setup` 后可运行 `npm run desktop`，进入 DSH 原生 Electron 窗口。首次启动会准备固定版本的 Electron、Node、Python 和 Office 依赖；原生欢迎页允许先跳过模型配置。默认数据位于项目 `.data/desktop`，与 Web 默认 `.data` 分开；可通过 `DSH_HOME` 指定已有独立桌面目录。
+
+`npm run desktop:entry` 在 `dist` 生成 macOS 的 `DSH Bots.app` 或 Windows 的 `DSH Bots.lnk`，可双击启动。入口依赖本机源码目录和 `.runtime`，移动源码后须重新生成；它不是包含完整运行时的签名安装包。原生 Host、渲染器隔离、账户配置与插件机制由 DSH 提供，普通启动不开放调试端口。运行 `npm run test:desktop` 可用临时目录验收原生欢迎页、Bot 创建、用量页面、重启恢复和进程退出，不会调用模型。

@@ -14,15 +14,19 @@ The complete follow-up is in progress. Checkboxes below mean implemented **and v
 - [x] Main Bot team-management tools with explicit operator-granted authority.
 - [x] Context steward decisions using public native compaction/rotation seams.
 - [x] Per-Bot isolated browser capability, verified with real Chromium on both supported DSH revisions.
-- [ ] macOS/Windows regression matrix, container packaging and desktop entry.
+- [x] Linux/macOS/Windows regression matrix, including real browser isolation (CI `39983451136`).
+- [x] Native Electron source entry and local double-click shortcut; macOS UI creation/usage/restart checks passed.
+- [ ] Container packaging and final desktop cross-platform entry checks.
 - [ ] Final source/package checks, push, release and live Feishu media/inbound acceptance.
 
-Current checkpoint: 235 source tests across 30 files and the launcher passed. Per-Bot grants passed real native MCP process/skill scope, shell variable selection, revocation, redaction and restart checks, plus DSH 0.1.5 and 0.2 Desktop/Web/shipped-client archive checks. Declarative cards passed native tool/form/restart, atomic duplicate-submission and client rendering checks. History/index and queued-result callback changes passed native DSH 0.2 Desktop restart, authenticated Web, shipped-client and IM delegation package checks. The prior usage/memory checkpoint also passed DSH 0.1.5 Host/client checks. Main Bot native tool/restart, authority isolation, atomic operations and explicit-grant UI checks passed. macOS, Linux and Node 22 passed the earlier history checkpoint; Windows passed the full declarative-card checkpoint; later connector tests now explicitly disable unrelated background memory review. Isolated browser checks prove concurrent Bot cookie separation and fresh storage after cancellation on both DSH revisions.
+Current checkpoint: 235 source tests across 30 files and the launcher passed. Per-Bot grants passed real native MCP process/skill scope, shell variable selection, revocation, redaction and restart checks, plus DSH 0.1.5 and 0.2 Desktop/Web/shipped-client archive checks. Declarative cards passed native tool/form/restart, atomic duplicate-submission and client rendering checks. History/index and queued-result callback changes passed native DSH 0.2 Desktop restart, authenticated Web, shipped-client and IM delegation package checks. The prior usage/memory checkpoint also passed DSH 0.1.5 Host/client checks. Main Bot native tool/restart, authority isolation, atomic operations and explicit-grant UI checks passed. macOS, Linux and Node 22 passed the earlier history checkpoint; Linux, macOS, Windows, Node 22 and the older DSH runtime passed the browser checkpoint in CI `39983451136`. Connector tests explicitly disable unrelated background memory review. Isolated browser checks prove concurrent Bot cookie separation and fresh storage after cancellation on both DSH revisions.
 
 Legacy accounting metadata that was never saved remains unknown. Live platform acceptance requires actual tenant access; offline tests do not establish it.
 
-Release set: Bot 0.9.1, Feishu 0.5.1, InfoFlow 0.6.1.
+Pending release set: Bot 0.10.0, Feishu 0.6.0, InfoFlow 0.7.0.
 This ledger describes implemented source and verification scope; publication is a separate step.
+
+The pending release archives passed compatibility metadata and shipped-client checks on both DSH 0.1.5-rc.2 and 0.2.0-rc.2. All seven offline tests using the pinned real Feishu and InfoFlow SDKs passed. The connector-protocol update passed all 236 source tests and the authenticated launcher smoke. Container acceptance, the new desktop CI steps, clean release archives, publication and the live profile upgrade remain pending. Local dirty test archives are not release artifacts.
 
 - [x] Bot/room edit, archive, restore, delete; queued Web messages and bounded group handoffs.
 - [x] Paginated history, search/export and automatic immutable history and deduplication-window segments. The atomic manifest retains all receipts and positional cursors; settled history no longer consumes the in-flight limit.

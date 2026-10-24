@@ -1,6 +1,6 @@
 import { toolResultPayload } from '../src/compatibility.ts'
 import { expect, it } from 'vitest'
-import { checkHost, checkAgent, checkClient, checkIM } from '../src/compatibility.ts'
+import { checkHost, checkAgent, checkClient, checkIM, requireConnectorProtocol, CONNECTOR_PROTOCOL } from '../src/compatibility.ts'
 
 it('reports a changed Host interface before storage is opened', () => {
   let opened = false
@@ -20,4 +20,10 @@ it('reads native tool results from both public message formats', () => {
   expect(toolResultPayload({ role: 'tool', toolCallId: 'call', content })).toEqual({ callId: 'call', content })
   expect(toolResultPayload({ role: 'user', content: [{ type: 'tool-result', toolCallId: 'call', content }] })).toEqual({ callId: 'call', content })
   expect(toolResultPayload({ role: 'user', content })).toBeUndefined()
+})
+
+it('blocks older connector snapshot readers before granting access to queues', () => {
+  expect(() => requireConnectorProtocol(undefined)).toThrow('Upgrade Feishu')
+  expect(() => requireConnectorProtocol(1)).toThrow('Upgrade Feishu')
+  expect(() => requireConnectorProtocol(CONNECTOR_PROTOCOL)).not.toThrow()
 })
