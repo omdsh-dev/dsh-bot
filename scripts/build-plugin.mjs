@@ -31,8 +31,9 @@ for (const artifact of generator.generate(['@deepseek-ai/dsh-experimental-bot-mo
 }
 runTool('tsc', ['-b', `${pluginPath}/tsconfig.client.json`])
 runTool('tsdown', ['--env.DSH_BUILD_FACE', 'client', '--filter', join(...pluginPath.split('/')), '--logLevel', 'warn'])
-// Full setup also type-checks tests. Keep incremental local builds on the same gate.
-runTool('tsc', ['-b', 'tsconfig.host.json', 'tsconfig.client.json'])
+// Container builds use generated production roots; normal builds also check all test roots.
+const typecheck = process.env.DSH_BOT_CONTAINER_BUILD === '1' ? 'tsconfig.container-' : 'tsconfig.'
+runTool('tsc', ['-b', `${typecheck}host.json`, `${typecheck}client.json`])
 // Bundler region comments can include absolute virtual CSS module paths.
 const clean = folder => {
   for (const entry of readdirSync(folder, { withFileTypes: true })) {
