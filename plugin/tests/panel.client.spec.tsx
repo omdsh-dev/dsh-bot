@@ -250,7 +250,7 @@ it('opens recent history immediately and ignores older results after clearing a 
 
 it('selects a listed model and filters tools without dropping hidden or unavailable selections', async () => {
   const updateBot = vi.fn<PanelFace['updateBot']>(async request => ({ id: request.id, name: request.name, instructions: request.instructions, preset: 'standard' }))
-  const catalog = async () => ({ providers: [{ id: 'configured', models: [{ id: 'model-a', name: 'Writing model' }, { id: 'model-b', name: 'Reasoning model' }] }], tools: [{ name: 'read', description: 'Read local files' }, { name: 'search', description: 'Search documents' }] })
+  const catalog = async () => ({ providers: [{ id: 'configured', models: [{ id: 'model-a', name: 'Writing model' }, { id: 'model-b', name: 'Reasoning model' }] }], tools: [{ name: 'read', description: 'Read local files' }, { name: 'search', description: 'Search documents\nDetailed search instructions.' }] })
   const b = await bench({ updateBot, capabilities: { catalog } as unknown as CapabilityFace })
   b.bots[0]!.policy = { provider: 'custom', model: 'saved', toolMode: 'allow', fileMode: 'read-only', tools: ['read', 'offline-tool'], inputPrice: 2 }
   b.model.replace({ bots: b.bots, rooms: b.rooms })
@@ -259,6 +259,7 @@ it('selects a listed model and filters tools without dropping hidden or unavaila
   fireEvent.click(await screen.findByRole('button', { name: /^Reasoning model/ }))
   fireEvent.click(screen.getByText('Tool and file permissions'))
   expect(screen.getByText('Read local files')).toBeTruthy()
+  expect(screen.getByText('Full description').closest('details')!.open).toBe(false)
   fireEvent.change(screen.getByRole('textbox', { name: 'Filter tools (optional)' }), { target: { value: 'documents' } })
   expect(screen.queryByRole('checkbox', { name: 'read' })).toBeNull()
   fireEvent.click(screen.getByRole('checkbox', { name: 'search' }))

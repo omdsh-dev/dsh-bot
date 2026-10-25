@@ -43,7 +43,7 @@ export function Controls({ state, room, face, updateBot, english, openRoom, init
   const [date, setDate] = useState(localDateTime)
   const [notify, setNotify] = useState(false), [delegate, setDelegate] = useState(false), [editing, setEditing] = useState<string>()
   const [catalog, setCatalog] = useState<CapabilityCatalog>({ providers: [], tools: [] })
-  const [catalogLoading, setCatalogLoading] = useState(false), [catalogError, setCatalogError] = useState(''), [catalogRefresh, setCatalogRefresh] = useState(0)
+  const [catalogLoading, setCatalogLoading] = useState(initialTab === 'policy'), [catalogError, setCatalogError] = useState(''), [catalogRefresh, setCatalogRefresh] = useState(0)
   const [budgetScope, setBudgetScope] = useState('*'), [period, setPeriod] = useState<'never' | 'day' | 'month'>('never')
   const [reserveTokens, setReserveTokens] = useState('8192'), [reserveCost, setReserveCost] = useState('0')
   const selectedBudget = budgetScope === '*' ? state.budget : state.botBudgets?.[budgetScope]
@@ -84,7 +84,7 @@ export function Controls({ state, room, face, updateBot, english, openRoom, init
       <p>{current?.description ?? l('选择一项开始，设置会在保存后生效。', 'Choose a topic to get started. Changes take effect when saved.')}</p>
       {current?.needsRoom && room && <span className={css.settingsScope}>{l('当前聊天：', 'Current chat: ')}{room.title}</span>}
     </header>
-    {tab === 'overview' && <SettingsHome english={english} room={room} more={more} setMore={setMore} open={key => { setTab(key); setError(''); setSaved(''); if (key === 'failures') void act(async () => setFailures(await face.failures())) }}/>}
+    {tab === 'overview' && <SettingsHome english={english} room={room} more={more} setMore={setMore} open={key => { if (key === 'policy') setCatalogLoading(true); setTab(key); setError(''); setSaved(''); if (key === 'failures') void act(async () => setFailures(await face.failures())) }}/>}
     {saved && <p role="status" className={css.savedNotice}>{saved}</p>}
     {current?.needsRoom && !room && <p>{l('先关闭设置并打开一个聊天，再来这里操作。', 'Close settings and open a chat first.')}</p>}
     {error && <p className={css.controlError} role="alert">{error}</p>}
@@ -93,7 +93,7 @@ export function Controls({ state, room, face, updateBot, english, openRoom, init
     {tab === 'access' && <AccessControls state={state} face={face} english={english}/>}
     {tab === 'team' && <TeamControls state={state} face={face} english={english}/>}
     {tab === 'policy' && <section>
-      <label>Bot<select value={botId} onChange={event => setBotId(event.target.value as BotId)}>{state.bots.map(bot => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select></label>
+      <label>Bot<select value={botId} onChange={event => { setCatalogLoading(true); setBotId(event.target.value as BotId) }}>{state.bots.map(bot => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select></label>
       {catalogError && <p role="alert">{l('无法读取模型和工具列表：', 'Could not load models and tools: ')}{catalogError} <Button onClick={() => setCatalogRefresh(value => value + 1)}>{l('重试', 'Retry')}</Button></p>}
       <ModelPicker key={botId} providers={catalog.providers} provider={provider} model={model} loading={catalogLoading} english={english} select={(nextProvider, nextModel) => { setProvider(nextProvider); setModel(nextModel) }}/>
       <details><summary>{l('工具和文件权限', 'Tool and file permissions')}</summary><div className={css.settingsFields}>

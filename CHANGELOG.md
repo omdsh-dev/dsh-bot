@@ -1,5 +1,10 @@
 # Release notes
 
+## 0.10.3 — local release candidate
+
+- Keep long tool descriptions collapsed so other tools remain visible in the list; expand any tool to read its complete description.
+- Show model discovery as loading immediately when opening Settings or switching Bots, avoiding an empty-list flash.
+
 ## 0.10.2 — local release candidate
 
 - Show recent chat history immediately, newest first, with optional search, clear filters and earlier-message loading. Discard stale requests when changing filters.

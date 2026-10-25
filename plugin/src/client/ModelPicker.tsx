@@ -50,10 +50,16 @@ export function ToolPicker({ available, value, change, editable, loading, englis
     <label>{l('筛选工具（可选）', 'Filter tools (optional)')}<Input value={query} onChange={event => { setQuery(event.target.value); setLimit(20) }}/></label>
     {loading ? <p role="status">{l('正在读取工具列表…', 'Loading tools…')}</p> : <>
       <p>{l(`找到 ${matches.length} 个工具`, `${matches.length} tools found`)}{editable && l(` · 已选择 ${selected.length} 个`, ` · ${selected.length} selected`)}</p>
-      <div className={css.choiceList}>{matches.slice(0, limit).map(tool => <label key={tool.name} className={css.toolChoice}>
-        {editable && <input type="checkbox" aria-label={tool.name} checked={selected.includes(tool.name)} onChange={event => toggle(tool.name, event.target.checked)}/>}
-        <span><strong>{tool.name}</strong><small>{tool.description || l('暂无说明', 'No description provided')}</small></span>
-      </label>)}</div>
+      <div className={css.choiceList}>{matches.slice(0, limit).map(tool => {
+        const full = tool.description || l('暂无说明', 'No description provided')
+        const firstLine = full.split('\n')[0] || full
+        const brief = firstLine.length > 180 ? firstLine.slice(0, 180) + '…' : firstLine
+        return <div key={tool.name} className={css.toolChoice}><span>
+          <label className={css.checkOption}>{editable && <input type="checkbox" aria-label={tool.name} checked={selected.includes(tool.name)} onChange={event => toggle(tool.name, event.target.checked)}/>}<strong>{tool.name}</strong></label>
+          <small>{brief}</small>
+          {brief !== full && <details><summary>{l('完整说明', 'Full description')}</summary><p>{full}</p></details>}
+        </span></div>
+      })}</div>
       {!matches.length && <p>{query ? l('没有匹配的工具。', 'No matching tools.') : l('暂未发现工具。', 'No tools discovered.')}</p>}
       {matches.length > limit && <Button onClick={() => setLimit(value => value + 20)}>{l('显示更多工具', 'Show more tools')}</Button>}
       {!!query && <Button onClick={() => { setQuery(''); setLimit(20) }}>{l('清除工具筛选', 'Clear tool filter')}</Button>}
