@@ -1,8 +1,22 @@
 # Bot capability completion
 
+## Bot creation from Feishu and InfoFlow (2026-10-25)
+
+Bot 0.12.0 lets the responding connection’s administrators create persistent local Bots through direct IM messages or directly addressed group messages. An ordinary Bot can provide this entry point without being appointed Main Bot. Creation returns the new Bot identity and the web path for IM binding; app authorization, credentials, access lists and external invitations stay in the web setup flow.
+
+- The narrow `create_bot` tool uses the existing connection administrators (previously labeled stop-command administrators); page-managed InfoFlow groups use their owner. Existing administrator lists are not modified. A creation grant never includes `team_list`, `team_manage` or other Bots’ private instructions.
+- Both tool installation and the state transaction check the current administrator, connection, conversation access and direct human delivery. Feishu private chat IDs and per-app Open IDs remain distinct; shared groups use the responding app’s authenticated sender mapping. Schedules, delegation, callbacks, local-only work and ordinary chat users have no creation authority.
+- A successful transaction saves the Bot, its local private chat and an audit record with platform/account/sender. Native call IDs prevent duplicate creation; failed writes leave no partial Bot. Defaults apply without inheriting the creator Bot’s private grants. The web audit shows IM actors, and the IM forms describe administrator creation rights.
+- All 251 source tests in 32 files and both launcher/container configuration checks passed. Authority, revocation, cross-app identity, failed persistence, duplicate calls and capability-directory isolation are covered.
+- The clean archive from `5d50b2aaee70396e4fd828a51efd8259e61214e2` passed Desktop, authenticated Web, restart and shipped-client checks on DSH 0.1.5-rc.2 and 0.2.0-rc.2. The native model fixture creates real persistent Bots from both platforms’ private and group conversations, checks web binding guidance, rejects guest authority and verifies restart persistence. Only the external model and connector transports are simulated.
+- Packaged IM isolation checks passed on both runtimes through the connector event handlers. General tools and all six Web/Feishu/InfoFlow histories remain isolated as before; only IM administrator deliveries gain `create_bot`. The old exact-tool-parity assertion was updated in `ac3af26` to verify this intended difference explicitly.
+- All 214 staged files match the clean base archive and unchanged Feishu 0.6.0 / InfoFlow 0.7.0 archives. Staged startup passed on the actual production DSH runtime. No npm publication was attempted; public `next` remains Bot 0.10.0.
+- The live local profile now runs Bot 0.12.0. The stopped-Host backup is retained at `.runtime/live-upgrade-backups/2026-10-25T06-20-45-768Z`. Six Bots, fourteen chats and their histories, two memories, both retained delivery failures, Main Bot grants and every IM administrator/access list were preserved; all eleven enabled bindings reconnected.
+- Live read-only Chromium checks passed for the Feishu administrator form and narrow layout. The existing hidden InfoFlow preference was preserved; both platform forms and the narrow layout passed in an isolated preview with InfoFlow visible. No page errors, saved live setting changes or real outgoing IM test messages occurred. Evidence is under `.runtime/acceptance/im-bot-creation/`.
+
 ## Bot discovery and specialist recommendations (2026-10-25)
 
-The live local profile runs Bot 0.11.0 from clean source `aa3b0f41d0545fa0fe545a8a7a349a0dc74cd4cf`. Feishu 0.6.0 and InfoFlow 0.7.0 remain unchanged. No npm publication was attempted; public `next` remains Bot 0.10.0.
+The previous local rollout installed Bot 0.11.0 from clean source `aa3b0f41d0545fa0fe545a8a7a349a0dc74cd4cf`. Feishu 0.6.0 and InfoFlow 0.7.0 remain unchanged. No npm publication was attempted; public `next` remains Bot 0.10.0.
 
 Bot 0.11.0 adds a public capability description and read-only `discover_bots` for ordinary Bot conversations. Prompt guidance prioritizes an existing specialist, then suggests a useful new Bot only when appropriate. Discovery does not confer Main Bot management authority or permission to dispatch tasks.
 
