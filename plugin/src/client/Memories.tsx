@@ -59,28 +59,32 @@ export function Memories({ state, room, face, english }: { state: BotState; room
     await face.saveMemory(request); reset()
   })
   return <section aria-label={l('长期记忆', 'Long-term memory')}>
-    <p>{l('可以直接在聊天中说“记住：我喜欢简短的回答”。Bot 提出的记忆会在这里等你确认。', 'Say “Remember: I prefer short answers” in a chat. Review the Bot’s proposed memories here before they take effect.')}</p>
+    {!formOpen && <p>{l('可以直接在聊天中说“记住：我喜欢简短的回答”。Bot 提出的记忆会在这里等你确认。', 'Say “Remember: I prefer short answers” in a chat. Review the Bot’s proposed memories here before they take effect.')}</p>}
     {error && <p role="alert" className={css.controlError}>{error}</p>}
     <label>{l('这些记忆给谁用？', 'Who are these memories for?')}<select disabled={busy} value={scope} onChange={event => changeScope(event.target.value as MemoryScope)}>{Object.entries(labels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
     {scope !== 'global' && <label>{l('选择对象', 'Choose an owner')}<select disabled={busy} value={owner} onChange={event => { setOwner(event.target.value); setShare(false) }}>{owners.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
     <p>{scopeHelp[scope]}</p>
 
-    <div className={css.settingsGrid}><label>{l('显示哪些记忆', 'Show memories')}<select value={status} onChange={event => setStatus(event.target.value as typeof status)}><option value="">{l('全部', 'All')}</option>{(['pending', 'active', 'superseded'] as const).map(key => <option key={key} value={key}>{statuses[key]}</option>)}</select></label>
+    {!formOpen && <><div className={css.settingsGrid}><label>{l('显示哪些记忆', 'Show memories')}<select value={status} onChange={event => setStatus(event.target.value as typeof status)}><option value="">{l('全部', 'All')}</option>{(['pending', 'active', 'superseded'] as const).map(key => <option key={key} value={key}>{statuses[key]}</option>)}</select></label>
     <label>{l('搜索记忆', 'Search memories')}<Input value={query} onChange={event => setQuery(event.target.value)}/></label></div>
-    <div className={css.controlActions}><Button variant="primary" disabled={busy} onClick={() => { reset(); setFormOpen(true) }}>{l('添加记忆', 'Add memory')}</Button><Button size="sm" disabled={busy} onClick={() => setRefresh(value => value + 1)}>{l('刷新', 'Refresh')}</Button></div>
+    <div className={css.controlActions}><Button variant="primary" disabled={busy} onClick={() => { reset(); setFormOpen(true) }}>{l('添加记忆', 'Add memory')}</Button><Button size="sm" disabled={busy} onClick={() => setRefresh(value => value + 1)}>{l('刷新', 'Refresh')}</Button></div></>}
     {formOpen && <div className={css.settingsEditor}><h4>{editing ? l('编辑记忆', 'Edit memory') : l('新记忆', 'New memory')}</h4>
     <p>{l('保存到：', 'Save to: ')}{labels[scope]} · {owners.find(item => item.id === owner)?.name}</p>
-    <label>{l('类型', 'Memory type')}<select value={kind} onChange={event => setKind(event.target.value as typeof kind)}><option value="preference">{l('偏好 / 约定', 'Preference / convention')}</option><option value="fact">{l('事实', 'Fact')}</option></select></label>
-    <label>{l('主题', 'Topic')}<Input maxLength={120} placeholder={l('例如：回复语言、项目上线日期', 'For example: reply language or release date')} value={topic} onChange={event => setTopic(event.target.value)}/></label>
+    <div className={css.settingsGrid}><label>{l('类型', 'Memory type')}<select value={kind} onChange={event => setKind(event.target.value as typeof kind)}><option value="preference">{l('偏好 / 约定', 'Preference / convention')}</option><option value="fact">{l('事实', 'Fact')}</option></select></label>
+    <label>{l('主题', 'Topic')}<Input maxLength={120} placeholder={l('例如：回复语言、项目上线日期', 'For example: reply language or release date')} value={topic} onChange={event => setTopic(event.target.value)}/></label></div>
     <label>{l('内容', 'Memory content')}<textarea maxLength={1500} value={body} onChange={event => setBody(event.target.value)}/></label>
+    {kind === 'fact' && <>
     <label>{l('证据 / 来源（事实必填）', 'Evidence / source (required for facts)')}<textarea maxLength={1500} value={evidence} onChange={event => setEvidence(event.target.value)}/></label>
-    <details><summary>{l('更多选项：适用环境与有效期', 'More options: context and dates')}</summary><div className={css.settingsFields}>
+    </>}
+    <details><summary>{l('更多选项：来源与有效期', 'More options: sources and dates')}</summary><div className={css.settingsFields}>
+    {kind === 'preference' && <label>{l('来源说明（可选）', 'Source note (optional)')}<textarea maxLength={1500} value={evidence} onChange={event => setEvidence(event.target.value)}/></label>}
     <label>{l('主体 / 环境', 'Subject / environment')}<Input maxLength={160} value={subject} onChange={event => setSubject(event.target.value)}/></label>
     <label>{l('生效时间（UTC，可留空）', 'Effective time (UTC, optional)')}<Input type="datetime-local" value={effectiveAt} onChange={event => setEffectiveAt(event.target.value)}/></label>
     <label>{l('到期时间（UTC，可留空）', 'Expiry (UTC, optional)')}<Input type="datetime-local" value={expiresAt} onChange={event => setExpiresAt(event.target.value)}/></label>
     </div></details>
     {(scope === 'user' || editing) && <label className={css.checkOption}><input type="checkbox" checked={share} onChange={event => setShare(event.target.checked)}/>{l('允许在所选范围内共享，包含该范围内的群聊', 'Allow sharing throughout the selected scope, including its group chats')}</label>}
     <div className={css.controlActions}><Button variant="primary" disabled={busy || !owner || !subject.trim() || !topic.trim() || !body.trim() || kind === 'fact' && !evidence.trim()} onClick={() => { void save() }}>{l('保存并生效', 'Save & activate')}</Button><Button disabled={busy} onClick={reset}>{l('取消编辑', 'Cancel edit')}</Button></div></div>}
+    {!formOpen && <>
     {!items.length && <p>{l('此范围暂无记忆。', 'No memories in this scope.')}</p>}
     {items.map(item => <article key={item.id} className={css.memoryCard}>
       <strong>{item.topic}</strong><span>{statuses[item.status]} · {item.kind === 'fact' ? l('事实', 'Fact') : l('偏好/约定', 'Preference/convention')}</span>
@@ -108,5 +112,6 @@ export function Memories({ state, room, face, english }: { state: BotState; room
       <Button disabled={busy} onClick={() => { setBusy(true); setError(''); void face.previewMemories({ roomId: room.id, botId: previewBot, ...(previewUser ? { userId: previewUser } : {}), query: previewQuery }).then(setPreview).catch(cause => setError(String(cause))).finally(() => setBusy(false)) }}>{l('预览', 'Preview')}</Button>
       {preview && <div aria-live="polite"><p>{preview.records.length} {l('条记忆', 'memories')} · {preview.conflicts.length} {l('组冲突，需核实', 'conflicts requiring verification')} · {preview.omitted} {l('条超出预算未加载', 'omitted by context budget')}</p>{preview.records.map(item => <p key={item.id}>{labels[item.scope]} · {item.topic}: {item.body}{preview.conflicts.some(ids => ids.includes(item.id)) ? ` · ${l('待核实', 'Verify')}` : ''}</p>)}</div>}
     </details>}
+    </>}
   </section>
 }
