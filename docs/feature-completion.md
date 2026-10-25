@@ -1,5 +1,15 @@
 # Bot capability completion
 
+## Simpler Settings (2026-10-25)
+
+Bot 0.10.1 is installed in the live local profile from clean source commit `4c107bd19334d5da7fcf332a8a31b47dd7d0311b`. npm `next` remains Bot 0.10.0; this UI update has not been published to npm. Feishu 0.6.0 and InfoFlow 0.7.0 are unchanged.
+
+- Settings opens with Memory, Model, Schedules and Chat history. Usage limits, Tools & accounts, Team management, Delivery issues and Archive & delete live under More settings.
+- Memory and schedule forms open only when adding or editing. Memory editing shows one focused form; model permissions, prices and budget reservations remain available behind explicit disclosures.
+- One-time schedules use browser-local time; interval and weekday repeats require an explicit choice. Saved permissions and existing schedules are preserved.
+- Validation: 239 source tests passed before the final form-layout refinement; all 42 panel tests passed again afterward. The final archive passed shipped-client checks on both supported DSH revisions and a staged startup on the actual production Host. Host and RPC artifacts are byte-identical to 0.10.0.
+- The stopped-Host backup and local upgrade preserved six Bots, fourteen chats and their histories, two memories and both retained delivery failures. All eleven enabled bindings reconnected. Desktop-width and narrow-width browser checks passed on the live profile, including settings navigation, forms and folded controls, with no page errors, saved-setting changes or outgoing messages.
+
 ## Full parity follow-up (2026-10-23)
 
 Implementation, public npm publication and the live profile upgrade are verified. The external tenant acceptance items below remain outstanding. Checkboxes below mean implemented **and verified**, not planned or merely exposed in the UI.
