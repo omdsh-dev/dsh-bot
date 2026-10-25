@@ -91,7 +91,7 @@ The same member Session preserves the prior request prefix across turns. New pub
 <a id="known-limitations-and-deferred-work"></a>
 
 - The Bot panel streams response text, tool progress and approvals. IM replies are delivered after completion; native Session logs remain available.
-- Per-Bot models, tool/file policy, budgets, scheduled routines and scoped memory are configured in Chat & execution controls. Unbounded autonomous conversations and other IM adapters remain outside this plugin. Memory retrieval uses lexical matching; automatic semantic equivalence and automatic account linking are not guaranteed; verified accounts can be explicitly linked by the operator.
+- Per-Bot models, tool/file policy, budgets, scheduled routines and scoped memory are configured in Settings. Unbounded autonomous conversations and other IM adapters remain outside this plugin. Memory retrieval uses lexical matching; automatic semantic equivalence and automatic account linking are not guaranteed; verified accounts can be explicitly linked by the operator.
 - Fixed complete-prompt presets such as `minimal` cannot host the extra Bot identity and are rejected before delivery. Use `standard` or an extensible custom preset.
 - Group messages and Session logs use separate durable stores. A crash between commits can leave a completed DSH Turn marked interrupted publicly; inspect the execution log before retrying. No exactly-once external-tool guarantee is claimed.
 - Removing a member preserves public history; rejoining creates a new member Session. Existing removed Sessions remain accessible through DSH.

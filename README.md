@@ -137,7 +137,7 @@ npm start -- --patch /absolute/path/bot-settings.patch.yml
 
 ## Current limits
 
-Scoped long-term memory is available under Chat & execution controls → Memory: global defaults, Bot knowledge, group conventions and individual user preferences, with automatic candidate extraction, review, recall preview and explicit account linking. Bots can search older chat messages, recall current memory and delegate concrete tasks with automatic result return. Long conversations can rotate Sessions with structured handoffs, and stalled executions have deadlines. See the [memory guide](docs/memory.md) for sharing and conflict rules.
+Scoped long-term memory is available under Settings → Memory: global defaults, Bot knowledge, group conventions and individual user preferences, with automatic candidate extraction, review, recall preview and explicit account linking. Bots can search older chat messages, recall current memory and delegate concrete tasks with automatic result return. Long conversations can rotate Sessions with structured handoffs, and stalled executions have deadlines. See the [memory guide](docs/memory.md) for sharing and conflict rules.
 
 The sidebar **Usage** page shows current budget usage, estimated costs, active reservations and per-Bot retained token totals, with separate memory-review and context-handoff breakdowns. The independent call ledger adds date, provider/model, room and purpose filters, cache accounting and retained records after chat deletion. It refreshes every 15 seconds. See the [capability guide](docs/capabilities.md) for accounting periods and reporting limits.
 

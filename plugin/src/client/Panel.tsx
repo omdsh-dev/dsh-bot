@@ -59,7 +59,7 @@ export function BotPanel(props: Props) {
   const [form, setForm] = useState<'bot' | 'edit' | 'group' | 'members' | null>(null)
   const [integration, setIntegration] = useState(false)
   const [usagePage, setUsagePage] = useState(false)
-  const [controlsTab, setControlsTab] = useState('history')
+  const [controlsTab, setControlsTab] = useState('overview')
   const [syncGroup, setSyncGroup] = useState<'none' | 'infoflow' | 'feishu'>('none')
   const [groupOwner, setGroupOwner] = useState('')
   const [humanMembers, setHumanMembers] = useState('')
@@ -194,7 +194,7 @@ export function BotPanel(props: Props) {
         <Button size="sm" icon={<ConnectionsIcon />} aria-pressed={integration} onClick={() => { setIntegration(true); setUsagePage(false); setShowChats(false) }}>{t('imTitle')}</Button>
         {props.capabilities && <>
           <Button size="sm" icon={<UsageIcon />} aria-pressed={usagePage} onClick={() => { setUsagePage(true); setIntegration(false); setShowChats(false) }}>{t('usage')}</Button>
-          <Button size="sm" icon={<ControlsIcon />} onClick={() => { setControlsTab('history'); setControls(true) }}>{t('capabilities')}</Button>
+          <Button size="sm" icon={<ControlsIcon />} onClick={() => { setControlsTab('overview'); setControls(true) }}>{t('capabilities')}</Button>
         </>}
       </div>
       <footer className={css.rosterFooter}><span className={css.connection} data-ready={snapshot.ready && !snapshot.error} /><span>{snapshot.error ? t('disconnected') : snapshot.ready ? t('connected') : t('loading')}</span>
@@ -323,7 +323,7 @@ export function BotPanel(props: Props) {
       </> : <div className={css.welcome}><Avatar id="dsh" large /><h2>{t('welcomeTitle')}</h2><p>{t('empty')}</p>
         <Button variant="primary" disabled={!snapshot.ready} onClick={() => { openForm('bot') }}>{t('newBot')}</Button></div>}
     </main>}
-    <Modal open={controls} onClose={() => setControls(false)} closeLabel={t('cancel')} title={t('capabilities')} className={clsx(css.dialog, css.controlsDialog)} contentClassName={clsx(css.dialogContent)}>
+    <Modal open={controls} onClose={() => setControls(false)} closeLabel={t('cancel')} title={t('capabilities')} className={clsx(css.dialog, css.controlsDialog)} contentClassName={clsx(css.dialogContent, css.settingsScroll)}>
       {props.capabilities && <Controls key={`${room?.id}:${controlsTab}`} initialTab={controlsTab} state={snapshot.value} room={room} face={props.capabilities} updateBot={props.updateBot} english={t('you') === 'You'} openRoom={next => { choose(next); setControls(false) }}/>}
     </Modal>
     <Modal open={details && !!room} onClose={() => { setDetails(false) }} closeLabel={t('cancel')} title={t('chatInfo')} className={clsx(css.dialog)} contentClassName={clsx(css.dialogContent)}>

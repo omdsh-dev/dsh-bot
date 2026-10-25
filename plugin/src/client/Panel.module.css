@@ -259,6 +259,27 @@
 .questions fieldset > label:last-child { margin: 14px 0 0; }
 .questions textarea { min-height: 70px; }
 .controlsDialog { width: min(680px, 100%); }
+.settingsScroll { scroll-behavior: auto; }
+.settingsHeading { display: grid; gap: 8px; }
+.settingsHeading h3 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -0.3px; outline: none; }
+.settingsScope { width: fit-content; max-width: 100%; padding: 5px 9px; border-radius: 8px; background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); font-size: 11px; overflow-wrap: anywhere; }
+.settingsGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.settingsCard { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 20px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 14px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-base); font: inherit; text-align: left; cursor: pointer; }
+.settingsCard:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.settingsCard:disabled { opacity: 0.55; cursor: default; }
+.settingsCard > span:first-child { display: grid; gap: 8px; min-width: 0; }
+.settingsCard strong { font-size: 14px; line-height: 22px; font-weight: 600; }
+.settingsCard small { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 20px; overflow-wrap: anywhere; }
+.settingsArrow { color: var(--dsw-alias-label-tertiary); font-size: 22px; }
+.settingsContext strong { color: var(--dsw-alias-label-primary); font-weight: 500; }
+.controls .settingsMore { padding: 16px; }
+.controls .settingsMore > summary { font-size: 13px; font-weight: 500; }
+.settingsMore > summary > span { display: block; margin: 5px 0 0 16px; color: var(--dsw-alias-label-secondary); font-size: 12px; font-weight: 400; }
+.settingsMore .settingsCard { padding: 14px; }
+.settingsFields, .settingsEditor { display: grid; gap: 16px; min-width: 0; }
+.settingsEditor { padding: 20px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 14px; }
+.settingsEditor h4, .settingsFields h4 { margin: 0; font-size: 14px; }
+.controls .savedNotice { color: var(--dsw-alias-state-success-primary); }
 .controls { display: grid; gap: 20px; min-width: 0; color: var(--dsw-alias-label-primary); font: 13px/20px var(--dsw-font-family); }
 .controls nav { display: flex; flex-wrap: wrap; gap: 4px; padding: 5px; background: var(--dsw-alias-bg-module-platform); border-radius: 12px; }
 .controls nav > button { flex: 1 0 auto; font-size: 12px; color: var(--dsw-alias-label-secondary); }
@@ -285,6 +306,7 @@
 .controls .controlError { padding: 10px 14px; background: var(--dsw-alias-bg-module-platform); border-radius: 10px; }
 @container bot-mode (max-width: 620px) { .integrationPage { padding: 24px 16px; }.integrationHeader { gap: 12px; }.integrationHeader h2 { font-size: 21px; }.integrationGroups article { flex-wrap: wrap; gap: 8px; }.composerActions { gap: 2px; } }
 @media (max-width: 520px) { .dialog .formGrid { grid-template-columns: minmax(0, 1fr); gap: 0; }.controls nav > button { flex-basis: calc(50% - 4px); }.controlActions { gap: 6px; }.controls article { padding: 12px; } }
+@media (max-width: 520px) { .settingsGrid { grid-template-columns: minmax(0, 1fr); gap: 10px; }.settingsCard { padding: 14px 16px; }.settingsEditor { padding: 14px; }.settingsHeading h3 { font-size: 18px; } }
 .memoryCard { display: flex; flex-direction: column; gap: 8px; overflow-wrap: anywhere; }
 .memoryCard p { white-space: pre-wrap; }
 .memoryCard small { opacity: .7; }

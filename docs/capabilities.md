@@ -1,10 +1,12 @@
 # 0.10 功能使用说明 / Capability guide
 
+设置入口位于左侧栏。首页提供记忆、模型、定时任务和聊天记录；用量限额、工具与账号、团队管理、消息发送问题、归档与删除位于「更多设置」。每个入口都有用途说明，进入后可返回设置首页。记忆和定时任务先显示已有内容，点击添加后才展开表单。
+
 本页适用于主包 `0.10.0`、飞书 `0.6.0`、如流 `0.7.0`。发布进度与验收范围见[完成记录](feature-completion.md)。
 
 ## 聊天、历史与协作
 
-「聊天与执行管理」提供聊天及 Bot 的归档、恢复和删除。归档保留历史与原生 Session；归档后不能接受新任务，关联定时任务暂停。删除清除公开聊天记录，原生执行日志仍归 DSH 管理。外部聊天保留去重墓碑，避免旧平台消息被重新执行；删除后的 Bot 标识不能复用。删除 Bot 前需停用其 IM 连接，所有排队及执行中的任务需先停止。删除本地私聊后，可从管理页为仍存在的 Bot 重新打开私聊。
+「设置」提供聊天及 Bot 的归档、恢复和删除。归档保留历史与原生 Session；归档后不能接受新任务，关联定时任务暂停。删除清除公开聊天记录，原生执行日志仍归 DSH 管理。外部聊天保留去重墓碑，避免旧平台消息被重新执行；删除后的 Bot 标识不能复用。删除 Bot 前需停用其 IM 连接，所有排队及执行中的任务需先停止。删除本地私聊后，可从管理页为仍存在的 Bot 重新打开私聊。
 
 聊天面板按 50 条加载历史；搜索会查询完整聊天，不限于当前页面。可导出 Markdown 或 JSON，包含消息状态、时间、错误及附件引用。导出不包含附件二进制或凭据。下载的文件按普通数据处理。
 
@@ -64,7 +66,7 @@ Bot 面板显示生成中的文字、当前工具、工具完成状态和审批�
 
 ## 定时任务与主动通知
 
-每个聊天可配置单次、固定分钟间隔或按日历重复的任务，整个 profile 最多 100 项。固定间隔至少 1 分钟，`0` 为单次；单次时间输入为 UTC。日历规则选择 IANA 时区、当地时间和星期，可表达工作日、每天或每周某几天。夏令时跳过不存在的当地时间，重复小时每天只运行一次。任务支持编辑、暂停、继续和删除，并可查看分页运行记录、各 Bot 状态、回复与错误。只有显式保存并启用的任务会运行。
+每个聊天可配置单次、固定分钟间隔或按日历重复的任务，整个 profile 最多 100 项。固定间隔至少 1 分钟，`0` 为单次；单次时间按浏览器的本地时区输入，保存为绝对时间。日历规则选择 IANA 时区、当地时间和星期，可表达工作日、每天或每周某几天。夏令时跳过不存在的当地时间，重复小时每天只运行一次。任务支持编辑、暂停、继续和删除，并可查看分页运行记录、各 Bot 状态、回复与错误。只有显式保存并启用的任务会运行。
 
 每次触发先把本次记录和聊天请求原子写入同一域，成功后才启动模型。进程重启后错过的循环合并为一次，不追赶全部历史周期。忙碌聊天进入普通队列；任务配置错误会暂停并保留错误。暂停或删除任务影响未来触发，已排队/执行的回复可在聊天中停止。
 
@@ -76,7 +78,7 @@ Bot 面板显示生成中的文字、当前工具、工具完成状态和审批�
 
 ## English
 
-Open **Chat & execution controls** for lifecycle, paginated full-text history, Markdown/JSON exports, per-Bot model/tool/file policy, token and estimated-cost budgets, schedules, and retained delivery recovery. New Web messages queue while work runs; group handoffs and IM synchronization require explicit checkboxes.
+Open **Settings** for lifecycle, paginated full-text history, Markdown/JSON exports, per-Bot model/tool/file policy, token and estimated-cost budgets, schedules, and retained delivery recovery. New Web messages queue while work runs; group handoffs and IM synchronization require explicit checkboxes.
 
 Media uses the deployment's native attachment store. Voice needs a configured DSH transcription provider; compressed recordings also need local ffmpeg. Tool and filesystem policies only narrow native permissions. Budgets gate subsequent model calls and can be exceeded by already-running calls; they are estimates rather than billing guarantees.
 

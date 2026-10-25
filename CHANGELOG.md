@@ -1,5 +1,12 @@
 # Release notes
 
+## 0.10.1 — local release candidate
+
+- Replace the crowded chat controls with a Settings home: memory, models, schedules and history, with advanced tools under More settings.
+- Keep memory and schedule forms closed until adding or editing; explain memory scopes and fold permissions, prices and reservation settings without changing saved policy.
+- Let users choose one-time, interval or weekday schedules explicitly. One-time schedules use the browser's local time.
+- Verify the new navigation, unchanged hidden permissions, saved drafts and scheduling with 239 source tests. npm publication is separate from this local UI update.
+
 ## 0.9.1 — unreleased
 
 - Fix real Cordis optional-service access for attachments, speech transcription, model/tool catalogs, pending questions and per-Bot policies.
