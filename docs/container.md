@@ -31,4 +31,4 @@ DSH_BOT_TEST_IMAGE=dsh-bot:local npm run test:container
 
 On Docker Desktop without host networking enabled, `DSH_BOT_TEST_CONTAINER_INTERNAL=1` runs the same service checks inside the Linux VM; it does **not** verify host-browser reachability. CI runs the default test from the Linux host.
 
-Container acceptance remains pending until recorded in the [completion ledger](feature-completion.md). Source archives have no Git worktree provenance and cannot be mistaken for clean npm release builds.
+The final image passed service, persistence and Chromium acceptance locally; Linux host access passed in [CI `40158827579`](https://github.com/zzzpyyy/dsh-bot/actions/runs/40158827579). See the [completion ledger](feature-completion.md) for the verified release. Source archives have no Git worktree provenance and cannot be mistaken for clean npm release builds.

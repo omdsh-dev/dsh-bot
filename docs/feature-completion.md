@@ -2,7 +2,7 @@
 
 ## Full parity follow-up (2026-10-23)
 
-The complete follow-up is in progress. Checkboxes below mean implemented **and verified**, not planned or merely exposed in the UI.
+Implementation and the live profile upgrade are verified. Public npm publication and external tenant acceptance remain outstanding. Checkboxes below mean implemented **and verified**, not planned or merely exposed in the UI.
 
 - [x] Usage overview page and budget visibility (commit `117b936`; 199 source tests and native Host/client package checks).
 - [x] Independent per-call usage ledger, date/model/provider/room/purpose queries and cache accounting.
@@ -16,28 +16,28 @@ The complete follow-up is in progress. Checkboxes below mean implemented **and v
 - [x] Per-Bot isolated browser capability, verified with real Chromium on both supported DSH revisions.
 - [x] Linux/macOS/Windows regression matrix, including real browser isolation (CI `39983451136`).
 - [x] Native Electron source entry and local double-click shortcut; macOS UI creation/usage/restart checks passed.
-- [ ] Container startup/restart/browser acceptance after the final launcher fix. The complete image builds successfully in a 4 GB Docker VM.
+- [x] Container image build, authentication, non-root service, restart persistence and real Chromium. Final image passed locally inside the Docker VM; Linux host access passed in CI `40158827579`.
 - [x] Native Electron entry and shortcut checks on macOS and Windows (CI `40107414842`; both platform jobs passed).
-- [ ] Publish the clean release archives, verify registry installation, and upgrade the live profile.
+- [x] Upgrade the live profile with all three packages, preserve data and reconnect every enabled binding; verify new pages in a real browser.
+- [ ] Publish the clean release archives and verify registry installation. npm credentials currently return 401; operator re-login is required.
 - [ ] Live Feishu media and real-user inbound acceptance (external requirements below).
 
 Current checkpoint: 236 source tests across 30 files and the launcher passed. Per-Bot grants passed real native MCP process/skill scope, shell variable selection, revocation, redaction and restart checks, plus DSH 0.1.5 and 0.2 Desktop/Web/shipped-client archive checks. Declarative cards passed native tool/form/restart, atomic duplicate-submission and client rendering checks. History/index and queued-result callback changes passed native DSH 0.2 Desktop restart, authenticated Web, shipped-client and IM delegation package checks. The prior usage/memory checkpoint also passed DSH 0.1.5 Host/client checks. Main Bot native tool/restart, authority isolation, atomic operations and explicit-grant UI checks passed. macOS, Linux and Node 22 passed the earlier history checkpoint; Linux, macOS, Windows, Node 22 and the older DSH runtime passed the browser checkpoint in CI `39983451136`. Connector tests explicitly disable unrelated background memory review. Isolated browser checks prove concurrent Bot cookie separation and fresh storage after cancellation on both DSH revisions.
 
 Legacy accounting metadata that was never saved remains unknown. Live platform acceptance requires actual tenant access; offline tests do not establish it.
 
-Pending release set: Bot 0.10.0, Feishu 0.6.0, InfoFlow 0.7.0.
-This ledger describes implemented source and verification scope; publication is a separate step.
+Prepared release set: Bot 0.10.0, Feishu 0.6.0, InfoFlow 0.7.0. These versions are installed in the live local profile; public npm publication is still pending.
 
-Release validation checkpoint (2026-10-24):
+Release validation checkpoint (2026-10-25):
 
 - The pending release archives passed compatibility metadata, native Desktop/Web, IM isolation/delegation, shipped-client and real Chromium isolation checks on both DSH 0.1.5-rc.2 and 0.2.0-rc.2.
 - All 236 source tests, the authenticated launcher smoke, and the new container-config regression passed. All seven offline tests using the pinned real Feishu and InfoFlow SDKs passed, including a second run using the staged upgrade dependencies.
-- Clean archives were prepared at commit `ba3a567d478cf5f39baf09adca33baa8ad3039bf`. Their 178 packaged runtime files match the previously tested release candidate; provenance metadata is distinct. Rebuild clean archives after the final launcher fixes are committed, before publication. Dirty development archives are not release artifacts.
-- The complete container image builds in a 4 GB Docker VM with production TypeScript roots and project references preserved. Real startup tests caught both the unsupported container-IP address and the CLI guard against `0.0.0.0`. The launcher now retains `127.0.0.1` and Compose uses host networking. Runtime, persistence and Chromium acceptance of that fix are pending. Docker Desktop requires host networking to be enabled; Linux CI checks host reachability directly.
+- Final clean archives record commit `82e4195c17ef213ff43f36800ea98681416b84d1`. Their 178 packaged runtime files match the previously tested release candidate; all 204 files in the staged packages match those archives. Dirty development archives are not release artifacts.
+- The complete container image builds in a 4 GB Docker VM with production TypeScript roots and project references preserved. Real startup tests caught both the unsupported container-IP address and the CLI guard against `0.0.0.0`. The launcher now retains `127.0.0.1` and Compose uses host networking. Runtime, persistence and Chromium acceptance passed for the final image. Docker Desktop requires host networking to be enabled for host-browser access; Linux CI checks host reachability directly. The native CLI guard is unchanged.
 - The staged three-package upgrade starts successfully with the actual production DSH 0.1.5-rc.2 Host in an isolated profile. Authentication, Bot creation, usage/access/team APIs and both connector managers passed. This is staging verification, not a live upgrade.
-- The live profile remains on Bot 0.9.1 / Feishu 0.5.1 / InfoFlow 0.6.1. At the last read-only check it contained six Bots, fourteen rooms, eleven connected bindings and two retained Feishu media failures. The upgrade must back up storage with the Host stopped and verify data and bindings after restart.
+- The live profile was upgraded to Bot 0.10.0 / Feishu 0.6.0 / InfoFlow 0.7.0 on 2026-10-25 after a stopped-Host backup. Six Bots, fourteen rooms and their histories, two memories and two retained Feishu media failures were preserved. All eleven enabled bindings reconnected. Real-browser checks of Usage, Memory, Capability grants and Team management passed without page errors or external messages.
 
-Final container acceptance, publication, registry installation and the live upgrade remain outstanding. CI `40107414842` passed Linux source/package checks, both desktop platforms, Node 22 and the older DSH runtime; its container job exposed the build configuration issue addressed by the current follow-up. The live service has not been restarted.
+The final [CI run `40158827579`](https://github.com/zzzpyyy/dsh-bot/actions/runs/40158827579) passed every job: Linux source/package checks, container, macOS, Windows, Node 22 and the older DSH runtime. Public npm publication and registry-installation checks remain outstanding: the publish attempt returned 404 and the identity check confirmed 401 Unauthorized. No package in this release set was published by that attempt. The operator has been asked to re-login; the installed local release uses the verified clean archives.
 
 - [x] Bot/room edit, archive, restore, delete; queued Web messages and bounded group handoffs.
 - [x] Paginated history, search/export and automatic immutable history and deduplication-window segments. The atomic manifest retains all receipts and positional cursors; settled history no longer consumes the in-flight limit.
