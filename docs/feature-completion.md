@@ -2,17 +2,21 @@
 
 ## Bot discovery and specialist recommendations (2026-10-25)
 
+The live local profile runs Bot 0.11.0 from clean source `aa3b0f41d0545fa0fe545a8a7a349a0dc74cd4cf`. Feishu 0.6.0 and InfoFlow 0.7.0 remain unchanged. No npm publication was attempted; public `next` remains Bot 0.10.0.
+
 Bot 0.11.0 adds a public capability description and read-only `discover_bots` for ordinary Bot conversations. Prompt guidance prioritizes an existing specialist, then suggests a useful new Bot only when appropriate. Discovery does not confer Main Bot management authority or permission to dispatch tasks.
 
 - Capability results include names, public descriptions, current membership and routing eligibility; full Bot prompts, private histories, memories, credentials and policy internals stay out of the directory.
 - Local operator chats can browse active Bots across the deployment. IM groups see eligible current members; IM private chats see only the responding Bot. Queries remain pageable when no metadata matches, and a missing description means unknown capability.
 - Main Bot create/edit commands accept optional public descriptions. Existing records remain valid, and callers that omit the new field preserve it. Existing Bots and Main Bot grants are not silently rewritten.
 - All 246 source tests passed. Native-profile tests exercise discovery without management grants, absence of unsolicited creation, external private isolation, public-description creation through team tools and persistence after restart. The external LLM is replaced by a deterministic test adapter for this verification.
-- Browser preview checks cover public-description display/edit/save, unchanged private instructions and narrow layouts. Final package and live-profile verification are recorded after installation.
+- The final archive passed Desktop and authenticated Web package checks (including the deterministic discovery/creation fixture and restart) plus shipped-client checks on both DSH 0.1.5-rc.2 and 0.2.0-rc.2. All 212 staged files matched clean archives; staged startup on the actual production Host verified the new metadata with both companion managers.
+- Browser preview checks cover public-description display/edit/save, unchanged private instructions and narrow layouts. The upgraded live profile passed read-only desktop and narrow-screen checks with no page errors, saved Bot changes or external messages.
+- A stopped-Host backup is retained at `.runtime/live-upgrade-backups/2026-10-25T06-07-34-545Z`. Six Bots, fourteen chats and their histories, two memories, two retained delivery failures and the exact Main Bot grants were preserved. All eleven enabled IM bindings reconnected.
 
 ## Browsable Settings lists (2026-10-25)
 
-Bot 0.10.2 adds automatic recent-history loading, an all-scope memory list with owner labels, and visible model/tool lists with optional filters. Custom model IDs, hidden tool selections, memory ownership and sharing defaults are preserved. The Host and recall isolation are unchanged. The live local profile now runs Bot 0.10.3 from clean commit `00cd864548ce040a446c6325eb822bbb45810bb4`, including compact tool descriptions and immediate model-loading feedback. npm publication remains separate; the public base is still 0.10.0.
+Bot 0.10.2 adds automatic recent-history loading, an all-scope memory list with owner labels, and visible model/tool lists with optional filters. Custom model IDs, hidden tool selections, memory ownership and sharing defaults are preserved. The Host and recall isolation are unchanged. The prior local profile update installed Bot 0.10.3 from clean commit `00cd864548ce040a446c6325eb822bbb45810bb4`, including compact tool descriptions and immediate model-loading feedback. npm publication remains separate; the public base is still 0.10.0.
 
 - All 242 source tests passed, including history filtering/pagination races, all-scope memory editing, model discovery failure/retry and filtered tool selections. After the final tool-list refinement, all 45 panel tests passed again. Distribution metadata, documentation links and whitespace checks passed.
 - The final archive passed shipped-client checks on DSH 0.1.5-rc.2 and 0.2.0-rc.2, plus staged startup on the actual production Host. All 210 staged package files matched their clean archives; Host and RPC artifacts are byte-identical to 0.10.2 (and 0.10.1).
