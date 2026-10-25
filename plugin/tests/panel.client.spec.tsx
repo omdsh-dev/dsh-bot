@@ -474,8 +474,9 @@ it('edits a Bot identity from chat info without changing its handle or preset', 
   expect(handle.disabled).toBe(true)
   fireEvent.change(within(dialog).getByRole('textbox', { name: en.name }), { target: { value: 'Nova 2' } })
   fireEvent.change(within(dialog).getByRole('textbox', { name: en.instructions }), { target: { value: 'Challenge plans.' } })
+  fireEvent.change(within(dialog).getByRole('textbox', { name: en.botCapabilities }), { target: { value: 'Review product plans' } })
   fireEvent.click(within(dialog).getByRole('button', { name: en.save }))
-  await waitFor(() => { expect(updateBot).toHaveBeenCalledWith({ id: 'nova', name: 'Nova 2', instructions: 'Challenge plans.' }) })
+  await waitFor(() => { expect(updateBot).toHaveBeenCalledWith({ id: 'nova', name: 'Nova 2', instructions: 'Challenge plans.', capabilities: 'Review product plans' }) })
   await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
 })
 

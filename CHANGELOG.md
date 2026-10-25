@@ -1,5 +1,13 @@
 # Release notes
 
+## 0.11.0 — local release candidate
+
+- Add read-only Bot capability discovery to ordinary conversations, independently of Main Bot management grants. Prefer existing specialists and recommend new Bots only for a useful capability gap.
+- Keep recommendations separate from creation and dispatch. Creation still requires an explicit human request and the Main Bot grant; group delegation retains its existing rules.
+- Add a public capability description to Bot creation/editing and team commands. Discovery exposes names and these descriptions, never another Bot's full instructions, private chats, memories, tool policies or credentials.
+- Local chats can browse the active deployment directory. External groups see eligible current members; external private chats see only the responding Bot. Unknown descriptions remain discoverable by name, and unmatched results remain browsable instead of implying no suitable Bot exists.
+- New metadata is optional and old edits preserve it when omitted. Existing Bots are not automatically assigned public descriptions or management authority.
+
 ## 0.10.3 — local release candidate
 
 - Keep long tool descriptions collapsed so other tools remain visible in the list; expand any tool to read its complete description.

@@ -1,5 +1,15 @@
 # Bot capability completion
 
+## Bot discovery and specialist recommendations (2026-10-25)
+
+Bot 0.11.0 adds a public capability description and read-only `discover_bots` for ordinary Bot conversations. Prompt guidance prioritizes an existing specialist, then suggests a useful new Bot only when appropriate. Discovery does not confer Main Bot management authority or permission to dispatch tasks.
+
+- Capability results include names, public descriptions, current membership and routing eligibility; full Bot prompts, private histories, memories, credentials and policy internals stay out of the directory.
+- Local operator chats can browse active Bots across the deployment. IM groups see eligible current members; IM private chats see only the responding Bot. Queries remain pageable when no metadata matches, and a missing description means unknown capability.
+- Main Bot create/edit commands accept optional public descriptions. Existing records remain valid, and callers that omit the new field preserve it. Existing Bots and Main Bot grants are not silently rewritten.
+- All 246 source tests passed. Native-profile tests exercise discovery without management grants, absence of unsolicited creation, external private isolation, public-description creation through team tools and persistence after restart. The external LLM is replaced by a deterministic test adapter for this verification.
+- Browser preview checks cover public-description display/edit/save, unchanged private instructions and narrow layouts. Final package and live-profile verification are recorded after installation.
+
 ## Browsable Settings lists (2026-10-25)
 
 Bot 0.10.2 adds automatic recent-history loading, an all-scope memory list with owner labels, and visible model/tool lists with optional filters. Custom model IDs, hidden tool selections, memory ownership and sharing defaults are preserved. The Host and recall isolation are unchanged. The live local profile now runs Bot 0.10.3 from clean commit `00cd864548ce040a446c6325eb822bbb45810bb4`, including compact tool descriptions and immediate model-loading feedback. npm publication remains separate; the public base is still 0.10.0.

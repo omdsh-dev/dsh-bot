@@ -2,7 +2,7 @@
 
 设置入口位于左侧栏。首页提供记忆、模型、定时任务和聊天记录；用量限额、工具与账号、团队管理、消息发送问题、归档与删除位于「更多设置」。每个入口都有用途说明，进入后可返回设置首页。记忆、定时任务和聊天记录先显示已有内容，点击添加后才展开表单。列表无需先搜索，关键词仅用于缩小范围。
 
-本页界面说明适用于本地更新的主包 `0.10.3`、飞书 `0.6.0`、如流 `0.7.0`。npm `next` 的主包仍为 `0.10.0`；新版设置页尚未发布到 npm。发布进度与验收范围见[完成记录](feature-completion.md)。
+本页界面说明适用于本地更新的主包 `0.11.0`、飞书 `0.6.0`、如流 `0.7.0`。npm `next` 的主包仍为 `0.10.0`；新版设置页与能力发现尚未发布到 npm。发布进度与验收范围见[完成记录](feature-completion.md)。
 
 ## 聊天、历史与协作
 
@@ -17,6 +17,16 @@
 在外部群中，DSH 输入默认只在 DSH 内可见。勾选「同步本条文字与 Bot 回复到群」后，本条文字和后续 Bot 回复进入持久投递队列。所有指定 Bot 必须已连接并获准在该群工作。附件会作为独立消息进入相同平台的投递队列；文件发送失败不会重发已成功的文字。此选项不会追溯发送之前的本地消息。
 
 历史会自动按 128 条写入不可变分段，空闲聊天的主状态保留最近最多 256 条消息和分段索引；未完成任务、祖先请求和待回答问题会固定在尾部。分段先写、主索引后原子提交；写盘失败不会发布未提交记录。修改旧收据只替换对应分段，旧版完整快照会自动迁移，成员游标和外部收据保留。`maxMessages` 限制在途回复数量，不再限制聊天的累计历史。首次升级会读取旧历史来迁移用量和用户身份；以后启动只加载近期消息与未完成工作。普通分页只读取需要的分段，全文检索复用持久化倒排索引。发送、旧响应重试、导出和落后投递恢复按需加载单个聊天，执行结束后释放归档正文；活跃聊天的工作集仍可能随该聊天历史增长。去重／通知窗口也按固定绝对边界分段，淘汰旧记录只重写首尾段；待处理任务和投递与分段索引一起原子保存。备份时须同时保留主域、所有 `bot_history_*`、`bot_receipts_*` 域及原生附件。删除会移除公开聊天引用，历史分段和原生附件的物理清理由部署者管理；不能降级到忽略分段索引的旧插件。
+
+## Bot 能力发现与新建建议
+
+普通 Bot 可以通过只读的 `discover_bots` 查看已有 Bot 的名称、公开能力说明和当前群聊的协作条件，不需要先成为 Main Bot。收到适合专长分工或重复处理的任务时，会先查已有 Bot，优先说明哪个 Bot 适合；缺少合适对象时，再建议新建一个具有明确职责的 Bot。建议本身不会创建 Bot、邀请成员或派发任务。
+
+创建或编辑 Bot 时填写「擅长什么（能力说明）」，例如「产品需求梳理、交互设计、方案评审」。这段说明可在所在 IM 会话中供其他成员发现，不要填写私密信息。完整「身份与职责」不会进入能力目录。已有 Bot 未填写时仍可按名称发现，能力会标记为未知；系统不会从旧提示词中自动提取并公开内容。
+
+本地 DSH 私聊和本地群聊可以浏览当前部署的未归档 Bot；飞书、如流群聊只返回当前群内可协作的成员，外部私聊只返回当前 Bot。目录不暴露私聊历史、记忆、凭据或工具配置。查询按名称和公开说明做轻量排序，可继续翻页浏览；关键词未匹配不代表没有合适的 Bot。能力说明是声明，并不证明模型具备相应工具或账号权限。
+
+同意新建建议后，实际创建仍由有「创建 Bot」授权的 Main Bot 在本地私聊中执行。配置入口为「设置 → 更多设置 → 团队管理」；本次更新不会自动选择 Main Bot 或扩大授权。已有 Bot 在当前群里且用户开启派活时可继续协作，否则可打开它的私聊，或手动加入本地群。
 
 ## 模型、用量与权限
 
@@ -89,7 +99,7 @@ Schedules require a running Host, coalesce missed intervals, and reserve their p
 
 ## Per-Bot capabilities and credentials
 
-Open **Controls → Capability grants** to register a skill or MCP server and explicitly select its Bots. New entries have no grants. Skills accept native instruction text; MCP supports direct local processes (one literal argument per line, no shell expansion) or HTTPS Streamable HTTP. These entries mount in the selected native Agent scope for the current delivery and dispose on completion, stop or revocation. Deployment-wide native tools and skills retain their existing scope; Bot tool/file policies continue to narrow them.
+Open **Settings → More settings → Tools & accounts** to register a skill or MCP server and explicitly select its Bots. New entries have no grants. Skills accept native instruction text; MCP supports direct local processes (one literal argument per line, no shell expansion) or HTTPS Streamable HTTP. These entries mount in the selected native Agent scope for the current delivery and dispose on completion, stop or revocation. Deployment-wide native tools and skills retain their existing scope; Bot tool/file policies continue to narrow them.
 
 Save secrets in the separate **Credentials** tab. Values use native DSH credential storage, never the Bot domain or ordinary snapshots, and are never read back into the form. `$DSH_SECRET_NAME` references are accepted in MCP environment values or headers, only when every assigned Bot also has that credential grant. Secrets cannot be placed in MCP arguments or URLs; sensitive headers require references. Updating values uses a fresh storage key, atomically publishes its grant, and retires the old key. Failed state writes roll back the new key; stale revisions cannot overwrite a newer grant.
 
@@ -105,7 +115,7 @@ Submitting a form records its values and a new human message atomically, address
 
 ## Main Bot team management
 
-Open **Controls → Team management** to appoint one Main Bot and select individual operations: create/edit Bot identities, create/edit local groups, or archive/restore. Everything starts disabled. `team_list` and `team_manage` are available only during a direct local operator message to that Bot; external IM, local groups, schedules and delegated/callback deliveries carry no team authority. Grants are rechecked inside the state transaction, and changing them cancels affected work and invalidates its context.
+Open **Settings → More settings → Team management** to appoint one Main Bot and select individual operations: create/edit Bot identities, create/edit local groups, or archive/restore. Everything starts disabled. `team_list` and `team_manage` are available only during a direct local operator message to that Bot; external IM, local groups, schedules and delegated/callback deliveries carry no team authority. Grants are rechecked inside the state transaction, and changing them cancels affected work and invalidates its context.
 
 The Main Bot cannot change its own identity, presets, model/tool/file policies, capability or credential grants, budgets, connector configuration, or delete data. Newly created Bots use the deployment default preset and receive no per-Bot grants. Group edits retain ordinary idle/membership validation; archiving Bots connected to external rooms requires the operator. Each request permits at most 20 successful changes. Native call IDs deduplicate retries; each successful mutation records actor, source response, operation, target and time atomically. The panel shows the latest 50 entries; the domain retains 500. Team listings expose identities and local group rosters, not private conversations or memories.
 

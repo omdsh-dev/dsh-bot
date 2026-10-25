@@ -60,7 +60,8 @@
     "src/cards.ts",
     "src/team-types.ts",
     "src/team.ts",
-    "src/browser-capability.ts"
+    "src/browser-capability.ts",
+    "src/bot-discovery.ts"
   ],
   "references": [
     {

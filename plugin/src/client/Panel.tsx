@@ -85,6 +85,7 @@ export function BotPanel(props: Props) {
   const [name, setName] = useState('')
   const [handle, setHandle] = useState('')
   const [instructions, setInstructions] = useState('')
+  const [botCapabilities, setBotCapabilities] = useState('')
   const [preset, setPreset] = useState('standard')
   const [members, setMembers] = useState<BotId[]>([])
   const [defaultBot, setDefault] = useState<BotId | undefined>()
@@ -127,7 +128,7 @@ export function BotPanel(props: Props) {
   }
   const openForm = (next: 'bot' | 'edit' | 'group' | 'members', bot?: Bot) => {
     setSyncGroup('none'); setGroupOwner(''); setHumanMembers(''); setGroupRequestId(crypto.randomUUID()); setGroupSubmitted(false); setFeishuGroups(null)
-    setForm(next); setError(null); setName(bot?.name ?? ''); setHandle(bot?.id ?? ''); setInstructions(bot?.instructions ?? ''); setPreset(bot?.preset ?? 'standard')
+    setForm(next); setError(null); setName(bot?.name ?? ''); setHandle(bot?.id ?? ''); setInstructions(bot?.instructions ?? ''); setBotCapabilities(bot?.capabilities ?? ''); setPreset(bot?.preset ?? 'standard')
     const ids = next === 'members' && room ? room.members.map(item => item.botId) : bots.slice(0, 2).map(bot => bot.id)
     setMembers(ids); setDefault(next === 'members' ? room?.defaultBot : ids[0])
   }
@@ -331,6 +332,7 @@ export function BotPanel(props: Props) {
         <RoomPortrait room={room} large /><h3>{room.title}</h3><p>{room.external && room.kind === 'group' ? localHint : t(room.external ? room.external.provider === 'feishu' ? 'fsExternalHelp' : 'externalHistory' : room.kind === 'group' ? 'history' : 'privateHistory')}</p>
         <div className={css.infoMembers}>{roomBots.map(bot => <section key={bot.id}>
           <div className={css.infoIdentity}><Avatar id={bot.id} /><div><strong>{bot.name}</strong><span>@{bot.id}</span></div>{room.defaultBot === bot.id && <small>{t('defaultResponder')}</small>}</div>
+          <p><strong>{t('botCapabilities')}</strong> · {bot.capabilities || t('botCapabilitiesMissing')}</p>
           <p>{bot.instructions || t('noDescription')}</p>
           <div className={css.infoActions}>
             <Button size="sm" disabled={rooms.some(item => item.messages.some(message => message.botId === bot.id && message.status === 'running'))} onClick={() => { setDetails(false); openForm('edit', bot) }}>{t('editBot')}</Button>
@@ -343,8 +345,8 @@ export function BotPanel(props: Props) {
       description={t(form === 'bot' ? 'createHelp' : form === 'edit' ? 'editHelp' : 'groupHelp')} className={clsx(css.dialog)} contentClassName={clsx(css.dialogContent)}
       footer={<><Button disabled={busy} onClick={closeForm}>{t('cancel')}</Button><Button form="bot-settings" type="submit" variant="primary" disabled={busy || ((form === 'group' || form === 'members') && !members.length)}>{t(form === 'members' || form === 'edit' ? 'save' : syncGroup === 'feishu' && groupSubmitted ? 'fsGroupResume' : 'create')}</Button></>}>
       <form id="bot-settings" className={css.form} onSubmit={(event) => { event.preventDefault(); void act(async () => {
-        if (form === 'bot') { const created = await props.createBot({ id: handle, name, instructions, preset }); setPendingBot(created.id) }
-        else if (form === 'edit') await props.updateBot({ id: handle as BotId, name, instructions })
+        if (form === 'bot') { const created = await props.createBot({ id: handle, name, instructions, capabilities: botCapabilities, preset }); setPendingBot(created.id) }
+        else if (form === 'edit') await props.updateBot({ id: handle as BotId, name, instructions, capabilities: botCapabilities })
         else if (defaultBot && (form === 'group' || room)) {
           if (form === 'group' && syncGroup === 'infoflow' && !infoflowVisible) throw new Error(t('imInfoflowHidden'))
           const result = form === 'group' ? syncGroup === 'feishu' && props.feishu
@@ -362,6 +364,7 @@ export function BotPanel(props: Props) {
           <div className={css.botPreview}><Avatar id={handle || 'dsh'} large /><div><strong>{name || t('newBot')}</strong><span>{handle ? `@${handle}` : t('identityPreview')}</span></div></div>
           <div className={css.formGrid}><label>{t('name')}<Input autoFocus required maxLength={80} value={name} onChange={(event) => { setName(event.target.value) }} /></label>
             <label>{t('handle')}<Input required disabled={form === 'edit'} pattern="[a-zA-Z][a-zA-Z0-9_-]{0,31}" value={handle} onChange={(event) => { setHandle(event.target.value) }} /></label></div>
+          <label>{t('botCapabilities')}<textarea rows={2} maxLength={500} placeholder={t('botCapabilitiesHint')} value={botCapabilities} onChange={event => setBotCapabilities(event.target.value)}/></label><small className={css.capabilityHint}>{t('botCapabilitiesHelp')}</small>
           <label>{t('instructions')}<textarea rows={4} maxLength={16000} placeholder={t('instructionsHint')} value={instructions} onChange={(event) => { setInstructions(event.target.value) }} /></label>
           <details className={css.advanced}><summary>{t('advanced')}</summary><label>{t('preset')}<Input required disabled={form === 'edit'} value={preset} onChange={(event) => { setPreset(event.target.value) }} />{form === 'edit' && <small>{t('editLocked')}</small>}</label></details>
         </> : <>

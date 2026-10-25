@@ -146,6 +146,7 @@
 .form label { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
 .form small { color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 18px; }
 .form textarea, .form select { width: 100%; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-button-elevated-fill); border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 10px; padding: 10px; font: inherit; resize: vertical; }
+.form .capabilityHint { display: block; margin: -10px 0 18px; }
 .formGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .botPreview { display: flex; align-items: center; gap: 18px; padding: 6px 0 24px; }
 .botPreview > div { display: flex; flex-direction: column; gap: 5px; min-width: 0; }

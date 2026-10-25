@@ -53,7 +53,7 @@ const schema: z.ZodType<BotState> = z.object({
   schedules: z.array(z.object({ id: z.string(), roomId: z.string().transform(brandString<RoomId>), name: z.string(), text: z.string(),
     calendar: z.object({ timeZone: z.string(), time: z.string(), weekdays: z.array(z.number()) }).optional(), targets: z.array(botId), nextAt: z.number(), intervalMinutes: z.number().nonnegative(), enabled: z.boolean(),
     allowDelegation: z.boolean(), notify: z.boolean(), lastAt: z.number().optional(), lastMessageId: messageId.optional(), error: z.string().optional() })).optional(),
-  bots: z.array(z.object({ id: botId, name: z.string(), instructions: z.string(), preset: z.string(), archived: z.boolean().optional(),
+  bots: z.array(z.object({ id: botId, name: z.string(), instructions: z.string(), capabilities: z.string().max(500).optional(), preset: z.string(), archived: z.boolean().optional(),
     policy: z.object({ provider: z.string().optional(), model: z.string().optional(), fileMode: z.enum(['inherit', 'read-only', 'workspace-write']).optional(), toolMode: z.enum(['inherit', 'none', 'allow']).optional(),
       tools: z.array(z.string()).optional(), inputPrice: z.number().nonnegative().optional(), outputPrice: z.number().nonnegative().optional() }).optional() })),
   rooms: z.array(z.object({

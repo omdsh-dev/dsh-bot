@@ -43,6 +43,18 @@ function bench() {
   return { service, state, set, close, assemble, followup, wake, ctx, variable, execute, run }
 }
 
+it('persists a separate public capability description and preserves it when older callers omit it', async () => {
+  const b = bench()
+  const bot = await b.service.createBot({ id: 'writer', name: 'Writer', instructions: 'PRIVATE_INSTRUCTIONS', capabilities: '  Write product announcements  ' })
+  expect(bot.capabilities).toBe('Write product announcements')
+  await b.service.updateBot({ id: bot.id, name: 'Writer 2', instructions: 'PRIVATE_INSTRUCTIONS_2' })
+  expect(b.service.snapshot().bots.find(item => item.id === bot.id)?.capabilities).toBe('Write product announcements')
+  await expect(b.service.updateBot({ id: bot.id, name: 'Bad update', instructions: '', capabilities: 'x'.repeat(501) })).rejects.toThrow('500')
+  expect(b.service.snapshot().bots.find(item => item.id === bot.id)?.name).toBe('Writer 2')
+  await b.service.updateBot({ id: bot.id, name: 'Writer 2', instructions: 'PRIVATE_INSTRUCTIONS_2', capabilities: '' })
+  expect(b.service.snapshot().bots.find(item => item.id === bot.id)?.capabilities).toBe('')
+})
+
 it('submits a card atomically and once, queues behind work and keeps external-group forms local', async () => {
   const b = bench(), room = b.state.rooms[0]!, attempt = room.messages[1]!
   room.kind = 'group'; room.external!.kind = 'group'; attempt.status = 'complete'

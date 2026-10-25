@@ -10,8 +10,8 @@ export const teamSettingsSchema: z.ZodType<TeamSettings> = z.object({ revision: 
 export const teamAuditSchema = z.object({ id: z.string(), time: z.number(), botId: z.string(), roomId: z.string(), messageId: z.string(), operation: teamOperation, targetId: z.string() })
 const id = z.string().min(1).max(100), title = z.string().trim().min(1).max(200)
 const command: z.ZodType<TeamCommand> = z.discriminatedUnion('operation', [
-  z.object({ operation: z.literal('create-bot'), id, name: title, instructions: z.string().max(16000) }).strict(),
-  z.object({ operation: z.literal('edit-bot'), id, name: title, instructions: z.string().max(16000) }).strict(),
+  z.object({ operation: z.literal('create-bot'), id, name: title, instructions: z.string().max(16000), capabilities: z.string().max(500).optional() }).strict(),
+  z.object({ operation: z.literal('edit-bot'), id, name: title, instructions: z.string().max(16000), capabilities: z.string().max(500).optional() }).strict(),
   z.object({ operation: z.literal('create-group'), title, botIds: z.array(id).min(1).max(16), defaultBot: id }).strict(),
   z.object({ operation: z.literal('edit-group'), id, title, botIds: z.array(id).min(1).max(16), defaultBot: id }).strict(),
   z.object({ operation: z.literal('archive'), kind: z.enum(['bot', 'room']), id, archived: z.boolean() }).strict(),
@@ -40,7 +40,7 @@ export function installTeamTools(agent: Agent, actions: { list(): unknown; manag
     description: 'List local Bot identities, local group rosters and the operator-granted team operations. No private chat, memories, credentials or connector configuration are exposed.',
     async execute(_args, exec) { verify(exec); return { result: JSON.stringify(actions.list()) } },
   })), registry.register(defineTool({ name: 'team_manage', output,
-    description: 'Perform an operator-requested team operation within your granted scope. command is JSON: {operation:"create-bot"|"edit-bot",id,name,instructions}; {operation:"create-group",title,botIds,defaultBot}; {operation:"edit-group",id,title,botIds,defaultBot}; {operation:"archive",kind:"bot"|"room",id,archived:boolean}. No policies, presets, credentials, capability grants, budgets, external chats or deletion can be changed. Cannot edit or archive yourself. Check team_list first and preserve operator constraints. Limit 20 successful changes per request.',
+    description: 'Perform an operator-requested team operation within your granted scope. command is JSON: {operation:"create-bot"|"edit-bot",id,name,instructions,capabilities?}; {operation:"create-group",title,botIds,defaultBot}; {operation:"edit-group",id,title,botIds,defaultBot}; {operation:"archive",kind:"bot"|"room",id,archived:boolean}. No policies, presets, credentials, capability grants, budgets, external chats or deletion can be changed. Cannot edit or archive yourself. Check discover_bots and team_list first to avoid unnecessary duplicate Bots. Include a concise public capabilities description when creating a specialist; never copy private instructions or secrets into it. A recommendation alone is not human acceptance to create. Preserve operator constraints. Limit 20 successful changes per request.',
     parameters: { command: { type: 'string', required: true } },
     async execute(args, exec) { verify(exec); return { result: JSON.stringify(await actions.manage(parseTeamCommand(args.command), exec.callId)) } },
   }))]

@@ -27,7 +27,7 @@ export interface ExternalSendRequest extends SendRequest { external: ExternalMes
 export type ExternalSendResult = { status: 'busy' } | { status: 'rejected'; reason: 'room-full' | 'invalid-input' }
   | { status: 'accepted'; messageId: ChatMessageId; attemptIds: ChatMessageId[] }
 /** Reusable Bot identity; each membership owns a separate Session. */
-export interface Bot { id: BotId; name: string; instructions: string; preset: string; archived?: boolean | undefined; policy?: BotPolicy | undefined }
+export interface Bot { id: BotId; name: string; instructions: string; capabilities?: string | undefined; preset: string; archived?: boolean | undefined; policy?: BotPolicy | undefined }
 /** Optional restrictions only narrow the deployment's existing permissions. */
 export interface BotPolicy {
   provider?: string | undefined; model?: string | undefined
@@ -156,9 +156,9 @@ export interface FailureAction { provider: 'infoflow' | 'feishu'; queue: string;
 /** Reconnecting feed replaces the complete small-domain snapshot. */
 export type BotFrame = { type: 'baseline'; value: BotState } | { type: 'changed'; value: BotState }
 /** Create one Bot and its canonical direct chat atomically. */
-export interface CreateBotRequest { id: string; name: string; instructions: string; preset?: string }
+export interface CreateBotRequest { id: string; name: string; instructions: string; capabilities?: string; preset?: string }
 /** Edit a Bot's display identity. The handle and preset stay fixed for existing Sessions. */
-export interface UpdateBotRequest { id: BotId; name: string; instructions: string; policy?: BotPolicy }
+export interface UpdateBotRequest { id: BotId; name: string; instructions: string; capabilities?: string; policy?: BotPolicy }
 /** Create a group from existing Bots. */
 export interface CreateGroupRequest { title: string; botIds: BotId[]; defaultBot: BotId }
 /** Edit group membership while all its response attempts are settled. */

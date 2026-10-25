@@ -38,11 +38,12 @@ export async function apply(ctx: Context): Promise<void> {
         { id: 'knowledge-memory', name: 'memory_recall', args: { query: 'shared-fixture' } },
         { id: 'knowledge-status', name: 'task_status', args: {} },
       ].find(call => !hasResult(call.id))
+      if (content.includes('DISCOVERY_FIXTURE') && !hasResult('discovery-list')) tool = { id: 'discovery-list', name: 'discover_bots', args: { query: '数据分析' } }
       if (content.includes('ACCESS_TOOL_FIXTURE') && !hasResult('access-inspect')) tool = { id: 'access-inspect', name: 'mcp__bot_access-fixture__inspect', args: {} }
       if (content.includes('CARD_VIEW_FIXTURE') && !hasResult('card-view')) tool = { id: 'card-view', name: 'show_card', args: { id: 'followup', card: JSON.stringify({ kind: 'form', title: 'Native form fixture', submitLabel: 'Continue', fields: [{ name: 'detail', label: 'Detail', type: 'text', required: true }] }) } }
       if (content.includes('TEAM_FIXTURE')) tool = [
         { id: 'team-list', name: 'team_list', args: {} },
-        { id: 'team-create', name: 'team_manage', args: { command: JSON.stringify({ operation: 'create-bot', id: 'team-worker', name: 'Team worker', instructions: 'Gather evidence.' }) } },
+        { id: 'team-create', name: 'team_manage', args: { command: JSON.stringify({ operation: 'create-bot', id: 'team-worker', name: 'Team worker', instructions: 'Gather evidence.', capabilities: 'Research and evidence gathering.' }) } },
         { id: 'team-group', name: 'team_manage', args: { command: JSON.stringify({ operation: 'create-group', title: 'Native team fixture', botIds: ['team-worker'], defaultBot: 'team-worker' }) } },
       ].find(call => !hasResult(call.id))
       for (const [marker, id, path] of [['BROWSER_OWNER_FIXTURE', 'browser-owner', 'set'], ['BROWSER_OTHER_FIXTURE', 'browser-other', 'other'], ['BROWSER_FRESH_FIXTURE', 'browser-fresh', 'fresh']]) {
@@ -107,6 +108,7 @@ export async function apply(ctx: Context): Promise<void> {
     const service = ctx.botMode
     await service.configureKnowledge({ reviewEnabled: false })
     if (process.env.BOT_TEST_PHASE === 'resume') {
+      assert.equal(service.snapshot().bots.find(bot => bot.id === 'team-worker')?.capabilities, 'Research and evidence gathering.')
       assert.equal(service.snapshot().infoflowVisible, false, 'An explicit hidden preference survives restart, including existing InfoFlow chats')
       assert.deepEqual(service.snapshot().bots.find(bot => bot.id === 'critic')!.policy,
         { provider: 'bot-selected-fixture', model: 'selected-fixture-model', toolMode: 'none', tools: [] })
@@ -329,16 +331,29 @@ export async function apply(ctx: Context): Promise<void> {
         } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())) }
       }
       const mainBot = await service.createBot({ id: 'team-main', name: 'Main Bot', instructions: 'Manage the team only as explicitly requested.' }), mainRoom = await service.openDirect(mainBot.id)
+      const specialist = await service.createBot({ id: 'data-specialist', name: '数据伙伴', capabilities: '数据分析、可视化、报表核对', instructions: 'DISCOVERY_PRIVATE_PROMPT_MUST_NOT_LEAK' })
+      const countBeforeDiscovery = service.snapshot().bots.length
+      await service.send({ roomId: mainRoom.id, text: 'DISCOVERY_FIXTURE 帮我找到能做数据分析的 Bot，有现成的就不要新建。' })
+      assert.equal((await settled(mainRoom.id)).messages.at(-1)!.status, 'complete')
+      const discoveryRequest = requests.at(-1)!
+      const discoveryEvidence = JSON.stringify(discoveryRequest.messages)
+      assert.ok(JSON.stringify(discoveryRequest.tools).includes('discover_bots'), 'Normal Bots can discover without Main Bot grants')
+      assert.ok(!JSON.stringify(discoveryRequest.tools).includes('team_manage'), 'Discovery does not grant creation')
+      assert.ok(discoveryEvidence.includes(specialist.id) && discoveryEvidence.includes('数据分析、可视化、报表核对'), 'The native discovery tool returned the declared capability')
+      assert.ok(!discoveryEvidence.includes('DISCOVERY_PRIVATE_PROMPT_MUST_NOT_LEAK'))
+      assert.equal(service.snapshot().bots.length, countBeforeDiscovery, 'Recommendation lookup creates no Bot')
+      assert.equal(service.teamView().audit.length, 0)
       await service.configureTeam({ revision: 0, botId: mainBot.id, operations: ['create-bot', 'create-group'] })
       await service.send({ roomId: mainRoom.id, text: 'TEAM_FIXTURE Create the requested worker and local team group.' })
       assert.equal((await settled(mainRoom.id)).messages.at(-1)!.status, 'complete')
-      assert.ok(service.snapshot().bots.some(bot => bot.id === 'team-worker'))
+      assert.equal(service.snapshot().bots.find(bot => bot.id === 'team-worker')?.capabilities, 'Research and evidence gathering.')
       assert.ok(service.snapshot().rooms.some(room => room.title === 'Native team fixture'))
       assert.equal(service.teamView().audit.length, 2)
       const externalTeam = await service.ensureExternalRoom({ conversation: { provider: 'feishu', accountId: mainBot.id, kind: 'private', id: 'team-outsider' }, title: 'External team request', botIds: [mainBot.id], defaultBot: mainBot.id })
-      await service.submitExternalMessage({ roomId: externalTeam.id, text: 'TEAM_EXTERNAL_SCOPE_CHECK', external: { id: 'team-receipt', sender: { id: 'outsider', name: 'External sender' } } })
+      await service.submitExternalMessage({ roomId: externalTeam.id, text: 'TEAM_EXTERNAL_SCOPE_CHECK DISCOVERY_FIXTURE', external: { id: 'team-receipt', sender: { id: 'outsider', name: 'External sender' } } })
       assert.equal((await settled(externalTeam.id)).messages.at(-1)!.status, 'complete')
       assert.ok(!JSON.stringify(requests.at(-1)?.tools).includes('team_manage'))
+      assert.ok(!JSON.stringify(requests.at(-1)).includes(specialist.id), 'External private discovery cannot expose a different Bot')
       const cardBot = await service.createBot({ id: 'card-bot', name: 'Card Bot', instructions: 'Use native cards.' }), cardRoom = await service.openDirect(cardBot.id)
       await service.send({ roomId: cardRoom.id, text: 'CARD_VIEW_FIXTURE Ask for the next detail.' })
       const cardMessage = (await settled(cardRoom.id)).messages.at(-1)!
