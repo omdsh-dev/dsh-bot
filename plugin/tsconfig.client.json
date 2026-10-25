@@ -47,7 +47,9 @@
     "src/card-types.ts",
     "src/client/Cards.tsx",
     "src/team-types.ts",
-    "src/client/TeamControls.tsx"
+    "src/client/TeamControls.tsx",
+    "src/client/HistoryBrowser.tsx",
+    "src/client/ModelPicker.tsx"
   ],
   "references": [
     {

@@ -1,6 +1,6 @@
 {
   "name": "dsh-bot",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "private": true,
   "type": "module",
   "description": "Persistent AI teammates and multi-Bot chats, as a native DeepSeek Harness plugin.",

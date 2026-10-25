@@ -1,13 +1,15 @@
 /** Explicit controls for lifecycle, execution policy, automation and retained delivery failures. */
 import { useEffect, useRef, useState } from 'react'
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { CapabilityCatalog, ScheduleRun, BotId, BotState, FailureView, HistoryPage, Room, Schedule, UpdateBotRequest } from '../types.ts'
+import type { CapabilityCatalog, ScheduleRun, BotId, BotState, FailureView, Room, Schedule, UpdateBotRequest } from '../types.ts'
 import type { CapabilityFace } from './capability-face.ts'
 import css from './Panel.module.css'
 import { Memories } from './Memories.tsx'
 import { AccessControls } from './AccessControls.tsx'
 import { TeamControls } from './TeamControls.tsx'
 import { SettingsHome, settingsSections } from './SettingsHome.tsx'
+import { HistoryBrowser } from './HistoryBrowser.tsx'
+import { ModelPicker, ToolPicker } from './ModelPicker.tsx'
 
 function localDateTime(time = Date.now() + 60000): string {
   return new Date(time - new Date(time).getTimezoneOffset() * 60000).toISOString().slice(0, 16)
@@ -27,7 +29,6 @@ export function Controls({ state, room, face, updateBot, english, openRoom, init
   const [saved, setSaved] = useState(''), [scheduleForm, setScheduleForm] = useState(false)
   useEffect(() => { heading.current?.focus(); heading.current?.closest(`.${css.settingsScroll}`)?.scrollTo?.({ top: 0 }) }, [tab])
   const [error, setError] = useState(''), [busy, setBusy] = useState(false)
-  const [query, setQuery] = useState(''), [page, setPage] = useState<HistoryPage>()
   const [botId, setBotId] = useState<BotId | undefined>(room?.defaultBot ?? state.bots[0]?.id)
   const bot = state.bots.find(item => item.id === botId)
   const [provider, setProvider] = useState(''), [model, setModel] = useState(''), [tools, setTools] = useState('')
@@ -42,6 +43,7 @@ export function Controls({ state, room, face, updateBot, english, openRoom, init
   const [date, setDate] = useState(localDateTime)
   const [notify, setNotify] = useState(false), [delegate, setDelegate] = useState(false), [editing, setEditing] = useState<string>()
   const [catalog, setCatalog] = useState<CapabilityCatalog>({ providers: [], tools: [] })
+  const [catalogLoading, setCatalogLoading] = useState(false), [catalogError, setCatalogError] = useState(''), [catalogRefresh, setCatalogRefresh] = useState(0)
   const [budgetScope, setBudgetScope] = useState('*'), [period, setPeriod] = useState<'never' | 'day' | 'month'>('never')
   const [reserveTokens, setReserveTokens] = useState('8192'), [reserveCost, setReserveCost] = useState('0')
   const selectedBudget = budgetScope === '*' ? state.budget : state.botBudgets?.[budgetScope]
@@ -52,9 +54,10 @@ export function Controls({ state, room, face, updateBot, english, openRoom, init
   useEffect(() => {
     if (tab !== 'policy') return
     let active = true
-    void face.catalog(botId).then(value => { if (active) setCatalog(value) }).catch(cause => { if (active) setError(String(cause)) })
+    setCatalog({ providers: [], tools: [] }); setCatalogLoading(true); setCatalogError('')
+    void face.catalog(botId).then(value => { if (active) setCatalog(value) }).catch(cause => { if (active) setCatalogError(String(cause)) }).finally(() => { if (active) setCatalogLoading(false) })
     return () => { active = false }
-  }, [face, botId, tab])
+  }, [face, botId, tab, catalogRefresh])
   useEffect(() => {
     setTokenLimit(String(selectedBudget?.tokenLimit ?? 0)); setCostLimit(String(selectedBudget?.costLimit ?? 0)); setCurrency(selectedBudget?.currency ?? 'USD')
     setPeriod(selectedBudget?.period ?? 'never'); setReserveTokens(String(selectedBudget?.reservationTokens ?? 8192)); setReserveCost(String(selectedBudget?.reservationCost ?? 0))
@@ -86,35 +89,21 @@ export function Controls({ state, room, face, updateBot, english, openRoom, init
     {current?.needsRoom && !room && <p>{l('先关闭设置并打开一个聊天，再来这里操作。', 'Close settings and open a chat first.')}</p>}
     {error && <p className={css.controlError} role="alert">{error}</p>}
     {tab === 'memories' && <Memories key={room?.id ?? 'global'} state={state} room={room} face={face} english={english}/>}
-    {tab === 'history' && room && <section>
-      <label>{l('搜索聊天原文', 'Search message text')}<Input value={query} onChange={event => setQuery(event.target.value)}/></label>
-      <div className={css.controlActions}>
-        <Button variant="primary" disabled={busy} onClick={() => { void act(async () => setPage(await face.history({ roomId: room.id, query, limit: 50 }))) }}>{l('搜索', 'Search')}</Button>
-        {(['markdown', 'json'] as const).map(format => <Button key={format} disabled={busy} onClick={() => { void act(async () => download(`chat-${room.id}.${format === 'json' ? 'json' : 'md'}`, await face.exportChat({ roomId: room.id, format }), 'text/plain')) }}>{l('导出', 'Export')} {format}</Button>)}
-      </div>
-      {page && <p>{page.total} {l('条结果', 'results')}</p>}
-      {page?.messages.map(message => <article key={message.id}><strong>{message.botId ?? l('用户', 'User')} · {new Date(message.time).toLocaleString()}</strong><pre>{message.text}</pre></article>)}
-      {page?.before && <Button disabled={busy} onClick={() => { void act(async () => { const next = await face.history({ roomId: room.id, query, before: page.before!, limit: 50 }); setPage({ ...next, messages: [...next.messages, ...page.messages] }) }) }}>{l('更早的结果', 'Earlier results')}</Button>}
-    </section>}
+    {tab === 'history' && room && <HistoryBrowser key={room.id} room={room} bots={state.bots} face={face} english={english} exporting={busy} exportChat={format => { void act(async () => download(`chat-${room.id}.${format === 'json' ? 'json' : 'md'}`, await face.exportChat({ roomId: room.id, format }), 'text/plain')) }}/>}
     {tab === 'access' && <AccessControls state={state} face={face} english={english}/>}
     {tab === 'team' && <TeamControls state={state} face={face} english={english}/>}
     {tab === 'policy' && <section>
       <label>Bot<select value={botId} onChange={event => setBotId(event.target.value as BotId)}>{state.bots.map(bot => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select></label>
-      <label>{l('模型服务商（留空使用默认设置）', 'Provider (blank uses the default)')}<Input list="bot-providers" value={provider} onChange={event => setProvider(event.target.value)}/></label>
-      <label>{l('模型名称', 'Model')}<Input list="bot-models" value={model} onChange={event => setModel(event.target.value)}/></label>
-      <datalist id="bot-providers">{catalog.providers.map(p => <option key={p.id} value={p.id}/>)}</datalist>
-      <datalist id="bot-models">{catalog.providers.find(p => p.id === provider)?.models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</datalist>
-      {catalog.providers.find(p => p.id === provider)?.error && <p>{catalog.providers.find(p => p.id === provider)!.error}</p>}
-      <p>{l('不知道怎么选时，可以保持留空，沿用 DSH 中已经配置好的模型。', 'Leave both fields blank to use the model already configured in DSH.')}</p>
+      {catalogError && <p role="alert">{l('无法读取模型和工具列表：', 'Could not load models and tools: ')}{catalogError} <Button onClick={() => setCatalogRefresh(value => value + 1)}>{l('重试', 'Retry')}</Button></p>}
+      <ModelPicker key={botId} providers={catalog.providers} provider={provider} model={model} loading={catalogLoading} english={english} select={(nextProvider, nextModel) => { setProvider(nextProvider); setModel(nextModel) }}/>
       <details><summary>{l('工具和文件权限', 'Tool and file permissions')}</summary><div className={css.settingsFields}>
-      {toolMode === 'allow' && <details><summary>{l('选择已发现的工具', 'Choose discovered tools')}</summary>{catalog.tools.map(tool => <label key={tool.name} className={css.checkOption} title={tool.description}><input type="checkbox" checked={tools.split(/[\n,]/).includes(tool.name)} onChange={event => setTools(list => event.target.checked ? [...new Set([...list.split(/[\n,]/).filter(Boolean), tool.name])].join('\n') : list.split(/[\n,]/).filter(name => name !== tool.name).join('\n'))}/>{tool.name}</label>)}</details>}
       <label>{l('工具权限', 'Tool permissions')}<select value={toolMode} onChange={event => setToolMode(event.target.value as typeof toolMode)}>
         <option value="inherit">{l('继承部署权限', 'Inherit deployment policy')}</option><option value="none">{l('禁止所有工具', 'No tools')}</option><option value="allow">{l('仅允许列出的工具', 'Allow listed tools only')}</option>
       </select></label>
       <label>{l('文件权限（只能收紧现有沙箱）', 'File policy (only narrows the current sandbox)')}<select value={fileMode} onChange={event => setFileMode(event.target.value as typeof fileMode)}>
         <option value="inherit">{l('继承 DSH', 'Inherit DSH')}</option><option value="read-only">{l('只读', 'Read only')}</option><option value="workspace-write">{l('仅工作目录可写', 'Workspace writes only')}</option>
       </select></label>
-      {toolMode === 'allow' && <label>{l('完整工具名，每行一个', 'Exact tool names, one per line')}<textarea value={tools} onChange={event => setTools(event.target.value)}/></label>}
+      <ToolPicker key={botId} available={catalog.tools} value={tools} change={setTools} editable={toolMode === 'allow'} loading={catalogLoading} english={english}/>
       <p>{l('工具设置只能收紧部署权限。文件目录隔离由 DSH 的沙箱配置负责；需要只读访问时，仅列出部署中实际存在的读取工具。', 'These restrictions only narrow deployment permissions. Filesystem isolation belongs to the DSH sandbox; for read-only access, list only the deployment’s actual read tools.')}</p>
       </div></details>
       <details><summary>{l('费用估算单价（可选）', 'Prices for cost estimates (optional)')}</summary><div className={css.settingsFields}>

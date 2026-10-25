@@ -6,7 +6,7 @@ import type { CapabilityFace } from './capability-face.ts'
 import css from './Panel.module.css'
 
 export function MemoryGovernance({ state, face, scope, ownerId, english, refresh, revision }: {
-  state: BotState; face: CapabilityFace; scope: MemoryScope; ownerId: string; english: boolean; refresh(): void; revision: number
+  state: BotState; face: CapabilityFace; scope: MemoryScope | 'all'; ownerId: string; english: boolean; refresh(): void; revision: number
 }) {
   const l = (zh: string, en: string) => english ? en : zh
   const [view, setView] = useState<MemoryGovernanceView>(), [busy, setBusy] = useState(false), [error, setError] = useState('')
@@ -20,9 +20,10 @@ export function MemoryGovernance({ state, face, scope, ownerId, english, refresh
   }
   return <details><summary>{l('重复与冲突审核', 'Duplicate and conflict review')} · {view?.suggestions.length ?? 0}</summary>
     <p>{l('这里集中展示所有范围内待审核的记忆关系。语义检查分析当前所选范围，使用指定 Bot 的模型并计入预算。建议不会自动生效。', 'Review pending memory relationships across all scopes. Semantic review analyzes the selected scope using the chosen Bot’s model and budget. Suggestions require your approval.')}</p>
+    {(scope === 'all' || !ownerId) && <p>{l('需要语义检查时，先在上方选择具体范围和对象。现有冲突仍列在下方。', 'To run a semantic review, choose a scope and owner above. Existing conflicts remain listed below.')}</p>}
     {error && <p role="alert" className={css.controlError}>{error}</p>}
     <label>{l('语义检查使用的 Bot', 'Bot for semantic review')}<select value={botId} disabled={busy} onChange={event => setBotId(event.target.value)}>{state.bots.filter(bot => !bot.archived).map(bot => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select></label>
-    <div className={css.controlActions}><Button size="sm" disabled={busy || !botId || !ownerId} onClick={() => { void act(() => face.analyzeMemories({ botId, scope, ownerId })) }}>{busy ? l('正在检查…', 'Reviewing…') : l('检查当前范围的语义重复', 'Review selected scope semantically')}</Button><Button size="sm" disabled={busy} onClick={() => { void act(async () => {}) }}>{l('刷新冲突列表', 'Refresh conflicts')}</Button></div>
+    <div className={css.controlActions}><Button size="sm" disabled={busy || !botId || !ownerId || scope === 'all'} onClick={() => { if (scope !== 'all') void act(() => face.analyzeMemories({ botId, scope, ownerId })) }}>{busy ? l('正在检查…', 'Reviewing…') : l('检查当前范围的语义重复', 'Review selected scope semantically')}</Button><Button size="sm" disabled={busy} onClick={() => { void act(async () => {}) }}>{l('刷新冲突列表', 'Refresh conflicts')}</Button></div>
     {!view?.suggestions.length && <p>{l('暂无待审核的重复或冲突。', 'No pending duplicates or conflicts.')}</p>}
     {view?.suggestions.map(suggestion => {
       const left = view.records.find(memory => memory.id === suggestion.left.id), right = view.records.find(memory => memory.id === suggestion.right.id)

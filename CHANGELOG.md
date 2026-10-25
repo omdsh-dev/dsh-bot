@@ -1,5 +1,13 @@
 # Release notes
 
+## 0.10.2 — local release candidate
+
+- Show recent chat history immediately, newest first, with optional search, clear filters and earlier-message loading. Discard stale requests when changing filters.
+- List memories from all scopes by default, show each record's owner, and preserve the original scope and sharing rules when editing. Scope, owner, status and text are optional filters.
+- Display selectable models and tool descriptions in browsable lists, with more-results controls and optional filters. Keep custom model IDs and unavailable tool selections intact; provide manual entry and discovery retries.
+- Keep existing conflict suggestions visible across all scopes; semantic review still requires a specific scope and owner.
+- This UI update does not change the Host or its RPC contract. npm publication is separate from the local update.
+
 ## 0.10.1 — local release candidate
 
 - Replace the crowded chat controls with a Settings home: memory, models, schedules and history, with advanced tools under More settings.

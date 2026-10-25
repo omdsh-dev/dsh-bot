@@ -279,6 +279,16 @@
 .settingsFields, .settingsEditor { display: grid; gap: 16px; min-width: 0; }
 .settingsEditor { padding: 20px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 14px; }
 .settingsEditor h4, .settingsFields h4 { margin: 0; font-size: 14px; }
+.choiceList { display: grid; gap: 8px; min-width: 0; max-height: 340px; overflow: auto; overscroll-behavior: contain; }
+.choiceCard { display: grid; gap: 4px; width: 100%; padding: 12px 14px; border: 1px solid var(--dsw-alias-border-l3); border-radius: 10px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.choiceCard:hover, .choiceCard[aria-pressed='true'] { background: var(--dsw-alias-interactive-bg-hover); }
+.choiceCard[aria-pressed='true'] { border-color: var(--dsw-alias-label-secondary); }
+.choiceCard:focus-visible { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: -2px; }
+.choiceCard small, .toolChoice small { display: block; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 20px; }
+.controls .toolChoice { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 10px; background: var(--dsw-alias-bg-base); overflow-wrap: anywhere; }
+.toolChoice input { margin-top: 3px; }
+.toolChoice > span { min-width: 0; }
+.toolChoice small { margin-top: 4px; white-space: pre-wrap; }
 .controls .savedNotice { color: var(--dsw-alias-state-success-primary); }
 .controls { display: grid; gap: 20px; min-width: 0; color: var(--dsw-alias-label-primary); font: 13px/20px var(--dsw-font-family); }
 .controls nav { display: flex; flex-wrap: wrap; gap: 4px; padding: 5px; background: var(--dsw-alias-bg-module-platform); border-radius: 12px; }

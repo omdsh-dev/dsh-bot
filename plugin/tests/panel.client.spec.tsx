@@ -7,7 +7,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { SlotTestRuntime } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import type { PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { Bot, BotId, Room, RoomId, ChatMessageId } from '../src/types.ts'
+import type { Bot, BotId, Room, RoomId, ChatMessageId, HistoryPage } from '../src/types.ts'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { PanelFace } from '../src/client/Panel.tsx'
 import { BotModel } from '../src/client/model.ts'
@@ -151,7 +151,7 @@ it('loads per-response context only when opened and shows forgotten memories wit
 })
 
 it('manages scoped memories and previews recall through the controls panel', async () => {
-  const candidate = { id: 'memory', revision: 1, scope: 'global', ownerId: '*', kind: 'preference', subject: 'response', topic: 'language', body: 'Use Chinese', status: 'pending', access: 'scope', source: { kind: 'operator', evidence: 'confirmed request' }, createdAt: 100, updatedAt: 100 }
+  const candidate = { id: 'memory', revision: 1, scope: 'bot', ownerId: 'sage', kind: 'preference', subject: 'response', topic: 'language', body: 'Use Chinese', status: 'pending', access: 'scope', source: { kind: 'operator', evidence: 'confirmed request' }, createdAt: 100, updatedAt: 100 }
   const memoryAction = vi.fn(async () => {}), saveMemory = vi.fn(async () => candidate)
   const listMemories = vi.fn(async () => [candidate]), previewMemories = vi.fn(async () => ({ records: [], conflicts: [], omitted: 0, text: '' }))
   const capabilities = { catalog: async () => ({ providers: [], tools: [] }), memoryCatalog: async () => ({ users: [{ id: 'local:operator', name: 'Local operator' }] }), listMemories, memoryAction, saveMemory, previewMemories } as unknown as CapabilityFace
@@ -160,13 +160,15 @@ it('manages scoped memories and previews recall through the controls panel', asy
   fireEvent.click(screen.getByRole('button', { name: 'Memory' }))
   expect(screen.queryByRole('textbox', { name: 'Memory content' })).toBeNull()
   await waitFor(() => expect(screen.getByText('Use Chinese')).toBeTruthy())
+  expect(listMemories).toHaveBeenCalledWith({ query: '' })
+  expect((screen.getByRole('combobox', { name: 'Memory scope' }) as HTMLSelectElement).value).toBe('all')
   fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
   await waitFor(() => expect(memoryAction).toHaveBeenCalledWith({ id: 'memory', revision: 1, action: 'approve' }))
   await waitFor(() => expect(screen.getByRole('button', { name: 'Edit / share' }).hasAttribute('disabled')).toBe(false))
   fireEvent.click(screen.getByRole('button', { name: 'Edit / share' }))
   fireEvent.change(screen.getByRole('textbox', { name: 'Memory content' }), { target: { value: 'Use short Chinese paragraphs' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save & activate' }))
-  await waitFor(() => expect(saveMemory).toHaveBeenCalledWith(expect.objectContaining({ id: 'memory', revision: 1, body: 'Use short Chinese paragraphs', share: false })))
+  await waitFor(() => expect(saveMemory).toHaveBeenCalledWith(expect.objectContaining({ id: 'memory', revision: 1, scope: 'bot', ownerId: 'sage', body: 'Use short Chinese paragraphs', share: false })))
   fireEvent.click(screen.getByText('Preview recall for this chat'))
   await waitFor(() => expect(screen.getByRole('button', { name: 'Preview' }).hasAttribute('disabled')).toBe(false))
   fireEvent.change(screen.getByRole('textbox', { name: 'Recall query' }), { target: { value: 'language' } })
@@ -214,9 +216,69 @@ it('preserves unsaved model settings when a fresh live snapshot arrives', async 
   const b = await bench({ capabilities })
   fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
   fireEvent.click(screen.getByRole('button', { name: 'Model' }))
-  fireEvent.change(screen.getByRole('combobox', { name: 'Model' }), { target: { value: 'unsaved-model' } })
+  fireEvent.change(screen.getByRole('textbox', { name: 'Model' }), { target: { value: 'unsaved-model' } })
   b.model.replace(structuredClone({ bots: b.bots, rooms: b.rooms }))
-  await waitFor(() => expect((screen.getByRole('combobox', { name: 'Model' }) as HTMLInputElement).value).toBe('unsaved-model'))
+  await waitFor(() => expect((screen.getByRole('textbox', { name: 'Model' }) as HTMLInputElement).value).toBe('unsaved-model'))
+})
+
+it('opens recent history immediately and ignores older results after clearing a filter', async () => {
+  let finishEarlier!: (page: HistoryPage) => void
+  const message = (id: string, text: string) => ({ id: id as ChatMessageId, botId: null, text, replyTo: null, status: 'complete' as const, error: null, time: 1000 })
+  const history = vi.fn<CapabilityFace['history']>(async request => {
+    if (request.before) return new Promise(resolve => { finishEarlier = resolve })
+    if (request.query) return { messages: [message('match', 'Filtered message')], before: 'match' as ChatMessageId, total: 2 }
+    return { messages: [message('recent', 'Recent retained message')], before: null, total: 1 }
+  })
+  await bench({ capabilities: { history } as unknown as CapabilityFace })
+  fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Chat history' }))
+  await screen.findByText('Recent retained message')
+  expect(history).toHaveBeenCalledWith({ roomId: 'studio', query: '', limit: 50 })
+  fireEvent.change(screen.getByRole('textbox', { name: 'Search message text' }), { target: { value: 'needle' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+  await screen.findByText('Filtered message')
+  fireEvent.change(screen.getByRole('textbox', { name: 'Search message text' }), { target: { value: 'unsent draft' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Load earlier messages' }))
+  expect(history).toHaveBeenLastCalledWith({ roomId: 'studio', query: 'needle', before: 'match', limit: 50 })
+  fireEvent.click(screen.getByRole('button', { name: 'Show all' }))
+  await screen.findByText('Recent retained message')
+  finishEarlier({ messages: [message('stale', 'Stale earlier result')], before: null, total: 2 })
+  await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
+  expect(screen.queryByText('Stale earlier result')).toBeNull()
+  expect(screen.queryByText('Filtered message')).toBeNull()
+})
+
+it('selects a listed model and filters tools without dropping hidden or unavailable selections', async () => {
+  const updateBot = vi.fn<PanelFace['updateBot']>(async request => ({ id: request.id, name: request.name, instructions: request.instructions, preset: 'standard' }))
+  const catalog = async () => ({ providers: [{ id: 'configured', models: [{ id: 'model-a', name: 'Writing model' }, { id: 'model-b', name: 'Reasoning model' }] }], tools: [{ name: 'read', description: 'Read local files' }, { name: 'search', description: 'Search documents' }] })
+  const b = await bench({ updateBot, capabilities: { catalog } as unknown as CapabilityFace })
+  b.bots[0]!.policy = { provider: 'custom', model: 'saved', toolMode: 'allow', fileMode: 'read-only', tools: ['read', 'offline-tool'], inputPrice: 2 }
+  b.model.replace({ bots: b.bots, rooms: b.rooms })
+  fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Model' }))
+  fireEvent.click(await screen.findByRole('button', { name: /^Reasoning model/ }))
+  fireEvent.click(screen.getByText('Tool and file permissions'))
+  expect(screen.getByText('Read local files')).toBeTruthy()
+  fireEvent.change(screen.getByRole('textbox', { name: 'Filter tools (optional)' }), { target: { value: 'documents' } })
+  expect(screen.queryByRole('checkbox', { name: 'read' })).toBeNull()
+  fireEvent.click(screen.getByRole('checkbox', { name: 'search' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save model settings' }))
+  await waitFor(() => expect(updateBot).toHaveBeenCalledWith(expect.objectContaining({ policy: expect.objectContaining({ provider: 'configured', model: 'model-b', tools: ['read', 'offline-tool', 'search'], fileMode: 'read-only', inputPrice: 2 }) })))
+})
+
+it('keeps a custom model when discovery fails and supports retry without replacing the selection', async () => {
+  const catalog = vi.fn<CapabilityFace['catalog']>().mockRejectedValueOnce(new Error('Discovery unavailable')).mockResolvedValue({ providers: [], tools: [] })
+  const b = await bench({ capabilities: { catalog } as unknown as CapabilityFace })
+  b.bots[0]!.policy = { provider: 'custom', model: 'my-model' }
+  b.model.replace({ bots: b.bots, rooms: b.rooms })
+  fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Model' }))
+  await screen.findByRole('alert')
+  expect(screen.getByText('my-model · custom')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+  await screen.findByText('No models discovered. Use the DSH default or enter a model below.')
+  expect(screen.getByText('my-model · custom')).toBeTruthy()
+  expect(catalog).toHaveBeenCalledTimes(2)
 })
 
 it('does not attach a late upload to a different chat after navigation', async () => {
@@ -741,7 +803,7 @@ it('keeps folded permissions and prices intact when saving a model change', asyn
   fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
   fireEvent.click(screen.getByRole('button', { name: 'Model' }))
   expect(screen.getByRole('combobox', { name: 'Tool permissions' }).closest('details')!.open).toBe(false)
-  fireEvent.change(screen.getByRole('combobox', { name: 'Model' }), { target: { value: 'new' } })
+  fireEvent.change(screen.getByRole('textbox', { name: 'Model' }), { target: { value: 'new' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save model settings' }))
   await waitFor(() => expect(updateBot).toHaveBeenCalledWith(expect.objectContaining({ id: 'sage', policy: expect.objectContaining({ model: 'new', toolMode: 'none', fileMode: 'read-only', inputPrice: 2, outputPrice: 8 }) })))
   expect(await screen.findByRole('status')).toHaveProperty('textContent', 'Saved. The next conversation will use these settings.')

@@ -1,5 +1,12 @@
 # Bot capability completion
 
+## Browsable Settings lists (2026-10-25)
+
+Bot 0.10.2 adds automatic recent-history loading, an all-scope memory list with owner labels, and visible model/tool lists with optional filters. Custom model IDs, hidden tool selections, memory ownership and sharing defaults are preserved. The Host and recall isolation are unchanged. Local installation verification is recorded after the final package checks; npm publication remains separate.
+
+- All 242 source tests passed, including history filtering/pagination races, all-scope memory editing, model discovery failure/retry and filtered tool selections. Distribution metadata, documentation links and whitespace checks passed.
+- A real Chromium preview verified populated memory lists, automatic history loading, model/tool discovery states, navigation, editing and narrow-screen layout without page errors or outgoing messages.
+
 ## Simpler Settings (2026-10-25)
 
 Bot 0.10.1 is installed in the live local profile from clean source commit `4c107bd19334d5da7fcf332a8a31b47dd7d0311b`. npm `next` remains Bot 0.10.0; this UI update has not been published to npm. Feishu 0.6.0 and InfoFlow 0.7.0 are unchanged.
