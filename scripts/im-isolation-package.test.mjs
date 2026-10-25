@@ -166,7 +166,10 @@ export async function apply(ctx) {
    for(const {marker,options} of requests) {
     const channel=marker.slice(4,-2),round=Number(marker.at(-1)),messages=JSON.stringify(options.messages);
     assert.ok(JSON.stringify(options.messages.filter(m=>m.role==='system')).includes('SHARED_PERSONA_ALPHA'),'Same Bot identity at every entry');
-    assert.deepEqual(toolNames(options),toolNames(requests[0].options),'Same Bot capabilities at every entry');
+    const commonTools=value=>toolNames(value).filter(name=>name!=='create_bot');
+    assert.deepEqual(commonTools(options),commonTools(requests[0].options),'Same general Bot capabilities at every entry');
+    assert.equal(toolNames(options).includes('create_bot'),!channel.startsWith('WEB'),'Only authenticated IM admin deliveries get narrow Bot creation');
+    assert.ok(!toolNames(options).some(name=>name==='team_manage'||name==='team_list'),'IM creation does not grant broad team management');
     for(const other of channels) if(other!==channel) assert.ok(!messages.includes('ISO_'+other+'_'),'Context leaked from '+other+' to '+channel);
     for(let prior=1;prior<round;prior++) assert.ok(messages.includes('ISO_'+channel+'_'+prior),'Own prior turns must remain in '+channel);
    }
