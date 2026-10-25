@@ -38,7 +38,9 @@ try {
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')
   const result = await call('tools/call', { name: 'browser_navigate', arguments: { url: `http://127.0.0.1:${server.address().port}/` } })
   assert.ok(!result.isError, JSON.stringify(result))
-  assert.match(JSON.stringify(result), /LOCAL_BROWSER_ACCEPTANCE/)
+  const body = await call('tools/call', { name: 'browser_evaluate', arguments: { function: '() => document.body.textContent' } })
+  assert.ok(!body.isError, JSON.stringify(body))
+  assert.match(JSON.stringify(body), /LOCAL_BROWSER_ACCEPTANCE/)
   console.log('The container Chromium completed a real isolated MCP navigation.')
 } finally {
   for (const pending of calls.values()) clearTimeout(pending.timer)
