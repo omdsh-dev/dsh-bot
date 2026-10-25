@@ -91,7 +91,7 @@ function Editor({ bot, binding, registration, api, t, changed }: { bot: Bot; bin
       <label className={css.infoflowCheck}><input type="checkbox" checked={allGroups} disabled={busy || active} onChange={event => { setAllGroups(event.target.checked); setDirty(true) }}/>{t('ifAllGroups')}</label>
       <p className={css.integrationHint}>{t('ifAllGroupsHint')}</p>
       {!allGroups && <label>{t('fsAllowGroups')}<Input aria-label={t('fsAllowGroups')} value={groups} disabled={active} placeholder="oc_…" onChange={event => { setGroups(event.target.value); setDirty(true) }}/><small>{t('fsAllowGroupsHint')}</small></label>}
-      <label>{t('fsAdmins')}<Input aria-label={t('fsAdmins')} value={admins} disabled={active} placeholder="ou_…" onChange={event => { setAdmins(event.target.value); setDirty(true) }}/></label>
+      <label>{t('fsAdmins')}<Input aria-label={t('fsAdmins')} value={admins} disabled={active} placeholder="ou_…" onChange={event => { setAdmins(event.target.value); setDirty(true) }}/><small>{t('fsAdminsHint')}</small></label>
       <div className={css.integrationActions}><Button type="submit" variant="primary" disabled={busy || active}>{t('ifSaveVerify')}</Button>
         <Button disabled={busy || active || !binding || dirty} onClick={() => { void run(() => api.verify(bot.id), 'ifVerified') }}>{t('ifVerify')}</Button>
         <Button disabled={busy || active || !binding || dirty} onClick={() => { void run(() => api.toggle({ botId: bot.id, enabled: !binding?.enabled }), binding?.enabled ? 'ifStopped' : 'ifStarted') }}>{t(binding?.enabled ? 'ifDisable' : 'ifEnable')}</Button></div>

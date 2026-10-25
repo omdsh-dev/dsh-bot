@@ -103,6 +103,32 @@ it('applies team commands atomically under current authority and revokes active 
   expect(b.service.teamView().audit).toHaveLength(5)
 })
 
+it('creates IM Bots atomically, deduplicates calls and rejects stale admin authority', async () => {
+  const b = bench(), room = b.state.rooms[0]!
+  room.messages[0]!.external = { id: 'im-receipt', sender: { id: 'alice', name: 'Alice' } }
+  const binding = { botId: 'sage', agentId: 'app', enabled: true, status: 'connected', allowUsers: ['alice'], allowGroups: [], admins: ['alice'] }
+  Reflect.set(b.service, 'infoflow', { snapshot: () => ({ bindings: [binding], groups: [] }) })
+  Reflect.get(b.service, 'config').defaultPreset = 'standard'
+  const actor = { provider: 'infoflow', accountId: 'app', senderId: 'alice' }
+  const draft = { id: 'im-worker', name: 'IM worker', instructions: 'PRIVATE_ROLE', capabilities: 'Research' }
+  const create = (callId = 'create', signal = new AbortController().signal) => Reflect.get(b.service, 'createIMBot').call(b.service, room.id, 'attempt', actor, draft, callId, signal)
+  b.set.mockRejectedValueOnce(new Error('disk full'))
+  await expect(create()).rejects.toThrow('disk full')
+  expect(b.service.snapshot().bots).toHaveLength(1)
+  expect(b.service.teamView().audit).toEqual([])
+  const result = await Promise.all([create(), create()])
+  expect(result[0]).toEqual(result[1]); expect(result[0]).toMatchObject({ bot: { id: 'im-worker', capabilities: 'Research' }, binding: { status: 'not-bound' } })
+  expect(JSON.stringify(result[0])).not.toContain('PRIVATE_ROLE')
+  expect(b.service.snapshot().bots).toHaveLength(2)
+  expect(b.service.snapshot().rooms.filter(item => item.defaultBot === 'im-worker')).toMatchObject([{ kind: 'dm' }])
+  expect(b.service.snapshot().bots[1]).toMatchObject({ preset: 'standard', instructions: 'PRIVATE_ROLE' })
+  expect(b.service.snapshot().bots[1]!.policy).toBeUndefined()
+  expect(b.service.teamView().audit).toMatchObject([{ actor, operation: 'create-bot', targetId: 'im-worker' }])
+  binding.admins = []; await expect(create()).rejects.toThrow('administrator')
+  binding.admins = ['alice']; await expect(create('aborted', AbortSignal.abort())).rejects.toThrow()
+  expect(b.service.teamView().audit).toHaveLength(1)
+})
+
 it('uses native compaction before rotating and retains the current session when it relieves pressure', async () => {
   const b = bench(), agent = b.ctx.agents.get()
   let chars = 120000

@@ -39,6 +39,11 @@ export async function apply(ctx: Context): Promise<void> {
         { id: 'knowledge-status', name: 'task_status', args: {} },
       ].find(call => !hasResult(call.id))
       if (content.includes('DISCOVERY_FIXTURE') && !hasResult('discovery-list')) tool = { id: 'discovery-list', name: 'discover_bots', args: { query: '数据分析' } }
+      const imTarget = content.match(/IM_CREATE_FIXTURE:([a-z-]+)/)?.[1]
+      if (imTarget) tool = [
+        { id: `im-discover-${imTarget}`, name: 'discover_bots', args: { query: 'Research' } },
+        { id: `im-create-${imTarget}`, name: 'create_bot', args: { draft: JSON.stringify({ id: imTarget, name: `IM ${imTarget}`, instructions: 'Gather evidence.', capabilities: 'Research requested from IM' }) } },
+      ].find(call => !hasResult(call.id))
       if (content.includes('ACCESS_TOOL_FIXTURE') && !hasResult('access-inspect')) tool = { id: 'access-inspect', name: 'mcp__bot_access-fixture__inspect', args: {} }
       if (content.includes('CARD_VIEW_FIXTURE') && !hasResult('card-view')) tool = { id: 'card-view', name: 'show_card', args: { id: 'followup', card: JSON.stringify({ kind: 'form', title: 'Native form fixture', submitLabel: 'Continue', fields: [{ name: 'detail', label: 'Detail', type: 'text', required: true }] }) } }
       if (content.includes('TEAM_FIXTURE')) tool = [
@@ -354,6 +359,42 @@ export async function apply(ctx: Context): Promise<void> {
       assert.equal((await settled(externalTeam.id)).messages.at(-1)!.status, 'complete')
       assert.ok(!JSON.stringify(requests.at(-1)?.tools).includes('team_manage'))
       assert.ok(!JSON.stringify(requests.at(-1)).includes(specialist.id), 'External private discovery cannot expose a different Bot')
+      const unusedIM = async (): Promise<never> => { throw new Error('IM creation must not change connector configuration or send messages') }
+      const imHost = await service.createBot({ id: 'im-host', name: 'IM host', instructions: 'Help administrators create specialist Bots.' })
+      for (const provider of ['feishu', 'infoflow'] as const) {
+        const baseBinding = { botId: imHost.id, enabled: true, status: 'connected' as const, error: null, robotName: 'Fixture', credentialsConfigured: true,
+          allowUsers: ['admin', 'guest'], allowGroups: ['im-group'], admins: ['admin'] }
+        const detachIM = provider === 'feishu' ? service.attachFeishu({
+          snapshot: () => ({ available: true, registrations: [], groups: [], bindings: [{ ...baseBinding, appId: 'im-app', botOpenId: 'ou_bot', brand: 'feishu' }] }),
+          save: unusedIM, verify: unusedIM, toggle: unusedIM, register: unusedIM, cancel: unusedIM, createGroup: unusedIM, resumeGroup: unusedIM,
+        }, CONNECTOR_PROTOCOL) : service.attachInfoFlow({
+          save: unusedIM, verify: unusedIM, toggle: unusedIM, testMessage: unusedIM, createGroup: unusedIM, resumeGroup: unusedIM, attachGroup: unusedIM,
+          snapshot: () => ({ available: true, groups: [], bindings: [{ ...baseBinding, agentId: 'im-app', robotId: 'robot' }] }),
+        }, CONNECTOR_PROTOCOL)
+        try {
+          for (const kind of ['private', 'group'] as const) {
+            const target = `im-${provider}-${kind}`
+            const imRoom = await service.ensureExternalRoom({ conversation: { provider, accountId: 'im-app', kind, id: kind === 'private' ? (provider === 'feishu' ? 'oc_admin_chat' : 'admin') : 'im-group' }, title: 'IM creation fixture', botIds: [imHost.id], defaultBot: imHost.id })
+            await service.submitExternalMessage({ roomId: imRoom.id, sourceAccountId: 'im-app', targets: [imHost.id], text: `IM_CREATE_FIXTURE:${target} Create the research Bot.`, external: { id: target, sender: { id: 'admin', name: 'Administrator' } } })
+            const reply = (await settled(imRoom.id)).messages.at(-1)!
+            assert.equal(reply.status, 'complete', JSON.stringify(reply))
+            assert.equal(service.snapshot().bots.find(bot => bot.id === target)?.capabilities, 'Research requested from IM')
+            const nativeRequest = requests.at(-1)!
+            assert.ok(JSON.stringify(nativeRequest.tools).includes('create_bot'))
+            assert.ok(!JSON.stringify(nativeRequest.tools).includes('team_manage') && !JSON.stringify(nativeRequest.tools).includes('team_list'))
+            assert.ok(JSON.stringify(nativeRequest.messages).includes('not-bound') && JSON.stringify(nativeRequest.messages).includes('IM 接入'))
+            assert.ok(!JSON.stringify(nativeRequest).includes(specialist.id), 'IM admins cannot browse unrelated Bots')
+            assert.ok(!service.snapshot().rooms.some(room => room.external && room.members.some(member => member.botId === target)), 'Creation does not bind or invite the new Bot')
+            assert.equal(service.teamView().audit.at(-1)!.actor!.provider, provider)
+            assert.equal(service.teamView().audit.at(-1)!.actor!.senderId, 'admin')
+          }
+          const guestRoom = await service.ensureExternalRoom({ conversation: { provider, accountId: 'im-app', kind: 'private', id: provider === 'feishu' ? 'oc_guest_chat' : 'guest' }, title: 'Non-admin fixture', botIds: [imHost.id], defaultBot: imHost.id })
+          await service.submitExternalMessage({ roomId: guestRoom.id, text: 'Please create a Bot.', external: { id: 'guest-receipt', sender: { id: 'guest', name: 'Guest' } } })
+          assert.equal((await settled(guestRoom.id)).messages.at(-1)!.status, 'complete')
+          assert.ok(!JSON.stringify(requests.at(-1)!.tools).includes('create_bot'))
+        } finally { detachIM() }
+      }
+      assert.equal(service.teamView().audit.length, 6)
       const cardBot = await service.createBot({ id: 'card-bot', name: 'Card Bot', instructions: 'Use native cards.' }), cardRoom = await service.openDirect(cardBot.id)
       await service.send({ roomId: cardRoom.id, text: 'CARD_VIEW_FIXTURE Ask for the next detail.' })
       const cardMessage = (await settled(cardRoom.id)).messages.at(-1)!
@@ -413,7 +454,9 @@ createInterface({input:process.stdin}).on('line', line=>{
       await service.saveBotCredential({ name: 'FIXTURE_TOKEN', description: 'Restored scoped fixture', value: 'ONLY_GRANTED_FIXTURE_TOKEN_123', botIds: [owner.id], shellBotIds: [owner.id] })
     } else if (process.env.BOT_TEST_PHASE === 'resume') {
       assert.equal(service.teamView().settings.botId, 'team-main')
-      assert.equal(service.teamView().audit.length, 2)
+      assert.equal(service.teamView().audit.length, 6)
+      assert.equal(service.teamView().audit.filter(item => item.actor).length, 4)
+      for (const id of ['im-feishu-private', 'im-feishu-group', 'im-infoflow-private', 'im-infoflow-group']) assert.equal(service.snapshot().bots.find(bot => bot.id === id)?.capabilities, 'Research requested from IM')
       const cards = service.snapshot().rooms.find(room => room.defaultBot === 'card-bot')!.messages.flatMap(message => message.cards ?? [])
       assert.equal(cards[0]!.submitted!.values.detail, 'NATIVE_FORM_ANSWER')
       assert.ok((await service.accessCatalog()).credentials.some(item => item.name === 'FIXTURE_TOKEN' && item.configured))

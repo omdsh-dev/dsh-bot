@@ -7,7 +7,7 @@ import { optionalService } from './compatibility.ts'
 
 export const teamOperation = z.enum(['create-bot', 'edit-bot', 'create-group', 'edit-group', 'archive'])
 export const teamSettingsSchema: z.ZodType<TeamSettings> = z.object({ revision: z.number().int().nonnegative(), botId: z.string().nullable(), operations: z.array(teamOperation).max(5) }).strict()
-export const teamAuditSchema = z.object({ id: z.string(), time: z.number(), botId: z.string(), roomId: z.string(), messageId: z.string(), operation: teamOperation, targetId: z.string() })
+export const teamAuditSchema = z.object({ id: z.string(), time: z.number(), botId: z.string(), roomId: z.string(), messageId: z.string(), operation: teamOperation, targetId: z.string(), actor: z.object({ provider: z.enum(['feishu', 'infoflow']), accountId: z.string(), senderId: z.string() }).optional() })
 const id = z.string().min(1).max(100), title = z.string().trim().min(1).max(200)
 const command: z.ZodType<TeamCommand> = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('create-bot'), id, name: title, instructions: z.string().max(16000), capabilities: z.string().max(500).optional() }).strict(),

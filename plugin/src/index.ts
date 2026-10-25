@@ -8,7 +8,8 @@ import { formValues, installCardTool } from './cards.ts'
 import type { SubmitCardRequest } from './card-types.ts'
 import { capabilityDescription, discoverBots, discoveryPrompt, installDiscoveryTool, type DiscoveryContext } from './bot-discovery.ts'
 import { installTeamTools, teamAuthority, teamSettingsSchema } from './team.ts'
-import type { TeamCommand, TeamSettings, TeamView } from './team-types.ts'
+import type { TeamActor, TeamCommand, TeamSettings, TeamView } from './team-types.ts'
+import { imBindingGuide, imCreationAuthority, installIMCreationTool, type IMBotDraft } from './im-bot-creation.ts'
 import type { AccessRemoval, AccessView, BotCapability, SaveCapability, SaveBotCredential } from './access-types.ts'
 import { PermanentChatError } from './external-errors.ts'
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -303,6 +304,9 @@ export class BotMode extends TypertRemoteService {
     const eligible = this.delegationRoster(room, delivery?.localOnly).map(bot => bot.id)
     let canCreate = false
     try { canCreate = !!delivery && teamAuthority(this.state, room, delivery).operations.includes('create-bot') } catch { /* Discovery does not grant mutations. */ }
+    if (room.external && delivery) {
+      try { this.imCreationGrant(this.state, room, delivery); canCreate = true } catch { /* IM creation has a separate, narrow grant. */ }
+    }
     const settings = this.state.teamSettings
     const manager = settings?.operations.includes('create-bot') ? this.state.bots.find(bot => bot.id === settings.botId && !bot.archived) : undefined
     return { bots: this.state.bots, room, botId, eligible, delegationEnabled: !!delivery && humanRequest(room, delivery)?.allowDelegation === true,
@@ -1242,6 +1246,23 @@ export class BotMode extends TypertRemoteService {
     })
     this.invalidateMemoryContext(targets)
   }
+  private imCreationGrant(state: BotState, room: Room, delivery: ChatMessage): TeamActor {
+    return imCreationAuthority(state, room, delivery, { feishu: this.feishu?.snapshot(), infoflow: this.infoflow?.snapshot() })
+  }
+  private async createIMBot(roomId: RoomId, messageId: ChatMessageId, actor: TeamActor, draft: IMBotDraft, callId: string, signal: AbortSignal) {
+    return this.change(state => {
+      signal.throwIfAborted()
+      if (this.closing) throw new Error('Bot Mode is closing')
+      const room = this.room(state, roomId), delivery = findMessage(room, messageId)
+      if (!isDeepStrictEqual(this.imCreationGrant(state, room, delivery), actor)) throw new Error('The IM creation authority has changed')
+      const id = `${messageId}:${callId}`, previous = state.teamAudit?.find(item => item.id === id)
+      if ((state.teamAudit ?? []).filter(item => item.messageId === messageId).length >= 20 && !previous) throw new Error('Bot creation limit reached for this request')
+      const bot = previous ? state.bots.find(item => item.id === previous.targetId) : this.createBotState(state, { id: draft.id, name: draft.name, instructions: draft.instructions, ...(draft.capabilities === undefined ? {} : { capabilities: draft.capabilities }) })
+      if (!bot) throw new Error('The previously created Bot is no longer available')
+      if (!previous) state.teamAudit = [...state.teamAudit ?? [], { id, time: Date.now(), botId: delivery.botId!, roomId, messageId, operation: 'create-bot' as const, targetId: bot.id, actor }].slice(-500)
+      return { operation: 'create-bot', bot: { id: bot.id, name: bot.name, capabilities: bot.capabilities ?? '' }, binding: imBindingGuide() }
+    })
+  }
   private async manageTeam(roomId: RoomId, messageId: ChatMessageId, revision: number, command: TeamCommand, callId: string, signal: AbortSignal): Promise<{ operation: string; targetId: string }> {
     return this.change(async state => {
       signal.throwIfAborted()
@@ -1676,6 +1697,15 @@ export class BotMode extends TypertRemoteService {
         const { current, delivery } = knowledgeContext()
         return discoverBots(this.discoveryContext(current, bot.id, delivery), query, offset)
       }))
+      let imActor: TeamActor | undefined
+      try { imActor = this.imCreationGrant(this.state, room, attempt) } catch { /* Only direct requests from current IM admins can create. */ }
+      if (imActor) {
+        const actor = imActor
+        cleanup.push(installIMCreationTool(agent, (draft, callId) => {
+          knowledgeContext()
+          return this.createIMBot(roomId, attempt.id, actor, draft, callId, deadline.signal)
+        }))
+      }
       let teamGrant: TeamSettings | undefined
       try { teamGrant = teamAuthority(this.state, room, attempt) } catch { /* Normal Bots and external/delegated requests have no team authority. */ }
       if (teamGrant) {

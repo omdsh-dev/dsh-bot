@@ -31,6 +31,8 @@ it('limits IM discovery to eligible current members and private IM to the respon
   input.room.external = { provider: 'feishu', accountId: 'a', kind: 'group', id: 'external-chat' }
   expect(discoverBots(input, '工程').entries.map(item => item.id).sort()).toEqual(['helper', 'writer'])
   expect(discoverBots(input).creation.manager).toBeNull()
+  input.canCreate = true
+  expect(discoverBots(input).creation).toMatchObject({ allowedHere: true, tool: 'create_bot', manager: null })
   input.eligible = []
   expect(discoverBots(input).entries.map(item => item.id)).toEqual(['helper'])
   input.room.kind = 'dm'; input.room.external.kind = 'private'; input.eligible = [input.bots[1]!.id]

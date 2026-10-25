@@ -1,5 +1,12 @@
 # Release notes
 
+## 0.12.0 — local release candidate
+
+- Allow authenticated Feishu and InfoFlow connection administrators to create persistent local Bots by conversation, including directly addressed group messages, without appointing a Main Bot.
+- Return web IM binding instructions after creation. Keep app authorization, credentials and chat binding on the web page.
+- Recheck per-connection administrators and chat access at commit, isolate app-scoped Feishu identities, deduplicate native tool calls, and atomically retain an IM actor audit record. Ordinary users, scheduled/delegated/callback work receive no creation tool.
+- Rename existing stop-command administrators to conversation administrators and explain their creation permission. Main Bot management grants and IM discovery scope are unchanged.
+
 ## 0.11.0 — local release candidate
 
 - Add read-only Bot capability discovery to ordinary conversations, independently of Main Bot management grants. Prefer existing specialists and recommend new Bots only for a useful capability gap.
