@@ -13,7 +13,7 @@
     "setup": "node scripts/setup.mjs",
     "prepare:runtime": "node scripts/setup.mjs --prepare-only",
     "start": "node scripts/start.mjs",
-    "test": "node --test scripts/start.test.mjs && node scripts/test.mjs",
+    "test": "node --test --test-concurrency=1 scripts/start.test.mjs scripts/container-build.test.mjs && node scripts/test.mjs",
     "check": "node scripts/check.mjs",
     "pack": "node scripts/pack.mjs",
     "test:package": "node --test scripts/package.test.mjs",

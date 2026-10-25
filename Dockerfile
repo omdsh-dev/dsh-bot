@@ -13,7 +13,7 @@ COPY .container/runtime.bundle ./.container/runtime.bundle
 RUN node scripts/restore-container-runtime.mjs && node scripts/setup.mjs --prepare-only
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store node --input-type=module -e "import {run,runtime} from './scripts/common.mjs'; run('pnpm',['install','--frozen-lockfile'],{cwd:runtime})"
 COPY . .
-RUN --mount=type=cache,target=/root/.local/share/pnpm/store node scripts/configure-container-build.mjs && DSH_BOT_CONTAINER_BUILD=1 npm run setup
+RUN node scripts/setup.mjs --prepare-only && node scripts/configure-container-build.mjs && DSH_BOT_CONTAINER_BUILD=1 node scripts/build-container.mjs
 
 FROM ${NODE_IMAGE}
 ARG DEBIAN_MIRROR=http://deb.debian.org

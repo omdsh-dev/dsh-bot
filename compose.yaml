@@ -3,8 +3,9 @@ services:
     build: .
     image: dsh-bot:local
     init: true
-    ports:
-      - "127.0.0.1:3093:3093"
+    network_mode: host
+    environment:
+      DSH_BOT_PORT: "${DSH_BOT_PORT:-3093}"
     volumes:
       - bot-data:/data
       - bot-workspace:/workspace

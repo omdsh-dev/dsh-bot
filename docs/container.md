@@ -9,7 +9,9 @@ docker compose up -d
 docker compose logs bot
 ```
 
-Open the native authentication link printed in the container log, replacing its container IP with `127.0.0.1` and keeping port `3093` and its token. Compose publishes only `127.0.0.1:3093`; if another local service owns this port, change the host side of the mapping and use that port in the browser. The service retains DSH authentication and trusted-host checks and runs as UID 1000. It binds its concrete private bridge address through DSH's public host option.
+The native DSH CLI deliberately permits only `127.0.0.1` listening. Compose therefore uses the **host network**, with no port publishing or proxy that changes the listener. Open the native authentication link printed in the container log. The service retains DSH authentication and trusted-host checks and runs as UID 1000. If port 3093 is occupied, use `DSH_BOT_PORT=3094 docker compose up -d`; the health check follows that port.
+
+This deployment supports Docker Engine on Linux. Docker Desktop 4.34 or newer also requires **Settings → Resources → Network → Enable host networking**, followed by Apply and restart. Docker Desktop Enhanced Container Isolation is incompatible with host networking; use the native desktop entry when retaining that setting. See [Docker's host-network requirements](https://docs.docker.com/engine/network/drivers/host/). Host networking shares the host network namespace, while application authentication, filesystem/container isolation and the loopback listener remain in place.
 
 The `bot-data` volume stores all DSH profiles, credentials, Bot state, history, ledger and attachments under `/data`. The `bot-workspace` volume stores task files under `/workspace`. Stop the service and back up both volumes before upgrades; `docker compose down` retains them. Replacing the image does not migrate an existing host data directory automatically. The image starts the base Bot plugin; install optional companions into its Web profile when needed.
 
@@ -26,5 +28,7 @@ Acceptance uses its own container and volumes. It checks anonymous denial, authe
 ```sh
 DSH_BOT_TEST_IMAGE=dsh-bot:local npm run test:container
 ```
+
+On Docker Desktop without host networking enabled, `DSH_BOT_TEST_CONTAINER_INTERNAL=1` runs the same service checks inside the Linux VM; it does **not** verify host-browser reachability. CI runs the default test from the Linux host.
 
 Container acceptance remains pending until recorded in the [completion ledger](feature-completion.md). Source archives have no Git worktree provenance and cannot be mistaken for clean npm release builds.

@@ -14,7 +14,8 @@ for (const face of ['host', 'client']) {
   const name = `tsconfig.${face}.json`, output = `tsconfig.container-${face}.json`
   const { config, error } = ts.readConfigFile(join(runtime, name), file => readFileSync(file, 'utf8'))
   if (error) throw new Error(`Cannot parse the pinned ${name}`)
-  config.exclude = [...new Set([...(config.exclude ?? []), '**/tests/**', '**/__tests__/**', 'benchmarks/**'])]
+  config.exclude = [...new Set([...(config.exclude ?? []), '**/tests/**', '**/__tests__/**', '**/stress-tests/**',
+    '**/*.spec.*', '**/*.test.*', '**/*.e2e.*', '**/*.stress.*', 'benchmarks/**'])]
   // Preserve the patched upstream configs so setup can still verify the integration patch.
   writeFileSync(join(runtime, output), JSON.stringify(config, null, 2) + '\n')
   const script = `build:lib:${face}`
