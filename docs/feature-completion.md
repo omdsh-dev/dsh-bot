@@ -2,12 +2,12 @@
 
 ## Browsable Settings lists (2026-10-25)
 
-Bot 0.10.2 adds automatic recent-history loading, an all-scope memory list with owner labels, and visible model/tool lists with optional filters. Custom model IDs, hidden tool selections, memory ownership and sharing defaults are preserved. The Host and recall isolation are unchanged. The live local profile now runs the clean `182ee6a8b972d1b7e0049ce09f4bcea68dc00004` archive. npm publication remains separate; the public base is still 0.10.0.
+Bot 0.10.2 adds automatic recent-history loading, an all-scope memory list with owner labels, and visible model/tool lists with optional filters. Custom model IDs, hidden tool selections, memory ownership and sharing defaults are preserved. The Host and recall isolation are unchanged. The live local profile now runs Bot 0.10.3 from clean commit `00cd864548ce040a446c6325eb822bbb45810bb4`, including compact tool descriptions and immediate model-loading feedback. npm publication remains separate; the public base is still 0.10.0.
 
-- All 242 source tests passed, including history filtering/pagination races, all-scope memory editing, model discovery failure/retry and filtered tool selections. Distribution metadata, documentation links and whitespace checks passed.
-- The final archive passed shipped-client checks on DSH 0.1.5-rc.2 and 0.2.0-rc.2, plus staged startup on the actual production Host. All 210 staged package files matched their clean archives; Host and RPC artifacts are byte-identical to 0.10.1.
+- All 242 source tests passed, including history filtering/pagination races, all-scope memory editing, model discovery failure/retry and filtered tool selections. After the final tool-list refinement, all 45 panel tests passed again. Distribution metadata, documentation links and whitespace checks passed.
+- The final archive passed shipped-client checks on DSH 0.1.5-rc.2 and 0.2.0-rc.2, plus staged startup on the actual production Host. All 210 staged package files matched their clean archives; Host and RPC artifacts are byte-identical to 0.10.2 (and 0.10.1).
 - Real Chromium checks passed against both an isolated preview and the upgraded live profile: populated memory lists, automatic history loading, visible model/tool lists, navigation, editing and narrow-screen layout, without page errors, saved-setting changes or outgoing messages.
-- A stopped-Host backup is retained at `.runtime/live-upgrade-backups/2026-10-25T05-38-02-555Z`. The upgrade preserved six Bots, fourteen chats and their histories, two memories and both retained delivery failures. All eleven enabled IM bindings reconnected. Feishu 0.6.0 and InfoFlow 0.7.0 are unchanged.
+- A stopped-Host backup is retained at `.runtime/live-upgrade-backups/2026-10-25T05-41-29-950Z`. The upgrade preserved six Bots, fourteen chats and their histories, two memories and both retained delivery failures. All eleven enabled IM bindings reconnected. Feishu 0.6.0 and InfoFlow 0.7.0 are unchanged.
 
 ## Simpler Settings (2026-10-25)
 
