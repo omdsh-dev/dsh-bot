@@ -2,14 +2,16 @@
 
 ## Browsable Settings lists (2026-10-25)
 
-Bot 0.10.2 adds automatic recent-history loading, an all-scope memory list with owner labels, and visible model/tool lists with optional filters. Custom model IDs, hidden tool selections, memory ownership and sharing defaults are preserved. The Host and recall isolation are unchanged. Local installation verification is recorded after the final package checks; npm publication remains separate.
+Bot 0.10.2 adds automatic recent-history loading, an all-scope memory list with owner labels, and visible model/tool lists with optional filters. Custom model IDs, hidden tool selections, memory ownership and sharing defaults are preserved. The Host and recall isolation are unchanged. The live local profile now runs the clean `182ee6a8b972d1b7e0049ce09f4bcea68dc00004` archive. npm publication remains separate; the public base is still 0.10.0.
 
 - All 242 source tests passed, including history filtering/pagination races, all-scope memory editing, model discovery failure/retry and filtered tool selections. Distribution metadata, documentation links and whitespace checks passed.
-- A real Chromium preview verified populated memory lists, automatic history loading, model/tool discovery states, navigation, editing and narrow-screen layout without page errors or outgoing messages.
+- The final archive passed shipped-client checks on DSH 0.1.5-rc.2 and 0.2.0-rc.2, plus staged startup on the actual production Host. All 210 staged package files matched their clean archives; Host and RPC artifacts are byte-identical to 0.10.1.
+- Real Chromium checks passed against both an isolated preview and the upgraded live profile: populated memory lists, automatic history loading, visible model/tool lists, navigation, editing and narrow-screen layout, without page errors, saved-setting changes or outgoing messages.
+- A stopped-Host backup is retained at `.runtime/live-upgrade-backups/2026-10-25T05-38-02-555Z`. The upgrade preserved six Bots, fourteen chats and their histories, two memories and both retained delivery failures. All eleven enabled IM bindings reconnected. Feishu 0.6.0 and InfoFlow 0.7.0 are unchanged.
 
 ## Simpler Settings (2026-10-25)
 
-Bot 0.10.1 is installed in the live local profile from clean source commit `4c107bd19334d5da7fcf332a8a31b47dd7d0311b`. npm `next` remains Bot 0.10.0; this UI update has not been published to npm. Feishu 0.6.0 and InfoFlow 0.7.0 are unchanged.
+Bot 0.10.1 was installed in the live local profile from clean source commit `4c107bd19334d5da7fcf332a8a31b47dd7d0311b`. npm `next` remains Bot 0.10.0; this UI update has not been published to npm. Feishu 0.6.0 and InfoFlow 0.7.0 are unchanged.
 
 - Settings opens with Memory, Model, Schedules and Chat history. Usage limits, Tools & accounts, Team management, Delivery issues and Archive & delete live under More settings.
 - Memory and schedule forms open only when adding or editing. Memory editing shows one focused form; model permissions, prices and budget reservations remain available behind explicit disclosures.
