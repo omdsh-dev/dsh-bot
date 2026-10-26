@@ -59,6 +59,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       try {
         transport = new FeishuTransport(loadSdk(config.endpointTimeoutMs), { ...binding, appSecret, timeoutMs: config.endpointTimeoutMs,
           groupTitles: groupTitleTarget(ctx.botMode, 'feishu', binding.appId, [binding.botId], id => binding.allowAllGroups === true || binding.allowGroups.includes(id)),
+          groupNameStatus: status => manager.groupNameStatus(binding.botId, binding.appId, status),
         }, input => bridge!.receive({ ...input, targets: [binding.botId] }),
           status => { manager.connection(binding.botId, status, status === 'error' ? '长连接异常，请检查事件订阅、应用发布状态和网络后重新启用' : null) }, report, request => ctx.botMode.upload(request), item => ctx.botMode.readAttachment(item))
         bridge = new InfoFlowBridge(ctx.botMode, queue.global, { prepare: input => transport!.prepare(input), send: async delivery => {

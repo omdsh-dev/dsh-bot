@@ -159,14 +159,25 @@ export class FeishuTransport {
   private stopped = false
   private connection: Promise<void> | undefined
   private readonly handlers = new Set<Promise<void>>()
-  constructor(sdk: Sdk, private readonly config: { appId: string; appSecret: string; brand: Brand; botOpenId: string; timeoutMs: number; groupTitles?: GroupTitleTarget; allowUsers?: string[]; allowGroups?: string[]; allowAllGroups?: boolean | undefined }, receive: (input: Incoming) => Promise<unknown>,
+  constructor(sdk: Sdk, private readonly config: { appId: string; appSecret: string; brand: Brand; botOpenId: string; timeoutMs: number; groupTitles?: GroupTitleTarget; groupNameStatus?: (status: NonNullable<FeishuBindingView['groupNameStatus']>) => void; allowUsers?: string[]; allowGroups?: string[]; allowAllGroups?: boolean | undefined }, receive: (input: Incoming) => Promise<unknown>,
     status: (status: FeishuBindingView['status']) => void, private readonly report: () => void, private readonly upload?: (request: UploadRequest) => Promise<ChatAttachment>, private readonly read?: (item: ChatAttachment) => Promise<AttachmentData>) {
     const common = { appId: config.appId, appSecret: config.appSecret, domain: domain(config.brand), logger, cache: tokenCache() }
     this.client = new sdk.Client(common)
     this.titles = new GroupTitles(async id => {
-      const result = object(await this.client.request({ method: 'GET', url: `/open-apis/im/v1/chats/${encodeURIComponent(id)}`, timeout: config.timeoutMs }))
-      if (result.code !== 0) throw new Error('Group metadata unavailable')
-      return object(result.data).name
+      try {
+        const result = object(await this.client.request({ method: 'GET', url: `/open-apis/im/v1/chats/${encodeURIComponent(id)}`, timeout: Math.min(config.timeoutMs, 3000) }))
+        if (result.code !== 0) throw { code: result.code }
+        const title = text(object(result.data).name).trim()
+        if (!title || title.length > 1000) throw new Error('Missing group name')
+        if (!this.stopped) config.groupNameStatus?.('available')
+        return title
+      } catch (cause) {
+        const response = object(object(cause).response), httpStatus = Number(response.status)
+        const code = Number(object(cause).code ?? object(response.data).code)
+        const denied = code === 99991672 && (!Number.isFinite(httpStatus) || httpStatus >= 400 && httpStatus < 500 && httpStatus !== 429)
+        if (!this.stopped) config.groupNameStatus?.(denied ? 'permission-required' : 'unavailable')
+        throw new Error('Group metadata unavailable')
+      }
     }, Math.min(config.timeoutMs, 3000), config.groupTitles, report)
     this.socket = new sdk.WSClient({ ...common, handshakeTimeoutMs: config.timeoutMs,
       onReady: () => { if (!this.stopped) status('connected') }, onReconnected: () => { if (!this.stopped) status('connected') },

@@ -31,6 +31,23 @@ function bench(initial: Settings = { bindings: [], registrations: [], groups: []
     reject: () => reject(new Error('error with secret payload')) }
 }
 const manual = (botId: BotId, appId = `cli_${botId}`) => ({ botId, appId, appSecret: 'private-manual-secret', brand: 'feishu' as const, allowUsers: ['ou_owner'], allowGroups: [], admins: ['ou_owner'] })
+it('keeps permission status separate from connection health and scopes it to the current enabled app', async () => {
+  const f = bench()
+  await f.manager.save(manual(alpha)); await f.manager.toggle({ botId: alpha, enabled: true })
+  f.manager.connection(alpha, 'connected')
+  f.manager.groupNameStatus(alpha, 'cli_other', 'permission-required')
+  expect(f.manager.snapshot().bindings[0]!.groupNameStatus).toBe('unknown')
+  f.manager.groupNameStatus(alpha, 'cli_alpha', 'permission-required')
+  expect(f.manager.snapshot().bindings[0]).toMatchObject({ status: 'connected', error: null, groupNameStatus: 'permission-required' })
+  f.manager.groupNameStatus(alpha, 'cli_alpha', 'available')
+  expect(f.manager.snapshot().bindings[0]!.groupNameStatus).toBe('available')
+  await f.manager.toggle({ botId: alpha, enabled: false })
+  f.manager.groupNameStatus(alpha, 'cli_alpha', 'permission-required')
+  expect(f.manager.snapshot().bindings[0]!.groupNameStatus).toBe('unknown')
+  await f.manager.toggle({ botId: alpha, enabled: true })
+  expect(f.manager.snapshot().bindings[0]!.groupNameStatus).toBe('unknown')
+  await f.manager.close()
+})
 it('cleans superseded and uncommitted secrets without replacing the active credential on storage failure', async () => {
   const f = bench()
   await f.manager.save(manual(alpha)); await f.manager.save(manual(alpha))

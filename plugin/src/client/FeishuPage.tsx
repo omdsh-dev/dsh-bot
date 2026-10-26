@@ -28,7 +28,7 @@ export function FeishuPage({ bots, api, t, createGroup, openRoom, selectRoom }: 
     {!api || snapshot?.available === false ? <p className={css.integrationNotice}>{t('fsUnavailable')}</p> : !snapshot ? <p>{t('loading')}</p> : <div className={css.integrationBody}>
       <nav className={css.integrationBots} aria-label={t('fsChooseBot')}>{bots.map(item => {
         const binding = snapshot.bindings.find(value => value.botId === item.id)
-        return <button type="button" key={item.id} aria-current={bot?.id === item.id ? 'page' : undefined} onClick={() => { setSelected(item.id) }}><Avatar id={item.id}/><span><strong>{item.name}</strong><small>{binding?.robotName || t('ifUnbound')}</small></span><span className={css.connection} data-ready={binding?.status === 'connected'}/></button>
+        return <button type="button" key={item.id} aria-current={bot?.id === item.id ? 'page' : undefined} onClick={() => { setSelected(item.id) }}><Avatar id={item.id}/><span><strong>{item.name}</strong><small>{binding?.robotName || t('ifUnbound')}</small>{binding?.enabled && binding.groupNameStatus === 'permission-required' && <small>{t('fsGroupNameNeedsAccess')}</small>}</span><span className={css.connection} data-ready={binding?.status === 'connected'}/></button>
       })}</nav>
       {bot ? <Editor key={bot.id} bot={bot} binding={snapshot.bindings.find(item => item.botId === bot.id)} registration={snapshot.registrations.find(item => item.botId === bot.id)} api={api} t={t} changed={refresh}/> : <p>{t('empty')}</p>}
     </div>}
@@ -66,6 +66,11 @@ function Editor({ bot, binding, registration, api, t, changed }: { bot: Bot; bin
   const list = (value: string) => value.split(/[,，\s]+/).filter(Boolean)
   return <section className={css.integrationEditor}>
     <div className={css.integrationIdentity}><Avatar id={bot.id} large/><div><h3>{bot.name}</h3><p>@{bot.id}</p></div><span className={css.integrationStatus} data-status={status}>{t(status === 'connected' ? 'fsConnected' : status === 'connecting' ? 'ifConnecting' : status === 'error' ? 'ifConnectionError' : 'ifDisabled')}</span></div>
+    {binding?.enabled && <div className={css.integrationNotice} role={binding.groupNameStatus === 'permission-required' ? 'alert' : 'status'}>
+      <strong>{t(binding.groupNameStatus === 'permission-required' ? 'fsGroupNameNeedsAccess' : binding.groupNameStatus === 'available' ? 'fsGroupNameAvailable' : binding.groupNameStatus === 'unavailable' ? 'fsGroupNameUnavailable' : 'fsGroupNameUnknown')}</strong>
+      {binding.groupNameStatus === 'permission-required' && <><p>{t('fsGroupNamePermissionHelp')}</p><a href={`https://${binding.brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/app/${encodeURIComponent(binding.appId)}/auth?q=im%3Achat%3Aread`} target="_blank" rel="noreferrer noopener">{t('fsGroupNameAuthorize')}</a></>}
+      {binding.groupNameStatus === 'unavailable' && <p>{t('fsGroupNameRetryHelp')}</p>}
+    </div>}
     {!binding && <div className={css.integrationNotice}><strong>{t('fsCreateTitle')}</strong><p>{t('fsCreateHint')}</p>
       <div className={css.integrationActions}><Button variant="primary" disabled={busy || active} onClick={() => { void run(() => api.register(bot.id)) }}>{t('fsCreate')}</Button><Button disabled={active} onClick={() => { setManual(!manual) }}>{t('fsManual')}</Button></div>
     </div>}

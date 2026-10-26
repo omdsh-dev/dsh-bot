@@ -1,9 +1,12 @@
 /** Public Feishu configuration; no credential values or OAuth device codes. */
 import type { BotId, Room, RoomId } from '../types.ts'
 export type Brand = 'feishu' | 'lark'
+export type GroupNameStatus = 'unknown' | 'available' | 'permission-required' | 'unavailable'
 export interface FeishuBindingView {
   botId: BotId; appId: string; botOpenId: string; robotName: string; brand: Brand; enabled: boolean
   status: 'disabled' | 'connecting' | 'connected' | 'error'; error: string | null
+  /** Latest group-information lookup, independent of message connection health. */
+  groupNameStatus?: GroupNameStatus | undefined
   allowUsers: string[]; allowGroups: string[]; allowAllGroups?: boolean | undefined; admins: string[]; credentialsConfigured: boolean
 }
 export interface FeishuRegistration {

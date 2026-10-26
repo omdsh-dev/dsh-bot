@@ -32,6 +32,7 @@ export class FeishuManager implements FeishuControl {
   private closed = false
   private readonly jobs = new Map<string, RegistrationJob>()
   private readonly statuses = new Map<BotId, { status: FeishuBindingView['status']; error: string | null }>()
+  private readonly groupNames = new Map<BotId, { appId: string; status: FeishuBindingView['groupNameStatus'] }>()
   constructor(private readonly store: SettingsStore, private readonly runtime: ManagerRuntime) { this.state = structuredClone(store.get()) }
   private exclusive<T>(action: () => Promise<T>): Promise<T> {
     const next = this.tail.then(action); this.tail = next.catch(() => {}); return next
@@ -44,13 +45,17 @@ export class FeishuManager implements FeishuControl {
   private view(binding: Binding): FeishuBindingView {
     const { secretRef, ...rest } = binding
     return { ...rest, allowUsers: [...binding.allowUsers], allowGroups: [...binding.allowGroups], allowAllGroups: binding.allowAllGroups === true, admins: [...binding.admins], credentialsConfigured: !!secretRef,
-      ...(this.statuses.get(binding.botId) ?? { status: binding.enabled ? 'connecting' : 'disabled', error: null }) }
+      ...(this.statuses.get(binding.botId) ?? { status: binding.enabled ? 'connecting' : 'disabled', error: null }),
+      groupNameStatus: binding.enabled && this.groupNames.get(binding.botId)?.appId === binding.appId ? this.groupNames.get(binding.botId)!.status : 'unknown' }
   }
   private registration(record: RegistrationRecord): FeishuRegistration {
     return structuredClone(this.jobs.get(record.attemptId)?.view ?? { ...record, url: null, qrDataUrl: null, expiresAt: null })
   }
   snapshot(): FeishuState { return { available: true, bindings: this.state.bindings.map(binding => this.view(binding)), registrations: this.state.registrations.map(record => this.registration(record)), groups: structuredClone(this.state.groups) } }
   connection(botId: BotId, status: FeishuBindingView['status'], error: string | null = null): void { this.statuses.set(botId, { status, error }) }
+  groupNameStatus(botId: BotId, appId: string, status: NonNullable<FeishuBindingView['groupNameStatus']>): void {
+    if (!this.closed && this.state.bindings.some(binding => binding.botId === botId && binding.appId === appId && binding.enabled)) this.groupNames.set(botId, { appId, status })
+  }
   private unique(id: string, botId: BotId): void {
     if (this.state.bindings.some(binding => binding.botId !== botId && binding.appId === id)) throw new Error('这个飞书应用已绑定到其他 Bot')
   }
@@ -60,6 +65,7 @@ export class FeishuManager implements FeishuControl {
     catch { throw new Error('验证失败，请检查凭据、机器人能力、应用发布状态和网络') }
   }
   private async activate(binding: Binding): Promise<void> {
+    this.groupNames.delete(binding.botId)
     this.connection(binding.botId, 'connecting')
     try { await this.runtime.start(binding) } catch { this.connection(binding.botId, 'error', '连接启动失败，请验证机器人并重新启用') }
   }

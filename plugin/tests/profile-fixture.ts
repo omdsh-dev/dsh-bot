@@ -365,7 +365,7 @@ export async function apply(ctx: Context): Promise<void> {
       const imHost = await service.createBot({ id: 'im-host', name: 'IM host', instructions: 'Help administrators create specialist Bots.' })
       for (const provider of ['feishu', 'infoflow'] as const) {
         const baseBinding = { botId: imHost.id, enabled: true, status: 'connected' as const, error: null, robotName: 'Fixture', credentialsConfigured: true,
-          allowUsers: ['admin', 'guest'], allowGroups: ['im-group'], admins: ['admin'] }
+          allowUsers: ['admin', 'guest'], allowGroups: ['im-group'], admins: ['admin'], groupNameStatus: 'permission-required' as const }
         const detachIM = provider === 'feishu' ? service.attachFeishu({
           snapshot: () => ({ available: true, registrations: [], groups: [], bindings: [{ ...baseBinding, appId: 'im-app', botOpenId: 'ou_bot', brand: 'feishu' }] }),
           save: unusedIM, verify: unusedIM, toggle: unusedIM, register: unusedIM, cancel: unusedIM, createGroup: unusedIM, resumeGroup: unusedIM,
@@ -384,6 +384,7 @@ export async function apply(ctx: Context): Promise<void> {
             const nativeRequest = requests.at(-1)!
             assert.ok(JSON.stringify(nativeRequest.tools).includes('create_bot'))
             assert.equal(JSON.stringify(nativeRequest.tools).includes('set_group_name'), kind === 'group')
+            if (provider === 'feishu' && kind === 'group') assert.ok(JSON.stringify(nativeRequest.messages).includes('https://open.feishu.cn/app/im-app/auth?q=im%3Achat%3Aread'))
             assert.ok(!JSON.stringify(nativeRequest.tools).includes('team_manage') && !JSON.stringify(nativeRequest.tools).includes('team_list'))
             assert.ok(JSON.stringify(nativeRequest.messages).includes('not-bound') && JSON.stringify(nativeRequest.messages).includes('IM 接入'))
             assert.ok(!JSON.stringify(nativeRequest).includes(specialist.id), 'IM admins cannot browse unrelated Bots')
@@ -402,6 +403,7 @@ export async function apply(ctx: Context): Promise<void> {
               assert.equal(named.title, `${provider} 对话补齐群`)
               assert.equal(namedReply.groupNameUpdate?.actor.senderId, 'admin')
               assert.ok(namedReply.toolDetails?.some(item => item.name === 'set_group_name' && item.result?.includes('saved')))
+              if (provider === 'feishu') assert.ok(namedReply.toolDetails?.some(item => item.result?.includes('permissionHelp') && item.result.includes('im%3Achat%3Aread')))
               assert.deepEqual(named.members.map(item => ({ botId: item.botId, sessionId: item.sessionId })), before.members.map(item => ({ botId: item.botId, sessionId: item.sessionId })))
               assert.equal(named.defaultBot, before.defaultBot)
               await service.submitExternalMessage({ roomId: imRoom.id, sourceAccountId: 'im-app', targets: [imHost.id], text: 'Guest checking tools.', external: { id: `guest-group-${provider}`, sender: { id: 'guest', name: 'Guest' } } })

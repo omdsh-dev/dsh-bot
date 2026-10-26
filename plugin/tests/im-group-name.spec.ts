@@ -1,6 +1,19 @@
 import { expect, it } from 'vitest'
-import { suppliedGroupName } from '../src/im-group-name.ts'
+import { suppliedGroupName, groupNamePermissionHelp, groupNamePrompt } from '../src/im-group-name.ts'
 import { messageSchema } from '../src/domain.ts'
+import type { FeishuBindingView } from '../src/feishu/types.ts'
+import type { BotId } from '../src/types.ts'
+
+it('offers the current app permission link only for a confirmed missing permission', () => {
+  const binding: FeishuBindingView = { botId: 'bot' as BotId, appId: 'cli_current', botOpenId: 'ou_bot', robotName: 'Bot', brand: 'feishu', enabled: true,
+    status: 'connected', error: null, allowUsers: [], allowGroups: [], admins: [], credentialsConfigured: true, groupNameStatus: 'permission-required' }
+  expect(groupNamePermissionHelp(binding)?.url).toBe('https://open.feishu.cn/app/cli_current/auth?q=im%3Achat%3Aread')
+  expect(groupNamePrompt(binding)).toContain('Do not repeat this notice during unrelated discussion')
+  expect(groupNamePermissionHelp({ ...binding, brand: 'lark' })?.url).toContain('open.larksuite.com/app/cli_current/')
+  for (const groupNameStatus of ['unknown', 'available', 'unavailable'] as const) expect(groupNamePermissionHelp({ ...binding, groupNameStatus })).toBeUndefined()
+  expect(groupNamePermissionHelp({ ...binding, enabled: false })).toBeUndefined()
+  expect(groupNamePermissionHelp(undefined)).toBeUndefined()
+})
 
 it('requires a literal current-request name and rejects empty, multiline and excessive names', () => {
   expect(suppliedGroupName(' 产品讨论群 ', '这个群叫「产品讨论群」，补齐到 Web')).toBe('产品讨论群')

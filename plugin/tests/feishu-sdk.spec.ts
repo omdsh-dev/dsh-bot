@@ -30,6 +30,38 @@ it('rejects robot senders, malformed content and mentions of a different robot',
   expect(decodeMessage({ ...incoming(), message: { ...incoming().message, content: '{' } }, 'cli_app', 'ou_robot')).toBeNull()
   expect(decodeMessage(incoming('group'), 'cli_app', 'ou_robot')).toMatchObject({ conversation: { provider: 'feishu', accountId: 'cli_app', id: 'oc_chat', kind: 'group' }, text: 'hello' })
 })
+it.each([
+  { response: { code: 99991672, msg: 'secret detail' }, expected: 'permission-required' },
+  { error: { response: { status: 403, data: { code: 99991672, msg: 'secret detail' } } }, expected: 'permission-required' },
+  { error: { response: { status: 403, data: { code: 230002 } } }, expected: 'unavailable' },
+  { error: { response: { status: 503, data: { code: 99991672 } } }, expected: 'unavailable' },
+  { error: { response: { status: 429, data: { code: 99991672 } } }, expected: 'unavailable' },
+  { error: new Error('network secret'), expected: 'unavailable' },
+  { response: { code: 0, data: { name: '' } }, expected: 'unavailable' },
+  { response: { code: 0, data: { name: '产品讨论群' } }, expected: 'available' },
+])('reports group lookup status without blocking messages or disclosing API details: $expected', async sample => {
+  const status = vi.fn(), b = bench(undefined, { groupNameStatus: status })
+  if ('error' in sample) b.request.mockRejectedValue(sample.error)
+  else b.request.mockResolvedValue(sample.response)
+  await b.emit(incoming('group'))
+  expect(status).toHaveBeenCalledExactlyOnceWith(sample.expected)
+  expect(b.receive).toHaveBeenCalledOnce()
+  expect(JSON.stringify(status.mock.calls)).not.toContain('secret')
+  await b.transport.close()
+})
+it('clears the permission warning after a successful later group lookup', async () => {
+  const status = vi.fn(), b = bench(undefined, { groupNameStatus: status })
+  const now = Date.now(), clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+  try {
+    b.request.mockResolvedValueOnce({ code: 99991672 }).mockResolvedValueOnce({ code: 0, data: { name: '授权后的群名' } })
+    await b.emit(incoming('group'))
+    expect(status).toHaveBeenLastCalledWith('permission-required')
+    clock.mockReturnValue(now + 60001)
+    await b.emit(incoming('group'))
+    expect(status).toHaveBeenLastCalledWith('available')
+    expect(b.receive).toHaveBeenLastCalledWith(expect.objectContaining({ groupTitle: '授权后的群名' }))
+  } finally { clock.mockRestore(); await b.transport.close() }
+})
 it('accepts DM and group events carrying the official dispatcher symbol metadata', async () => {
   const b = bench()
   // EventDispatcher.parse adds an enumerable Symbol('event-type') to every callback payload.

@@ -59,6 +59,8 @@ export async function apply(ctx){
    }
   }
   await wait(()=>bot.feishuSnapshot().bindings.filter(b=>b.status==='connected').length===2);
+  await wait(()=>bot.feishuSnapshot().bindings.find(b=>b.botId==='beta')?.groupNameStatus==='permission-required');
+  assert.equal(bot.feishuSnapshot().bindings.find(b=>b.botId==='beta').status,'connected','Missing metadata permission must not mark messaging as broken');
   const emit=async(app,event_type,event,at)=>{
    const socket=sdk.state.sockets.findLast(s=>s.active&&s.options.appId===app);
    await socket.dispatcher.invoke({schema:'2.0',header:{event_type,app_id:app,create_time:String(at)},event},{needCheck:false});

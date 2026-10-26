@@ -603,6 +603,26 @@ it('binds an existing Feishu app with a write-only secret and explicit allowlist
   expect(feishu.register).not.toHaveBeenCalled()
 })
 
+it('shows an app-specific permission warning and clears it after verification recovers', async () => {
+  const state: FeishuState = { available: true, registrations: [], groups: [], bindings: [{ botId: 'sage' as BotId, appId: 'cli_sage', botOpenId: 'ou_bot', robotName: 'Sage robot', brand: 'feishu', enabled: true,
+    status: 'connected', error: null, credentialsConfigured: true, allowUsers: ['ou_owner'], allowGroups: [], admins: ['ou_owner'], groupNameStatus: 'permission-required' }] }
+  const feishu = { createGroup: vi.fn(), resumeGroup: vi.fn(), snapshot: vi.fn(async () => structuredClone(state)), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), cancel: vi.fn(), register: vi.fn() }
+  await bench({ feishu }); fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
+  const warning = await screen.findByRole('alert')
+  expect(warning.textContent).toContain(en.fsGroupNamePermissionHelp)
+  expect(within(warning).getByRole('link').getAttribute('href')).toBe('https://open.feishu.cn/app/cli_sage/auth?q=im%3Achat%3Aread')
+  expect(screen.getByText(en.fsConnected)).toBeTruthy()
+  state.bindings[0]!.groupNameStatus = 'available'
+  fireEvent.click(screen.getByRole('button', { name: en.ifVerify }))
+  await screen.findByText(en.fsGroupNameAvailable)
+  expect(screen.queryByRole('alert')).toBeNull()
+  state.bindings[0]!.groupNameStatus = 'unavailable'
+  fireEvent.click(screen.getByRole('button', { name: en.ifVerify }))
+  await screen.findByText(en.fsGroupNameRetryHelp)
+  expect(screen.queryByRole('alert')).toBeNull()
+  expect(feishu.save).not.toHaveBeenCalled(); expect(feishu.register).not.toHaveBeenCalled()
+})
+
 it('creates a Feishu group from the selected bot without requiring a manually copied Chat ID', async () => {
   const binding = { botId: 'sage' as BotId, appId: 'cli_sage', botOpenId: 'ou_bot', robotName: 'Sage robot', brand: 'feishu' as const, enabled: true,
     status: 'connected' as const, error: null, credentialsConfigured: true, allowUsers: ['ou_owner'], allowGroups: [], admins: ['ou_owner'] }
