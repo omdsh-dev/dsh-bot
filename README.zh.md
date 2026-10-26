@@ -12,7 +12,7 @@
 
 **如流入口默认隐藏：** 新用户默认隐藏如流配置和建群选项。内部用户可在 **IM 接入 → 高级设置 → 显示如流接入（内部用户）** 开启，设置保存在当前 DSH profile。已有如流绑定或聊天记录的用户升级后保留入口；关闭显示不会停用连接或删除记录。开启显示后仍需安装如流配套插件并配置企业 SDK。
 
-**0.10.0** 增加了聊天管理、历史自动分段、模型和工具候选项、每 Bot 周期预算与并发预留、附件收发与下载、内联问答与审批、离线失败恢复和带时区的日历任务。下表为本次发布包；发布进度及实机验收范围见[完成记录](docs/feature-completion.md)，配置见[功能使用说明](docs/capabilities.md)。
+**0.12.0** 增加了 Bot 能力发现、新建建议，以及通过飞书／如流对话创建 Bot。接入的对话管理员可以私聊或在群里 @ Bot 发起创建，无需先配置 Main Bot；创建后按回复指引到网页完成 IM 绑定。普通聊天用户没有创建权限，新 Bot 使用部署默认配置，不继承创建者 Bot 的工具或凭据授权。设置页也增加了可直接浏览的记忆、历史、模型和工具列表。下表为本次发布包；发布进度及实机验收范围见[完成记录](docs/feature-completion.md)，配置见[功能使用说明](docs/capabilities.md)。
 
 ## 能做什么
 
@@ -47,22 +47,22 @@
 
 | 包 | 版本 | 用途 |
 | --- | --- | --- |
-| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.10.0` | 必装主包，提供 Web 聊天和 IM 配置面板 |
+| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.12.0` | 必装主包，提供 Web 聊天和 IM 配置面板 |
 | [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.6.0` | 可选，提供飞书连接和建群能力 |
 | [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.7.0` | 可选，提供如流连接；需能获取企业 SDK |
 
-**安装时请指定版本号或 `@next`。** 下方命令固定安装本次版本；要安装当前 `next` 标签对应的版本，可使用 `@zzzpyyy/dsh-bot@next`、`@zzzpyyy/dsh-bot-feishu@next` 或 `@zzzpyyy/dsh-bot-infoflow@next`。只填写包名会使用 `latest`，截至 **2026-10-21**，该标签仍指向旧版。
+**安装时请指定版本号或 `@next`。** 下方命令固定安装本次版本；要安装当前 `next` 标签对应的版本，可使用 `@zzzpyyy/dsh-bot@next`、`@zzzpyyy/dsh-bot-feishu@next` 或 `@zzzpyyy/dsh-bot-infoflow@next`。只填写包名会使用 `latest`，截至 **2026-10-26**，该标签仍指向旧版。
 
 上面同一套包已覆盖 DSH **0.1.5-rc.2** 与 **0.2.0-rc.2**，无需为它们选择不同的插件版本。更高 DSH 版本不会仅因版本号变化被拒绝，但尚未验证的版本不等于保证可用；如果上游删除或改变核心接口，仍需适配。飞书和如流包接受主包 `>=0.10.0 <1.0.0`，可接受此协议范围内的兼容更新。从 0.9 升级到 0.10 时须同时升级连接器，历史按需加载需要新的通知游标协议。详见[兼容策略与测试](docs/compatibility.md)。
 
-在 **Desktop → 插件管理器** 安装 `@zzzpyyy/dsh-bot@0.10.0`，再按需向同一个 profile 添加配套插件。
+在 **Desktop → 插件管理器** 安装 `@zzzpyyy/dsh-bot@0.12.0`，再按需向同一个 profile 添加配套插件。
 
 飞书安装若报 `ERR_PNPM_IGNORED_BUILDS: protobufjs`，按[飞书安装说明](docs/feishu.zh.md#安装与开发)在目标 profile 中明确禁用该可选安装脚本，再重试。
 
 已有兼容版本的 **DSH CLI Web profile** 可执行：
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot@0.10.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot@0.12.0
 # 可选：接入飞书
 dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.6.0
 ```

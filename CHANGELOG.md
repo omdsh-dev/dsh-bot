@@ -1,6 +1,6 @@
 # Release notes
 
-## 0.12.0 — local release candidate
+## 0.12.0 — experimental next
 
 - Allow authenticated Feishu and InfoFlow connection administrators to create persistent local Bots by conversation, including directly addressed group messages, without appointing a Main Bot.
 - Return web IM binding instructions after creation. Keep app authorization, credentials and chat binding on the web page.

@@ -8,9 +8,11 @@ This is an independent, experimental community plugin. It is not an official Dee
 
 **InfoFlow is hidden by default:** New profiles hide InfoFlow configuration and group creation. Internal users can enable **IM connections → Advanced settings → Show InfoFlow integration (internal users)**. The preference persists in the DSH profile. Existing bindings or chats retain their entry on upgrade; hiding it preserves connections and history. The optional companion and enterprise SDK are still required.
 
-**Version 0.10.0** runs the same packages on **DSH 0.1.5-rc.2 and 0.2.0-rc.2**, with Web, Feishu and InfoFlow in one Bot workspace. Configure both IM platforms under **DSH Bots → IM connections**, bind each platform's robot to a Bot, and create platform groups from DSH.
+**Version 0.12.0** runs the same packages on **DSH 0.1.5-rc.2 and 0.2.0-rc.2**, with Web, Feishu and InfoFlow in one Bot workspace. Configure both IM platforms under **DSH Bots → IM connections**, bind each platform's robot to a Bot, and create platform groups from DSH.
 
 One Bot can use Feishu and InfoFlow at the same time. Bot instructions, models and tools are shared; conversation histories and reply destinations stay separate by platform and chat. Files and external memory accessed through tools still follow the deployment's permissions.
+
+Version **0.12.0** adds capability discovery, specialist recommendations and Bot creation through Feishu/InfoFlow conversations. Connection administrators can ask a Bot to create a persistent specialist in a private chat or by mentioning it in a group; the reply guides the operator to the web IM binding page. This does not require appointing a Main Bot. Ordinary chat users cannot create Bots, and new Bots receive the deployment defaults without inheriting private tool or credential grants. Settings now include browsable memory, history, model and tool lists.
 
 Version **0.10.0** adds scoped global/Bot/group/user memory, memory conflict review, per-response context inspection, an independent usage ledger, persistent transcript search, explicit per-Bot MCP/skill/credential grants, isolated browsers, declarative cards and Main Bot team management. Native desktop and Docker source entry points are included. Publication and acceptance remain tracked in the [completion ledger](docs/feature-completion.md); see the [capability guide](docs/capabilities.md) for operational limits.
 
@@ -47,22 +49,22 @@ This release uses the experimental `next` tag on npm.
 
 | Package | Version | Purpose |
 | --- | --- | --- |
-| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.10.0` | Required base: Web chats and the IM configuration panel |
+| [@zzzpyyy/dsh-bot](https://www.npmjs.com/package/@zzzpyyy/dsh-bot) | `0.12.0` | Required base: Web chats and the IM configuration panel |
 | [@zzzpyyy/dsh-bot-feishu](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-feishu) | `0.6.0` | Optional Feishu connection and group creation |
 | [@zzzpyyy/dsh-bot-infoflow](https://www.npmjs.com/package/@zzzpyyy/dsh-bot-infoflow) | `0.7.0` | Optional InfoFlow connection; requires enterprise SDK access |
 
-**Specify a version or `@next` when installing.** The examples below pin this release. To install the version currently tagged `next`, use `@zzzpyyy/dsh-bot@next`, `@zzzpyyy/dsh-bot-feishu@next`, or `@zzzpyyy/dsh-bot-infoflow@next`. Installing a bare package name uses `latest`, which points to older releases as of **2026-10-21**.
+**Specify a version or `@next` when installing.** The examples below pin this release. To install the version currently tagged `next`, use `@zzzpyyy/dsh-bot@next`, `@zzzpyyy/dsh-bot-feishu@next`, or `@zzzpyyy/dsh-bot-infoflow@next`. Installing a bare package name uses `latest`, which points to older releases as of **2026-10-26**.
 
 Use the same package set above on DSH **0.1.5-rc.2** and **0.2.0-rc.2**. Later DSH versions are admitted without a new plugin release, but acceptance is not a guarantee of compatibility with untested or changed interfaces. Feishu and InfoFlow accept Bot `>=0.10.0 <1.0.0`, for compatible updates within this contract. Upgrading from Bot 0.9 requires upgrading the connectors together because historical snapshots now load on demand. See the [compatibility policy and matrix](docs/compatibility.md).
 
-In **Desktop → plugin manager**, install `@zzzpyyy/dsh-bot@0.10.0`, then add the optional companion packages you need to the same profile.
+In **Desktop → plugin manager**, install `@zzzpyyy/dsh-bot@0.12.0`, then add the optional companion packages you need to the same profile.
 
 If Feishu installation reports `ERR_PNPM_IGNORED_BUILDS` for `protobufjs`, explicitly disable that optional install script in the profile as described in the [Feishu guide](docs/feishu.zh.md#安装与开发), then retry.
 
 For an existing compatible **DSH CLI Web profile**, use:
 
 ```sh
-dsh plugin --profile web add @zzzpyyy/dsh-bot@0.10.0
+dsh plugin --profile web add @zzzpyyy/dsh-bot@0.12.0
 # Optional: Feishu integration
 dsh plugin --profile web add @zzzpyyy/dsh-bot-feishu@0.6.0
 ```
