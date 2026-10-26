@@ -9,7 +9,7 @@ export const IM_GROUP_NAME_RULES = 'When the current human asks to fill or corre
 export function groupNamePermissionHelp(binding: FeishuBindingView | undefined) {
   if (!binding?.enabled || binding.groupNameStatus !== 'permission-required') return undefined
   return { permission: 'im:chat:read', url: `https://${binding.brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/app/${encodeURIComponent(binding.appId)}/auth?q=im%3Achat%3Aread`,
-    instructions: '当前机器人读取群信息时被飞书拒绝。请应用管理员开通 im:chat:read，发布应用并完成组织审批；生效后自动补查群名。也可由对话管理员明确提供名称，先补齐 Web 显示名。' }
+    instructions: '当前机器人读取群信息时被飞书拒绝。请应用管理员开通 im:chat:read；如飞书页面要求，再完成应用发布和组织审批。生效后自动补查群名。也可由对话管理员明确提供名称，先补齐 Web 显示名。' }
 }
 
 export function groupNamePrompt(binding?: FeishuBindingView): string {
