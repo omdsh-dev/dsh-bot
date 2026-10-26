@@ -1,5 +1,18 @@
 # Bot capability completion
 
+
+## IM group name synchronization (2026-10-26)
+
+Bot 0.12.2 with Feishu 0.6.1 and InfoFlow 0.7.1 now reads group names from the receiving robot's official group-information API. Incoming group messages carry the name through durable admission; already linked, still-authorized groups refresh in the background and after startup. The chat list and managed-group list use the same saved title. No IM messages or model calls are needed for name refresh.
+
+- Metadata lookups coalesce, use a bounded cache/retry interval and wait at most three seconds for the provider. Missing permissions, empty names and network failures preserve the current name. Group identity, histories, members and default Bots are retained; private chats and groups belonging to other providers are excluded.
+- Restart/reconnect no longer replays an old creation title over a synchronized name. A newly linked room that only has a provider/ID placeholder still receives the name supplied at creation, even when group-reading permission is unavailable.
+- Feishu registration requests `im:chat:read`; existing bindings have a matching permission link and a synchronization explanation in the web page. The pinned InfoFlow SDK's numeric-ID conversion is guarded against unsafe integers.
+- All 261 source tests passed before the final edge-case refinement; the affected tests passed again afterward (100 connector/owner tests, then 43 owner/refresh tests for the final refinement). Full Desktop/Web/restart/isolation package checks passed on DSH 0.1.5-rc.2 and 0.2.0-rc.2; both connectors were rechecked on both versions against the final 0.12.2 archive. The shipped client passed on DSH 0.2.0-rc.2; the final client/codecs differ only in diagnostic source-line numbers. Real-runtime staged startup and archive-byte verification also passed.
+- Local rollout installed clean base commit `fa573de4911b1a280bafe8add67d49bbd293a6f3` with the companions from `95b4e66a940cf37ee03997d8eb755275e62ac2d0`. Backup: `.runtime/live-upgrade-backups/2026-10-26T07-34-09-001Z`. All six Bots, fourteen chats and histories, two memories, two retained delivery failures, access settings and Main Bot grants were preserved; all eleven IM connections reconnected. Browser verification confirmed the group list, synchronization hint and permission link.
+- Read-only live checks succeeded for InfoFlow. Feishu currently returns `99991672` for existing applications; the user will enable `im:chat:read` and publish/approve the `dsh` and `reviewer` apps, which cover the three existing Feishu groups. Live Feishu title verification remains pending that external authorization. No real test messages were sent.
+- npm authentication/publication is paused at the user's request. These versions are installed locally and have not been published to npm.
+
 ## Bot creation from Feishu and InfoFlow (2026-10-25)
 
 Bot 0.12.0 lets the responding connection’s administrators create persistent local Bots through direct IM messages or directly addressed group messages. An ordinary Bot can provide this entry point without being appointed Main Bot. Creation returns the new Bot identity and the web path for IM binding; app authorization, credentials, access lists and external invitations stay in the web setup flow.
