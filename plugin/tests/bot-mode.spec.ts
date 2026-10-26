@@ -56,6 +56,8 @@ it.each(['feishu', 'infoflow'] as const)('syncs %s group names from a receiving 
   expect(b.service.snapshot().rooms[0]).toMatchObject({ id: room.id, title: '产品讨论二组', members, messages, defaultBot: room.defaultBot })
   await b.service.ensureExternalRoom({ ...request, title: room.title })
   expect(b.service.snapshot().rooms[0]!.title).toBe('产品讨论二组')
+  await b.service.ensureExternalRoom({ ...request, conversation: room.external, title: '最初建群名称', preserveTitle: true })
+  expect(b.service.snapshot().rooms[0]!.title).toBe('产品讨论二组')
   const configured = { title: '最初建群名称', groupId: room.external.id, chatId: room.external.id }
   Reflect.set(b.service, provider, { snapshot: () => ({ available: true, bindings: [], groups: [configured], registrations: [] }) })
   expect((provider === 'feishu' ? b.service.feishuSnapshot() : b.service.infoflowSnapshot()).groups[0]!.title).toBe('产品讨论二组')

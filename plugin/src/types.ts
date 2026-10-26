@@ -20,7 +20,7 @@ export interface ExternalConversation { provider: 'infoflow' | 'feishu'; account
 /** Original human identity and provider message receipt. */
 export interface ExternalMessage { id: string; sender: { id: string; name: string }; sources?: { accountId: string; senderId: string }[] | undefined }
 /** Create or resolve a dedicated external room without reusing a local DM. */
-export interface ExternalRoomRequest { conversation: ExternalConversation; title: string; botIds: BotId[]; defaultBot: BotId }
+export interface ExternalRoomRequest { conversation: ExternalConversation; title: string; botIds: BotId[]; defaultBot: BotId; preserveTitle?: boolean }
 /** Idempotent Host-only ingress. A busy result leaves the request uncommitted. */
 export interface ExternalSendRequest extends SendRequest { external: ExternalMessage; sourceAccountId?: string; allowDelegation?: boolean }
 /** Accepted receipts return this delivery's target response IDs, including on redelivery. */

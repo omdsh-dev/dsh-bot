@@ -28,13 +28,13 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
   const resolve = async (ref: string) => (await ctx.credentials.resolve(credentialRef(ref)))?.value
   const link = (group: InfoFlowGroupView): Promise<Room> => {
     const existing = shared.get(group.groupId)
-    if (existing) return Promise.resolve(existing.room)
+    if (existing) return Promise.resolve(ctx.botMode.snapshot().rooms.find(room => room.id === existing.room.id) ?? existing.room)
     const pending = opening.get(group.groupId)
     if (pending) return pending
     const task = (async () => {
       const accountId = `group:${group.groupId}`
       const room = await ctx.botMode.ensureExternalRoom({ conversation: { provider: 'infoflow', accountId, kind: 'group', id: group.groupId },
-        title: group.title, botIds: group.botIds, defaultBot: group.defaultBot })
+        title: group.title, preserveTitle: true, botIds: group.botIds, defaultBot: group.defaultBot })
       const name = queueName(accountId)
       const domain = await queues.open(name)
       try {

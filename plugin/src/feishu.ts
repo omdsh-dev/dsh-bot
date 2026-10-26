@@ -40,7 +40,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     linkGroup: async (group, bindings) => {
       if (!group.chatId) throw new Error('Created chat ID required')
       return ctx.botMode.ensureExternalRoom({ conversation: { provider: 'feishu', accountId: `group:${group.chatId}`, kind: 'group', id: group.chatId },
-        title: group.title, botIds: bindings.map(binding => binding.botId), defaultBot: group.creatorBot })
+        title: group.title, preserveTitle: true, botIds: bindings.map(binding => binding.botId), defaultBot: group.creatorBot })
     },
     unset: ref => ctx.credentials.unset(credentialRef(ref)),
     resolve, set: (ref, value) => ctx.credentials.set(credentialRef(ref), value), stop,

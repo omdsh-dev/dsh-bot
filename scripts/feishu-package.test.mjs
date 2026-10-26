@@ -154,7 +154,10 @@ export async function apply(ctx) {
     assert.ok(request,'Missing model request for '+marker);
     const system=JSON.stringify(request.messages.filter(m=>m.role==='system'));
     assert.ok(system.includes(marker.endsWith('ALPHA')?'PERSONA_ALPHA':'PERSONA_BETA'),'All four entry points must use the selected Bot identity');
-    assert.deepEqual(toolNames(request),toolNames(modelRequests[0]),'All entry points use the same native tool preset');
+    const commonTools=value=>toolNames(value).filter(name=>name!=='create_bot');
+    assert.deepEqual(commonTools(request),commonTools(modelRequests[0]),'All entry points use the same native tool preset');
+    assert.equal(toolNames(request).includes('create_bot'),marker.startsWith('FS_'),'Only authenticated IM admins receive narrow Bot creation');
+    assert.ok(!toolNames(request).some(name=>name==='team_manage'||name==='team_list'));
     for(const other of markers) if(other!==marker && !(marker.startsWith('FS_GROUP_')&&other.startsWith('FS_GROUP_'))) assert.ok(!JSON.stringify(request.messages).includes(other),'Conversation history leaked from '+other+' to '+marker);
     if(marker==='FS_GROUP_BETA') assert.ok(JSON.stringify(request.messages).includes('FS_GROUP_ALPHA'),'The second Bot sees the same group history');
    }
