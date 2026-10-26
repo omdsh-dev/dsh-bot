@@ -99,5 +99,8 @@ function Editor({ bot, binding, registration, api, t, changed }: { bot: Bot; bin
     {error && <p role="alert" className={css.error}>{error}</p>}{message && <p role="status" className={css.integrationHint}>{message}</p>}
     <p className={css.integrationHint}>{t('fsPermissionHint')}</p>
     <p className={css.integrationHint}>{t('fsGroupNameHint')} {binding && <a href={`https://${binding.brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/app/${encodeURIComponent(binding.appId)}/auth?q=im%3Achat%3Aread`} target="_blank" rel="noreferrer noopener">{t('fsGroupNameAuthorize')}</a>}</p>
+    <details><summary>{t('fsGroupEventsSetup')}</summary><p className={css.integrationHint}>{t('fsGroupEventsHint')}</p>
+      <p className={css.integrationHint}>{binding && <><a href={`https://${binding.brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/app/${encodeURIComponent(binding.appId)}/auth?q=im%3Achat.members%3Abot_access`} target="_blank" rel="noreferrer noopener">{t('fsGroupEventsAuthorize')}</a>{' · '}</>}<a href={`https://${binding?.brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/document/server-docs/group/chat-member/event/added-2`} target="_blank" rel="noreferrer noopener">{t('fsGroupEventsGuide')}</a></p>
+    </details>
   </section>
 }

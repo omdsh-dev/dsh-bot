@@ -116,6 +116,15 @@ Desktop 可在插件管理器中按相同顺序安装这两个精确版本。包
 
 ### 群名同步
 
-IM 中创建的群首次向机器人发送消息时，连接器读取飞书群信息，将群名显示在 Web 聊天列表。已接入的群启动时补查，此后约每分钟检查一次，因此在飞书里改名后不必再次发消息。群 ID、聊天记录、Bot 成员和默认 Bot 不变；查询失败或返回空群名时保留已有名称。只同步当前机器人已接入且仍被允许的群，不扫描其他群。
+Bot 0.12.3 与飞书连接器 0.6.2 支持两条来源：
 
-如果仍显示“飞书 · 群 ID”，在 **IM 接入 → 飞书 → 对应 Bot → 开通群名读取权限** 补齐 `im:chat:read`，发布应用并完成审批。名称读取失败不会阻止正常消息处理。依据：[获取群信息](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/chat/get)。
+- **事件推送**：订阅 `im.chat.member.bot.added_v1`（机器人进群）后，从事件 `name` 保存入群时的名称。符合当前绑定允许群列表（或已启用“所有群”）的新群会出现在 Web 中，无需先发消息。订阅 `im.chat.updated_v1`（群配置修改）后，从 `after_change.name` 同步改名；仅修改头像等其他字段的事件不会清空群名。
+- **群信息查询**：首次群消息、服务启动及后台定期刷新会查询群名，为已有群补齐名称。查询失败或返回空名称时保留已知名称；先前查询和排队消息不会覆盖刚收到的事件名称。
+
+进群事件需要 `im:chat.members:bot_access`，或接口认可的等效权限。只开通这项权限也能记录入群时的群名，但无法补查未收到事件的历史群，或持续追踪后续改名。群信息查询与改名事件需要 `im:chat:read`、`im:chat:readonly`、`im:chat` 中适用的群信息权限；通常申请较窄的 `im:chat:read` 即可。普通消息事件只有群 ID，不提供群名称。
+
+新应用扫码创建会一并申请进群权限并订阅上述事件。**已有应用**需在飞书开放平台开启权限，在长连接事件列表中添加“机器人进群”“群配置修改”，发布应用并完成组织审批。Web 的 **IM 接入 → 飞书 → 对应 Bot → 群名同步设置** 提供说明和权限链接。更新本地连接器不会自动修改已发布应用的权限和事件列表。
+
+所有更新保留群 ID、聊天记录和默认 Bot；进群事件仅加入当前已授权绑定的 Bot，不扫描或接入未允许的群。不调用模型、不发送 IM 消息。连接期间按事件时间忽略旧事件；收到重投时可重试失败的持久化。重启保留已保存群名；历史事件时间只在当前连接内去重，跨重启的完整校正仍依赖群信息查询。
+
+依据：[机器人进群](https://open.feishu.cn/document/server-docs/group/chat-member/event/added-2)、[群配置修改](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/chat/events/updated)、[获取群信息](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/chat/get)。

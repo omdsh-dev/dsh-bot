@@ -1,5 +1,10 @@
 # Release notes
 
+## 0.12.3 — Feishu group-name events (local release; npm publication paused)
+
+- Feishu 0.6.2 records names from bot-join events without a chat-information lookup, links allowed new groups to Web, and applies rename events directly. New app registration requests the event subscriptions and bot-access scope; existing apps have setup guidance and permission links.
+- Keep event names on metadata permission failures, reject older event replays within the connection, serialize writes, and prevent in-flight lookups or queued messages from restoring stale names. Event handling does not invoke models or send messages. InfoFlow 0.7.1 remains unchanged.
+
 ## 0.12.2 — Preserve managed group names without read permission
 
 - Reconnecting keeps synchronized group names, while a newly linked room with only a provider/ID placeholder still receives the name supplied at creation. Feishu 0.6.1 and InfoFlow 0.7.1 remain compatible.

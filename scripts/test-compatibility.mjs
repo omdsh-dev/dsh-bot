@@ -16,7 +16,7 @@ for (const { version } of compatibility.tested) {
   console.log(`Testing unchanged release archives on DSH ${version}`)
   run(process.execPath, ['--test', '--test-concurrency=1', 'scripts/compatibility.test.mjs', 'scripts/package.test.mjs',
     'scripts/install.test.mjs', 'scripts/infoflow-package.test.mjs', 'scripts/infoflow-managed-package.test.mjs',
-    'scripts/feishu-package.test.mjs', 'scripts/im-isolation-package.test.mjs', 'scripts/im-delegation-package.test.mjs'], {
+    'scripts/feishu-package.test.mjs', 'scripts/feishu-group-events-package.test.mjs', 'scripts/im-isolation-package.test.mjs', 'scripts/im-delegation-package.test.mjs'], {
     cwd: root, env: { ...process.env, DSH_BOT_TEST_VERSION: version },
   })
   run(process.execPath, ['scripts/test-client-package.mjs'], { cwd: root, env: { ...process.env, DSH_BOT_TEST_VERSION: version } })

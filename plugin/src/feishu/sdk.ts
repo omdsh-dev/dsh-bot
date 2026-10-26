@@ -112,8 +112,8 @@ export async function createGroup(sdk: Sdk, appId: string, appSecret: string, br
 export function register(sdk: Sdk, options: RegistrationOptions): Promise<RegistrationResult> {
   return sdk.registerApp({ signal: options.signal, source: 'dsh-bot', createOnly: true, onQRCodeReady: options.qr,
     appPreset: { name: options.name, desc: 'DSH Bot 独立 AI 助手' },
-    addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:chat:create', 'im:resource', 'im:chat:read'] },
-      events: { items: { tenant: ['im.message.receive_v1'] } } } })
+    addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:chat:create', 'im:resource', 'im:chat:read', 'im:chat.members:bot_access'] },
+      events: { items: { tenant: ['im.message.receive_v1', 'im.chat.member.bot.added_v1', 'im.chat.updated_v1'] } } } })
 }
 export async function qrImage(url: string): Promise<string> {
   const parsed = new URL(url)
@@ -171,7 +171,22 @@ export class FeishuTransport {
     this.socket = new sdk.WSClient({ ...common, handshakeTimeoutMs: config.timeoutMs,
       onReady: () => { if (!this.stopped) status('connected') }, onReconnected: () => { if (!this.stopped) status('connected') },
       onReconnecting: () => { if (!this.stopped) status('connecting') }, onError: () => { if (!this.stopped) status('error') } })
-    const dispatcher = new sdk.EventDispatcher({ logger }).register({ 'im.message.receive_v1': async event => {
+    const groupEvent = async (event: unknown, joined: boolean) => {
+      if (this.stopped) return
+      const body = object(event), id = text(body.chat_id)
+      if (body.app_id !== undefined && body.app_id !== config.appId || !/^oc_[\w-]{1,128}$/.test(id)
+        || config.allowGroups && !config.allowAllGroups && !config.allowGroups.includes(id)) return
+      const time = Number(body.create_time)
+      const task = this.titles.observe(id, joined ? body.name : object(body.after_change).name,
+        { joined, at: Number.isSafeInteger(time) && time > 0 ? time : undefined })
+        .catch(() => { this.report(); throw new Error('DSH could not persist the group name; retry this event') })
+      this.handlers.add(task)
+      try { await task } finally { this.handlers.delete(task) }
+    }
+    const dispatcher = new sdk.EventDispatcher({ logger }).register({
+      'im.chat.member.bot.added_v1': event => groupEvent(event, true),
+      'im.chat.updated_v1': event => groupEvent(event, false),
+      'im.message.receive_v1': async event => {
       if (this.stopped) return
       const input = decodeMessage(event, config.appId, config.botOpenId)
       if (!input) return

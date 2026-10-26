@@ -1,5 +1,13 @@
 # Bot capability completion
 
+## Feishu group-name event fallback (2026-10-26)
+
+Bot 0.12.3 and Feishu 0.6.2 add names from `im.chat.member.bot.added_v1` and `im.chat.updated_v1`. An allowed bot-join event can create the Web group before any message arrives; shared groups retain their default Bot and existing members. New registration requests `im:chat.members:bot_access` and both event subscriptions. Existing apps have Web setup guidance and direct permission links; their published app configuration is not changed automatically.
+
+- Events do not query the metadata API, invoke a model, or send an IM message. The connector rejects other apps, invalid names and disallowed groups. Metadata failures retain event names; in-flight lookups and queued messages cannot restore an earlier name. Writes are serialized and drained on close, and failed event writes can be retried. Event ordering is tracked within the current connection; saved names survive restart, while cross-restart correction still relies on authorized group-information queries.
+- Build/type checks, all 269 source tests and both launcher/container tests passed. The installed-package fixture uses the actual pinned SDK dispatcher with simulated Feishu transport: it verifies join/rename events, unknown allowed groups, rejected groups, shared membership/defaults, no message/model work, and restart persistence while every chat-information query returns `99991672`. All four real SDK contract tests also passed. The fixture is included in `test:feishu-package` and the compatibility matrix.
+- InfoFlow 0.7.1 is unchanged. npm publication remains paused. Live permission/subscription configuration and receipt of real Feishu events remain external prerequisites; isolated fixtures do not claim tenant authorization.
+
 
 ## IM group name synchronization (2026-10-26)
 

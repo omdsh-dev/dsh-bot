@@ -1,6 +1,6 @@
 {
   "name": "dsh-bot",
-  "version": "0.12.2",
+  "version": "0.12.3",
   "private": true,
   "type": "module",
   "description": "Persistent AI teammates and multi-Bot chats, as a native DeepSeek Harness plugin.",
@@ -24,7 +24,7 @@
     "test:infoflow-package": "node --test scripts/infoflow-package.test.mjs",
     "test:infoflow-managed-package": "node --test scripts/infoflow-managed-package.test.mjs",
     "pack:feishu": "node scripts/pack-feishu.mjs",
-    "test:feishu-package": "node --test scripts/feishu-package.test.mjs",
+    "test:feishu-package": "node --test scripts/feishu-package.test.mjs scripts/feishu-group-events-package.test.mjs",
     "test:im-isolation-package": "node --test scripts/im-isolation-package.test.mjs",
     "test:im-delegation-package": "node --test scripts/im-delegation-package.test.mjs",
     "test:compatibility": "node scripts/test-compatibility.mjs",

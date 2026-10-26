@@ -4,6 +4,7 @@ import type { BotId, BotState, ExternalConversation, ExternalRoomRequest, Room }
 export interface GroupTitleTarget {
   groups(): string[]
   update(id: string, title: string): Promise<void>
+  join?(id: string, title: string): Promise<void>
 }
 
 /** Only revisit groups already linked to this robot and still allowed by its binding. */
@@ -19,13 +20,25 @@ export function groupTitleTarget(bots: { snapshot(): BotState; ensureExternalRoo
       await bots.ensureExternalRoom({ conversation: { provider, accountId, kind: 'group', id }, title,
         botIds: [], defaultBot: room.defaultBot })
     },
+    join: async (id, title) => {
+      if (!allowed(id) || !botIds.length) return
+      await bots.ensureExternalRoom({ conversation: { provider, accountId, kind: 'group', id }, title,
+        botIds, defaultBot: botIds[0]! })
+    },
   }
+}
+
+interface CachedTitle { title?: string | undefined; nextAt: number; eventAt?: number | undefined; joined?: boolean }
+function validTitle(value: unknown): string | undefined {
+  const title = typeof value === 'string' ? value.trim() : ''
+  return title && title.length <= 1000 ? title : undefined
 }
 
 /** Coalesce lookups, bound retries/cache size, and refresh existing groups without sending messages. */
 export class GroupTitles {
-  private readonly cache = new Map<string, { title?: string; nextAt: number }>()
+  private readonly cache = new Map<string, CachedTitle>()
   private readonly pending = new Map<string, Promise<string | undefined>>()
+  private readonly writes = new Map<string, Promise<void>>()
   private timer: ReturnType<typeof setInterval> | undefined
   private refresh: Promise<void> | undefined
   private stopped = false
@@ -44,24 +57,59 @@ export class GroupTitles {
         const value = await Promise.race([this.lookup(id), new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new Error('Group title lookup timed out')), this.timeoutMs); timer.unref()
         })])
-        const title = typeof value === 'string' ? value.trim() : ''
+        // An event arriving during the lookup is newer than this request's view.
+        if (this.cache.get(id) !== cached) return this.cache.get(id)?.title
+        const title = validTitle(value)
         // Provider metadata is display text only. Empty/invalid metadata must never clear a title.
-        if (!title || title.length > 1000) throw new Error('Missing group title')
+        if (!title) throw new Error('Missing group title')
         if (!this.stopped) {
-          this.remember(id, { title, nextAt: Date.now() + 60000 })
-          await this.target?.update(id, title)
+          const entry = { ...cached, title, nextAt: Date.now() + 60000 }
+          this.remember(id, entry)
+          await this.persist(id, entry)
         }
-        return title
+        return this.cache.get(id)?.title
       } catch {
-        if (!this.stopped) { this.remember(id, { nextAt: Date.now() + 60000 }); this.report() }
-        return undefined
+        if (!this.stopped) {
+          const current = this.cache.get(id)
+          // Missing API permission must not discard a name supplied by an event.
+          if (current === cached) this.remember(id, { ...cached, nextAt: Date.now() + 60000 })
+          this.report()
+        }
+        return this.cache.get(id)?.title
       } finally { if (timer) clearTimeout(timer) }
     })().finally(() => { this.pending.delete(id) })
     this.pending.set(id, task)
     return task
   }
 
-  private remember(id: string, value: { title?: string; nextAt: number }): void {
+  /** Authenticated provider events bypass metadata API permissions, but never the binding allowlist. */
+  async observe(id: string, value: unknown, options: { at?: number | undefined; joined?: boolean } = {}): Promise<void> {
+    const title = validTitle(value)
+    if (this.stopped || !title) return
+    const current = this.cache.get(id), at = options.at
+    if (at !== undefined && current?.eventAt !== undefined
+      && (at < current.eventAt || at === current.eventAt && title !== current.title)) return
+    const entry = { title, nextAt: Date.now() + 60000, eventAt: at ?? current?.eventAt, joined: options.joined || current?.joined || false }
+    this.remember(id, entry)
+    // Re-delivery retries a failed write even when its timestamp/name is unchanged.
+    await this.persist(id, entry)
+  }
+
+  private persist(id: string, entry: CachedTitle): Promise<void> {
+    const task = (this.writes.get(id) ?? Promise.resolve()).catch(() => {}).then(async () => {
+      if (this.cache.get(id) !== entry || !entry.title) return
+      if (entry.joined && this.target?.join) {
+        await this.target.join(id, entry.title)
+        const current = this.cache.get(id)
+        if (current) current.joined = false
+      }
+      else await this.target?.update(id, entry.title)
+    }).finally(() => { if (this.writes.get(id) === task) this.writes.delete(id) })
+    this.writes.set(id, task)
+    return task
+  }
+
+  private remember(id: string, value: CachedTitle): void {
     this.cache.delete(id); this.cache.set(id, value)
     if (this.cache.size > 1000) this.cache.delete(this.cache.keys().next().value!)
   }
@@ -82,6 +130,7 @@ export class GroupTitles {
     if (this.timer) clearInterval(this.timer)
     await this.refresh
     await Promise.allSettled(this.pending.values())
+    await Promise.allSettled(this.writes.values())
     this.cache.clear()
   }
 }

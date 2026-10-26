@@ -246,7 +246,9 @@ export class InfoFlowBridge {
       if (item.binding.botIds.some(id => !known.includes(id))) { await this.finish(item, '配置的 Bot 不存在，请部署者检查机器人配置。'); continue }
       let committed = false
       try {
-        const room = await this.bots.ensureExternalRoom(item.binding)
+        // Feishu events/API refresh the room independently; queued messages may carry an older name.
+        const room = await this.bots.ensureExternalRoom({ ...item.binding,
+          ...(item.binding.conversation.provider === 'feishu' ? { preserveTitle: true } : {}) })
         const accepted = await this.bots.submitExternalMessage({ roomId: room.id, text: item.input.text, external: item.input.message, sourceAccountId: item.input.conversation.accountId,
           ...(item.input.attachments ? { attachments: item.input.attachments } : {}),
           ...(this.config.allowDelegation ? { allowDelegation: true } : {}), ...(item.input.targets ? { targets: item.input.targets } : {}) })

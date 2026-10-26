@@ -6,20 +6,21 @@ const incoming = (kind = 'p2p', target = 'ou_robot') => ({ sender: { sender_type
   message_id: 'om_one', chat_id: 'oc_chat', chat_type: kind, message_type: 'text', content: JSON.stringify({ text: '@_user_1 hello' }),
   mentions: [{ key: '@_user_1', id: { open_id: target } }],
 } })
-function bench(receive = vi.fn(async (_input: unknown) => {})) {
+function bench(receive = vi.fn(async (_input: unknown) => {}), config: Partial<ConstructorParameters<typeof FeishuTransport>[1]> = {}) {
   const request = vi.fn(async (_options: Record<string, unknown>): Promise<unknown> => ({ code: 0, bot: { open_id: 'ou_robot', app_name: 'Alpha' } }))
   const begin = vi.fn(async (_options: unknown) => {}), close = vi.fn(), registration = vi.fn(async (_options: Record<string, unknown>) => ({ client_id: 'cli_app', client_secret: 'secret' }))
   let handlers: Record<string, (event: unknown) => Promise<void>> = {}
   const sdk: Sdk = { Client: class { request = request }, WSClient: class { start = begin; close = close },
     EventDispatcher: class { register(value: typeof handlers) { handlers = value; return this } }, registerApp: registration }
-  const transport = new FeishuTransport(sdk, { appId: 'cli_app', appSecret: 'secret', brand: 'feishu', botOpenId: 'ou_robot', timeoutMs: 100 }, receive, vi.fn(), vi.fn())
-  return { sdk, request, registration, transport, begin, close, receive, emit: (event: unknown) => handlers['im.message.receive_v1']!(event) }
+  const transport = new FeishuTransport(sdk, { appId: 'cli_app', appSecret: 'secret', brand: 'feishu', botOpenId: 'ou_robot', timeoutMs: 100, ...config }, receive, vi.fn(), vi.fn())
+  return { sdk, request, registration, transport, begin, close, receive, emit: (event: unknown) => handlers['im.message.receive_v1']!(event),
+    event: (kind: string, event: unknown) => handlers[kind]!(event) }
 }
 it('uses the official create-only flow with explicit messaging permissions and cancellation', async () => {
   const b = bench(), controller = new AbortController(), qr = vi.fn()
   await register(b.sdk, { signal: controller.signal, name: 'Alpha', qr })
   expect(b.registration).toHaveBeenCalledWith(expect.objectContaining({ createOnly: true, source: 'dsh-bot', signal: controller.signal, onQRCodeReady: qr,
-    appPreset: expect.objectContaining({ name: 'Alpha' }), addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:chat:create', 'im:resource', 'im:chat:read'] }, events: { items: { tenant: ['im.message.receive_v1'] } } } }))
+    appPreset: expect.objectContaining({ name: 'Alpha' }), addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:chat:create', 'im:resource', 'im:chat:read', 'im:chat.members:bot_access'] }, events: { items: { tenant: ['im.message.receive_v1', 'im.chat.member.bot.added_v1', 'im.chat.updated_v1'] } } } }))
   expect(await identity(b.sdk, 'cli_app', 'secret', 'feishu', 100)).toEqual({ openId: 'ou_robot', name: 'Alpha' })
   await b.transport.close()
 })
@@ -128,4 +129,45 @@ it('loads a group name through the authenticated chat API and still accepts mess
   expect(denied.receive).toHaveBeenCalledWith(expect.objectContaining({ text: 'hello' }))
   expect(denied.receive.mock.calls[0]?.[0]).not.toHaveProperty('groupTitle')
   await denied.transport.close()
+})
+
+it('uses join and rename events without chat-read access or model work, and carries the name into messages', async () => {
+  const join = vi.fn(async () => {}), update = vi.fn(async () => {})
+  const b = bench(undefined, { allowUsers: [], allowGroups: ['oc_chat'], groupTitles: { groups: () => [], join, update } })
+  b.request.mockResolvedValue({ code: 99991672 })
+  await b.event('im.chat.member.bot.added_v1', { app_id: 'cli_app', chat_id: 'oc_chat', name: ' 入群名称 ', create_time: '1608725989000' })
+  expect(join).toHaveBeenCalledWith('oc_chat', '入群名称')
+  await b.event('im.chat.updated_v1', { app_id: 'cli_app', chat_id: 'oc_chat', before_change: { name: '入群名称' }, after_change: { name: '新群名' }, create_time: '1608725990000' })
+  expect(update).toHaveBeenCalledWith('oc_chat', '新群名')
+  expect(b.receive).not.toHaveBeenCalled(); expect(b.request).not.toHaveBeenCalled()
+  await b.emit(incoming('group'))
+  expect(b.receive).toHaveBeenCalledWith(expect.objectContaining({ groupTitle: '新群名' }))
+  expect(b.request).not.toHaveBeenCalled()
+  await b.transport.close()
+})
+
+it('ignores other apps, disallowed groups, missing/invalid names and callbacks after shutdown', async () => {
+  const join = vi.fn(async () => {}), update = vi.fn(async () => {})
+  const b = bench(undefined, { allowGroups: ['oc_chat'], groupTitles: { groups: () => [], join, update } })
+  for (const event of [
+    { chat_id: 'oc_unlisted', name: '未允许' }, { chat_id: 'oc_chat', app_id: 'cli_other', name: '其他应用' },
+    { chat_id: 'bad-id', name: '错误群号' }, ...['', ' ', 123, 'x'.repeat(1001)].map(name => ({ chat_id: 'oc_chat', name })),
+  ]) await b.event('im.chat.member.bot.added_v1', event)
+  await b.event('im.chat.updated_v1', { chat_id: 'oc_chat', before_change: { name: '旧群名' }, after_change: { avatar: 'new' } })
+  await b.transport.close()
+  await b.event('im.chat.member.bot.added_v1', { chat_id: 'oc_chat', name: '关闭后' })
+  expect(join).not.toHaveBeenCalled(); expect(update).not.toHaveBeenCalled()
+  expect(b.receive).not.toHaveBeenCalled(); expect(b.request).not.toHaveBeenCalled()
+})
+
+it('lets an allowed new group join with all-groups enabled and retries a sanitized persistence failure', async () => {
+  const join = vi.fn(async () => {})
+  join.mockRejectedValueOnce(new Error('private-secret'))
+  const b = bench(undefined, { allowGroups: [], allowAllGroups: true, groupTitles: { groups: () => [], join, update: vi.fn() } })
+  const event = { chat_id: 'oc_new', name: '新群', create_time: '1608725989000' }
+  await expect(b.event('im.chat.member.bot.added_v1', event)).rejects.toThrow('DSH could not persist the group name')
+  await b.event('im.chat.member.bot.added_v1', event)
+  expect(join).toHaveBeenCalledTimes(2)
+  expect(b.receive).not.toHaveBeenCalled(); expect(b.request).not.toHaveBeenCalled()
+  await b.transport.close()
 })
