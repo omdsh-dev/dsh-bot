@@ -44,6 +44,8 @@ export async function apply(ctx: Context): Promise<void> {
         { id: `im-discover-${imTarget}`, name: 'discover_bots', args: { query: 'Research' } },
         { id: `im-create-${imTarget}`, name: 'create_bot', args: { draft: JSON.stringify({ id: imTarget, name: `IM ${imTarget}`, instructions: 'Gather evidence.', capabilities: 'Research requested from IM' }) } },
       ].find(call => !hasResult(call.id))
+      const groupNameTarget = content.match(/GROUP_NAME_FIXTURE:(feishu|infoflow)/)?.[1]
+      if (groupNameTarget && !hasResult(`group-name-${groupNameTarget}`)) tool = { id: `group-name-${groupNameTarget}`, name: 'set_group_name', args: { title: `${groupNameTarget} 对话补齐群` } }
       if (content.includes('ACCESS_TOOL_FIXTURE') && !hasResult('access-inspect')) tool = { id: 'access-inspect', name: 'mcp__bot_access-fixture__inspect', args: {} }
       if (content.includes('CARD_VIEW_FIXTURE') && !hasResult('card-view')) tool = { id: 'card-view', name: 'show_card', args: { id: 'followup', card: JSON.stringify({ kind: 'form', title: 'Native form fixture', submitLabel: 'Continue', fields: [{ name: 'detail', label: 'Detail', type: 'text', required: true }] }) } }
       if (content.includes('TEAM_FIXTURE')) tool = [
@@ -381,6 +383,7 @@ export async function apply(ctx: Context): Promise<void> {
             assert.equal(service.snapshot().bots.find(bot => bot.id === target)?.capabilities, 'Research requested from IM')
             const nativeRequest = requests.at(-1)!
             assert.ok(JSON.stringify(nativeRequest.tools).includes('create_bot'))
+            assert.equal(JSON.stringify(nativeRequest.tools).includes('set_group_name'), kind === 'group')
             assert.ok(!JSON.stringify(nativeRequest.tools).includes('team_manage') && !JSON.stringify(nativeRequest.tools).includes('team_list'))
             assert.ok(JSON.stringify(nativeRequest.messages).includes('not-bound') && JSON.stringify(nativeRequest.messages).includes('IM 接入'))
             assert.ok(!JSON.stringify(nativeRequest).includes(specialist.id), 'IM admins cannot browse unrelated Bots')
@@ -393,6 +396,18 @@ export async function apply(ctx: Context): Promise<void> {
               assert.equal(refreshed.title, `${provider} 群改名同步`)
               assert.deepEqual(refreshed.members, before.members)
               assert.deepEqual(refreshed.messages, before.messages)
+              await service.submitExternalMessage({ roomId: imRoom.id, sourceAccountId: 'im-app', targets: [imHost.id], text: `GROUP_NAME_FIXTURE:${provider} 这个群叫「${provider} 对话补齐群」，帮我补齐到 Web。`, external: { id: `name-${provider}`, sender: { id: 'admin', name: 'Administrator' } } })
+              const named = await settled(imRoom.id), namedReply = named.messages.at(-1)!
+              assert.equal(namedReply.status, 'complete', JSON.stringify(namedReply))
+              assert.equal(named.title, `${provider} 对话补齐群`)
+              assert.equal(namedReply.groupNameUpdate?.actor.senderId, 'admin')
+              assert.ok(namedReply.toolDetails?.some(item => item.name === 'set_group_name' && item.result?.includes('saved')))
+              assert.deepEqual(named.members.map(item => ({ botId: item.botId, sessionId: item.sessionId })), before.members.map(item => ({ botId: item.botId, sessionId: item.sessionId })))
+              assert.equal(named.defaultBot, before.defaultBot)
+              await service.submitExternalMessage({ roomId: imRoom.id, sourceAccountId: 'im-app', targets: [imHost.id], text: 'Guest checking tools.', external: { id: `guest-group-${provider}`, sender: { id: 'guest', name: 'Guest' } } })
+              await settled(imRoom.id)
+              assert.ok(!JSON.stringify(requests.at(-1)!.tools).includes('set_group_name'))
+              assert.equal(service.snapshot().rooms.find(item => item.id === imRoom.id)!.title, named.title)
             }
           }
           const guestRoom = await service.ensureExternalRoom({ conversation: { provider, accountId: 'im-app', kind: 'private', id: provider === 'feishu' ? 'oc_guest_chat' : 'guest' }, title: 'Non-admin fixture', botIds: [imHost.id], defaultBot: imHost.id })
@@ -463,7 +478,7 @@ createInterface({input:process.stdin}).on('line', line=>{
       assert.equal(service.teamView().settings.botId, 'team-main')
       assert.equal(service.teamView().audit.length, 6)
       assert.equal(service.teamView().audit.filter(item => item.actor).length, 4)
-      for (const provider of ['feishu', 'infoflow']) assert.equal(service.snapshot().rooms.find(room => room.external?.provider === provider && room.external.id === 'im-group')?.title, `${provider} 群改名同步`)
+      for (const provider of ['feishu', 'infoflow']) assert.equal(service.snapshot().rooms.find(room => room.external?.provider === provider && room.external.id === 'im-group')?.title, `${provider} 对话补齐群`)
       for (const id of ['im-feishu-private', 'im-feishu-group', 'im-infoflow-private', 'im-infoflow-group']) assert.equal(service.snapshot().bots.find(bot => bot.id === id)?.capabilities, 'Research requested from IM')
       const cards = service.snapshot().rooms.find(room => room.defaultBot === 'card-bot')!.messages.flatMap(message => message.cards ?? [])
       assert.equal(cards[0]!.submitted!.values.detail, 'NATIVE_FORM_ANSWER')

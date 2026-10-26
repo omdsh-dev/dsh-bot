@@ -6,7 +6,7 @@ import type { Memory, MemorySuggestion } from './memory-types.ts'
 import type { UsageLedger } from './usage-types.ts'
 import type { AccessState } from './access-types.ts'
 import type { ChatCard } from './card-types.ts'
-import type { TeamAudit, TeamSettings } from './team-types.ts'
+import type { TeamActor, TeamAudit, TeamSettings } from './team-types.ts'
 export type * from './memory-types.ts'
 
 /** Stable, case-insensitive Bot handle. */
@@ -79,6 +79,8 @@ export interface ChatMessage {
   questions?: (QuestionView & { callId: string })[] | undefined
   questionReply?: { callId: string; questions: QuestionItem[]; answer: QuestionAnswer } | undefined
   toolDetails?: { name: string; arguments: string; result?: string | undefined }[] | undefined
+  /** Durable receipt: retries must not restore an older user-supplied group name. */
+  groupNameUpdate?: { title: string; callId: string; time: number; actor: TeamActor } | undefined
   /** Transient projection, never persisted with token-level updates. */
   progress?: { phase: string; tools: string[]; approvalId?: string | undefined; reason?: string | undefined; arguments?: string | undefined; question?: QuestionView | undefined } | undefined
   /** Explicitly configured scheduler source, used for auditing and notification idempotency. */

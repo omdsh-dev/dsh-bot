@@ -25,6 +25,7 @@ export const attachmentSchema = z.object({ type: z.enum(['image', 'file']), atta
 const questionItem = z.object({ id: z.string(), question: z.string(), detail: z.string().optional(), header: z.string().optional(), options: z.array(z.object({ label: z.string(), description: z.string().optional() })).optional(), multiSelect: z.boolean().optional() })
 const answerSchema = z.object({ answers: z.array(z.object({ id: z.string(), selected: z.array(z.string()), custom: z.string().optional() })) })
 export const messageSchema = z.object({ id: messageId, botId: botId.nullable(), text: z.string(),
+      groupNameUpdate: z.object({ title: z.string(), callId: z.string(), time: z.number(), actor: z.object({ provider: z.enum(['feishu', 'infoflow']), accountId: z.string(), senderId: z.string() }) }).optional(),
       cards: z.array(cardSchema).max(8).optional(),
       replyTo: messageId.nullable(), status: z.enum(['complete', 'queued', 'running', 'failed', 'canceled', 'interrupted']),
       error: z.string().nullable(), time: z.number(), external: externalMessage.optional(), allowDelegation: z.boolean().optional(),

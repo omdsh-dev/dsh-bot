@@ -152,6 +152,48 @@ it('creates IM Bots atomically, deduplicates calls and rejects stale admin autho
   expect(b.service.teamView().audit).toHaveLength(1)
 })
 
+it.each(['feishu', 'infoflow'] as const)('saves an explicit %s group name atomically and prevents retries overwriting later metadata', async provider => {
+  const b = bench(), room = b.state.rooms[0]!
+  room.kind = 'group'; room.external = { provider, accountId: 'group:group', kind: 'group', id: 'group' }
+  room.messages[0]!.text = '这个群叫「产品讨论群」，补齐到 Web，也提到了另一个名称。'
+  room.messages[0]!.external = { id: 'receipt', sender: { id: 'first-receiver-id', name: 'Admin' }, sources: [{ accountId: 'app', senderId: 'admin' }] }
+  const binding = { botId: 'sage', appId: 'app', agentId: 'app', enabled: true, status: 'connected', allowGroups: ['group'], admins: ['admin'] }
+  Reflect.set(b.service, provider, { snapshot: () => ({ bindings: [binding], groups: [] }) })
+  const actor = { provider, accountId: 'app', senderId: 'admin' }
+  const save = (title = '产品讨论群', signal = new AbortController().signal) => Reflect.get(b.service, 'setIMGroupName').call(b.service, room.id, 'attempt', actor, title, 'save', signal)
+  await expect(save('模型猜测的名称')).rejects.toThrow('explicitly supply')
+  b.set.mockRejectedValueOnce(new Error('disk full'))
+  await expect(save()).rejects.toThrow('disk full')
+  expect(b.service.snapshot().rooms[0]!.title).toBe('Chat')
+  expect(b.service.snapshot().rooms[0]!.messages[1]!.groupNameUpdate).toBeUndefined()
+  await Promise.all([save(), save()])
+  expect(b.service.snapshot().rooms[0]).toMatchObject({ title: '产品讨论群', members: room.members, defaultBot: room.defaultBot })
+  expect(b.service.snapshot().rooms[0]!.messages[1]!.groupNameUpdate).toMatchObject({ title: '产品讨论群', actor })
+  await expect(save('另一个名称')).rejects.toThrow('already supplied')
+  await b.service.ensureExternalRoom({ conversation: { ...room.external, accountId: 'app' }, title: 'IM 后续实际群名', botIds: [], defaultBot: room.defaultBot })
+  expect(await save()).toMatchObject({ status: 'already-saved', title: 'IM 后续实际群名' })
+  expect(b.service.snapshot().rooms[0]!.title).toBe('IM 后续实际群名')
+  binding.admins = []; await expect(save()).rejects.toThrow('administrator')
+  binding.admins = ['admin']; await expect(save('产品讨论群', AbortSignal.abort())).rejects.toThrow()
+})
+
+it.each(['private', 'local', 'guest', 'cross-app', 'delegated', 'scheduled', 'archived'] as const)('denies group naming for %s requests', async kind => {
+  const b = bench(), room = b.state.rooms[0]!, human = room.messages[0]!, delivery = room.messages[1]!
+  room.kind = 'group'; room.external = { provider: 'feishu', accountId: 'group:group', kind: 'group', id: 'group' }
+  human.text = '这个群叫产品讨论群，补齐到 Web'
+  human.external = { id: 'receipt', sender: { id: 'admin', name: 'Admin' }, sources: [{ accountId: 'app', senderId: 'admin' }] }
+  Reflect.set(b.service, 'feishu', { snapshot: () => ({ groups: [], bindings: [{ botId: 'sage', appId: 'app', enabled: true, status: 'connected', admins: ['admin'], allowGroups: ['group'] }] }) })
+  if (kind === 'private') { room.kind = 'dm'; room.external.kind = 'private' }
+  if (kind === 'local') { human.localOnly = true; delivery.localOnly = true }
+  if (kind === 'guest') human.external.sources![0]!.senderId = 'guest'
+  if (kind === 'cross-app') human.external.sources![0]!.accountId = 'another-app'
+  if (kind === 'delegated') delivery.delegation = { rootId: human.id, task: 'Rename' }
+  if (kind === 'scheduled') human.scheduleId = 'schedule'
+  if (kind === 'archived') room.archived = true
+  await expect(Reflect.get(b.service, 'setIMGroupName').call(b.service, room.id, 'attempt', { provider: 'feishu', accountId: 'app', senderId: 'admin' }, '产品讨论群', 'save', new AbortController().signal)).rejects.toThrow()
+  expect(b.set).not.toHaveBeenCalled()
+})
+
 it('uses native compaction before rotating and retains the current session when it relieves pressure', async () => {
   const b = bench(), agent = b.ctx.agents.get()
   let chars = 120000

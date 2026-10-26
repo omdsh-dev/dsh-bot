@@ -166,8 +166,9 @@ export async function apply(ctx) {
    for(const {marker,options} of requests) {
     const channel=marker.slice(4,-2),round=Number(marker.at(-1)),messages=JSON.stringify(options.messages);
     assert.ok(JSON.stringify(options.messages.filter(m=>m.role==='system')).includes('SHARED_PERSONA_ALPHA'),'Same Bot identity at every entry');
-    const commonTools=value=>toolNames(value).filter(name=>name!=='create_bot');
+    const commonTools=value=>toolNames(value).filter(name=>!['create_bot','set_group_name'].includes(name));
     assert.deepEqual(commonTools(options),commonTools(requests[0].options),'Same general Bot capabilities at every entry');
+    assert.equal(toolNames(options).includes('set_group_name'),!channel.startsWith('WEB') && channel.includes('GROUP'),'Only IM groups receive group naming');
     assert.equal(toolNames(options).includes('create_bot'),!channel.startsWith('WEB'),'Only authenticated IM admin deliveries get narrow Bot creation');
     assert.ok(!toolNames(options).some(name=>name==='team_manage'||name==='team_list'),'IM creation does not grant broad team management');
     for(const other of channels) if(other!==channel) assert.ok(!messages.includes('ISO_'+other+'_'),'Context leaked from '+other+' to '+channel);

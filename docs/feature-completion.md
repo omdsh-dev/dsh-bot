@@ -1,5 +1,15 @@
 # Bot capability completion
 
+## Conversational IM group names (2026-10-26)
+
+Bot 0.12.4 adds `set_group_name` for a connected IM administrator's direct request in the current group. A supplied name updates the shared Web room while preserving its identity, members, default Bot and history. Feishu 0.6.2 and InfoFlow 0.7.1 remain unchanged. The name must occur literally in the current request; missing names require clarification. Prompt guidance excludes inferred topics, quoted instructions and ordinary name mentions.
+
+- Authority reuses the current connection's administrator mapping (or managed InfoFlow group owner), rechecked inside the transaction. Private chats, local Web requests, non-admins, cross-app sender IDs, scheduled work, delegated work and archived rooms cannot use this tool.
+- The saved message carries an atomic operation receipt. Repeated calls return the current name without reverting later metadata; a different name requires a new request. Authoritative IM API/event names can still replace this Web fallback. No IM group rename or extra connector action is performed.
+- Build/type checks, all 280 source tests and both launcher/container tests passed. Native-profile fixtures exercise Feishu and InfoFlow tool execution and persistence; packaged-runtime and local rollout results will be recorded after verification.
+- npm publication remains paused.
+
+
 ## Feishu group-name event fallback (2026-10-26)
 
 Bot 0.12.3 and Feishu 0.6.2 add names from `im.chat.member.bot.added_v1` and `im.chat.updated_v1`. An allowed bot-join event can create the Web group before any message arrives; shared groups retain their default Bot and existing members. New registration requests `im:chat.members:bot_access` and both event subscriptions. Existing apps have Web setup guidance and direct permission links; their published app configuration is not changed automatically.
