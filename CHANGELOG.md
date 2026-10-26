@@ -1,5 +1,9 @@
 # Release notes
 
+## 0.12.2 — Preserve managed group names without read permission
+
+- Reconnecting keeps synchronized group names, while a newly linked room with only a provider/ID placeholder still receives the name supplied at creation. Feishu 0.6.1 and InfoFlow 0.7.1 remain compatible.
+
 ## 0.12.1 — IM group names (local verification; npm publication paused)
 
 - Feishu and InfoFlow now load group names on incoming messages and refresh already linked groups every minute, including after restart.

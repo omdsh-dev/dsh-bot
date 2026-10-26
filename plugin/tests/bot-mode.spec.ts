@@ -50,6 +50,8 @@ it.each(['feishu', 'infoflow'] as const)('syncs %s group names from a receiving 
   room.title = `${provider === 'feishu' ? '飞书' : '如流'} · existing-group`
   const members = structuredClone(room.members), messages = structuredClone(room.messages)
   const request = { conversation: { ...room.external, accountId: 'receiving-app' }, title: '产品讨论群', botIds: [room.defaultBot], defaultBot: room.defaultBot }
+  await b.service.ensureExternalRoom({ ...request, conversation: room.external, title: '创建时填写的群名', preserveTitle: true })
+  expect(b.service.snapshot().rooms[0]!.title).toBe('创建时填写的群名')
   await b.service.ensureExternalRoom(request)
   expect(b.service.snapshot().rooms[0]!.title).toBe('产品讨论群')
   await b.service.ensureExternalRoom({ ...request, title: '产品讨论二组' })

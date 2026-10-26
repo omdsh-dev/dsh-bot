@@ -1339,7 +1339,8 @@ export class BotMode extends TypertRemoteService {
         if (previous) {
           previous.members = this.members(state, [...previous.members.map(member => member.botId), ...request.botIds], previous.defaultBot, previous.members, true)
           const title = request.title.trim()
-          if (!request.preserveTitle && title && title !== `${source.provider === 'feishu' ? '飞书' : '如流'} · ${source.id}`) previous.title = title
+          const placeholder = `${source.provider === 'feishu' ? '飞书' : '如流'} · ${source.id}`
+          if (title && title !== placeholder && (!request.preserveTitle || !previous.title.trim() || previous.title === placeholder)) previous.title = title
           if (source.accountId === `group:${source.id}`) {
             previous.defaultBot = request.defaultBot
           }
