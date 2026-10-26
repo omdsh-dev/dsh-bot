@@ -47,6 +47,7 @@ Bot 的身份和能力共用，聊天上下文按入口和聊天分别保存；W
 - `im:message.group_at_msg:readonly`：接收群中 @机器人的消息。
 - `im:message:send_as_bot`：以机器人身份发送回复。
 - `im:resource`：上传图片／文件并读取接收到的消息资源；已有应用需补齐权限后发布。
+- `im:chat:read`：读取群名；已有应用需在开放平台开通、发布并完成组织审批。
 - `im:chat:create`：创建飞书群；已有应用可点击页面中的「开通建群权限」补齐。
 
 官方创建页的 `addons` 能力仍有灰度限制；若没有采用请求的配置，可能展示默认模板。以实际授权页为准，核对权限，并在开发者后台补齐消息事件、长连接和发布状态。不要同时在其他程序运行同一应用的接收连接。
@@ -112,3 +113,9 @@ Desktop 可在插件管理器中按相同顺序安装这两个精确版本。包
 入站用消息 ID 和资源 key 调用 SDK `im.messageResource.get`，出站先上传得到 image_key/file_key，再发送图片／文件消息。音频识别另需 DSH speech-to-text；压缩音频需主机 ffmpeg。权限失败和下载／转写失败均保留在失败队列，修正配置后可单项重试。
 
 依据：[消息能力与权限总览](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1)、[上传图片](https://open.feishu.cn/document/server-docs/im-v1/image/create)、[上传文件](https://open.feishu.cn/document/server-docs/im-v1/file/create)。
+
+### 群名同步
+
+IM 中创建的群首次向机器人发送消息时，连接器读取飞书群信息，将群名显示在 Web 聊天列表。已接入的群启动时补查，此后约每分钟检查一次，因此在飞书里改名后不必再次发消息。群 ID、聊天记录、Bot 成员和默认 Bot 不变；查询失败或返回空群名时保留已有名称。只同步当前机器人已接入且仍被允许的群，不扫描其他群。
+
+如果仍显示“飞书 · 群 ID”，在 **IM 接入 → 飞书 → 对应 Bot → 开通群名读取权限** 补齐 `im:chat:read`，发布应用并完成审批。名称读取失败不会阻止正常消息处理。依据：[获取群信息](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/chat/get)。

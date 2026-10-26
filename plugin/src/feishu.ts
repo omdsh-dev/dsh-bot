@@ -14,6 +14,7 @@ import { InfoFlowBridge } from './infoflow/bridge.ts'
 import { QueueRegistry } from './infoflow/queues.ts'
 import { settingsDomain } from './feishu/settings.ts'
 import { FeishuManager } from './feishu/manager.ts'
+import { groupTitleTarget } from './group-titles.ts'
 import { FeishuTransport, createGroup, identity, loadSdk, qrImage, register } from './feishu/sdk.ts'
 export const name = 'bot-feishu'
 export const inject = ['botMode', 'storageDomain', 'credentials']
@@ -56,7 +57,9 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       const queue = await queues.open(name)
       let bridge: InfoFlowBridge | undefined, transport: FeishuTransport | undefined
       try {
-        transport = new FeishuTransport(loadSdk(config.endpointTimeoutMs), { ...binding, appSecret, timeoutMs: config.endpointTimeoutMs }, input => bridge!.receive({ ...input, targets: [binding.botId] }),
+        transport = new FeishuTransport(loadSdk(config.endpointTimeoutMs), { ...binding, appSecret, timeoutMs: config.endpointTimeoutMs,
+          groupTitles: groupTitleTarget(ctx.botMode, 'feishu', binding.appId, [binding.botId], id => binding.allowAllGroups === true || binding.allowGroups.includes(id)),
+        }, input => bridge!.receive({ ...input, targets: [binding.botId] }),
           status => { manager.connection(binding.botId, status, status === 'error' ? '长连接异常，请检查事件订阅、应用发布状态和网络后重新启用' : null) }, report, request => ctx.botMode.upload(request), item => ctx.botMode.readAttachment(item))
         bridge = new InfoFlowBridge(ctx.botMode, queue.global, { prepare: input => transport!.prepare(input), send: async delivery => {
           const target = connections.get(delivery.botId ?? binding.botId)

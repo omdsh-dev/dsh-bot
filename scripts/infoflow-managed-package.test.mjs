@@ -29,7 +29,7 @@ class Client {
     this.im = { message: {
       sendToUser: async (user, text) => { state.sent.push({ agentId: id, user, text }); },
       sendToGroupWithOptions: async value => { state.sent.push({ agentId: id, group: value.groupId, text: value.body.map(block => block.content || '').join('') }); }
-    }, group: { create: async options => { state.created.push(options); return { groupId: '777' }; } } };
+    }, group: { getGroupInfo: async groupId => ({groupId,name:'如流实际群名',masterUserId:'alice'}), create: async options => { state.created.push(options); return { groupId: '777' }; } } };
   }
 }
 class WSClient {
@@ -91,6 +91,7 @@ export async function apply(ctx) {
       const payload={data:{raw:{groupid:'777',eventtype:'MESSAGE_RECEIVE',message:{header:{fromuserid:'alice',messageid:'group-one'},body:[{type:'AT',robotid:'111'},{type:'AT',robotid:'221'},{type:'TEXT',content:'work together'}]}}}};
       for(const socket of sdk.state.sockets) socket.eventDispatcher.emit('group.text',payload);
       await wait(()=>sdk.state.sent.filter(item=>item.group==='777'&&item.text.includes('managed fixture answer')).length===2);
+      assert.equal(bot.snapshot().rooms.find(item=>item.id===room.id).title,'如流实际群名');
       const messages=bot.snapshot().rooms.find(item=>item.id===room.id).messages;
       assert.equal(messages.filter(item=>item.botId===null).length,1);
       assert.deepEqual(messages.filter(item=>item.botId).map(item=>item.botId).sort(),['alpha','beta']);
@@ -126,6 +127,7 @@ export async function apply(ctx) {
       const report = await readReport(result)
       assert.equal(report.ok, true, report.error + '\n' + host.stderr)
       const group = report.rooms.find(room => room.external?.id === '777')
+      assert.equal(group.title, '如流实际群名')
       if (phase === 'first') first = group
       else assert.deepEqual(group, first)
       await host.stop(); host = undefined

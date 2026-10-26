@@ -12,6 +12,7 @@ import { settingsDomain, type Binding } from './settings.ts'
 import { QueueRegistry } from './queues.ts'
 import { InfoFlowBridge } from './bridge.ts'
 import { InfoFlowTransport, loadSdk, robotApi } from './sdk.ts'
+import { groupTitleTarget } from '../group-titles.ts'
 
 /** Mount page-managed bindings; imported legacy references remain disabled until explicitly enabled in the UI. */
 export async function applyManaged(ctx: Context, config: Config): Promise<void> {
@@ -74,6 +75,8 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
       let transport: InfoFlowTransport | undefined
       try {
         const connection = new InfoFlowTransport(loadSdk(), { ...config, accountId: binding.agentId, robotId: binding.robotId, appKey, appSecret,
+          groupTitles: groupTitleTarget(ctx.botMode, 'infoflow', binding.agentId, [binding.botId], id => binding.allowAllGroups === true || binding.allowGroups.includes(id)
+            || manager.snapshot().groups.some(group => group.groupId === id && group.botIds.includes(binding.botId) && group.status === 'ready')),
           upload: request => ctx.botMode.upload(request), read: item => ctx.botMode.readAttachment(item),
           allowMedia: input => input.conversation.kind === 'private' ? binding.allowUsers.includes(input.message.sender.id)
             : binding.allowAllGroups === true || binding.allowGroups.includes(input.conversation.id)

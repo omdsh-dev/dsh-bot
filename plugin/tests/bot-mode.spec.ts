@@ -43,6 +43,25 @@ function bench() {
   return { service, state, set, close, assemble, followup, wake, ctx, variable, execute, run }
 }
 
+it.each(['feishu', 'infoflow'] as const)('syncs %s group names from a receiving app without replacing history or its default Bot', async provider => {
+  const b = bench(), room = b.state.rooms[0]!
+  room.kind = 'group'
+  room.external = { provider, accountId: 'group:existing-group', kind: 'group', id: 'existing-group' }
+  room.title = `${provider === 'feishu' ? '飞书' : '如流'} · existing-group`
+  const members = structuredClone(room.members), messages = structuredClone(room.messages)
+  const request = { conversation: { ...room.external, accountId: 'receiving-app' }, title: '产品讨论群', botIds: [room.defaultBot], defaultBot: room.defaultBot }
+  await b.service.ensureExternalRoom(request)
+  expect(b.service.snapshot().rooms[0]!.title).toBe('产品讨论群')
+  await b.service.ensureExternalRoom({ ...request, title: '产品讨论二组' })
+  expect(b.service.snapshot().rooms[0]).toMatchObject({ id: room.id, title: '产品讨论二组', members, messages, defaultBot: room.defaultBot })
+  await b.service.ensureExternalRoom({ ...request, title: room.title })
+  expect(b.service.snapshot().rooms[0]!.title).toBe('产品讨论二组')
+  const configured = { title: '最初建群名称', groupId: room.external.id, chatId: room.external.id }
+  Reflect.set(b.service, provider, { snapshot: () => ({ available: true, bindings: [], groups: [configured], registrations: [] }) })
+  expect((provider === 'feishu' ? b.service.feishuSnapshot() : b.service.infoflowSnapshot()).groups[0]!.title).toBe('产品讨论二组')
+  expect(configured.title).toBe('最初建群名称')
+})
+
 it('persists a separate public capability description and preserves it when older callers omit it', async () => {
   const b = bench()
   const bot = await b.service.createBot({ id: 'writer', name: 'Writer', instructions: 'PRIVATE_INSTRUCTIONS', capabilities: '  Write product announcements  ' })

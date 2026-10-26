@@ -1,4 +1,5 @@
 /** Optional SDK transport. Loading Bot Mode alone never resolves the private SDK. */
+import { GroupTitles, type GroupTitleTarget } from '../group-titles.ts'
 import { PermanentChatError } from '../external-errors.ts'
 import { createRequire } from 'node:module'
 import { EventEmitter } from 'node:events'
@@ -40,7 +41,7 @@ export interface Sdk {
   Client: new (options: Record<string, unknown>) => { im: { message: {
     sendToUser(user: string, text: unknown, type: string): Promise<unknown>
     sendToGroupWithOptions(options: Record<string, unknown>): Promise<unknown>
-  }; file?: { upload(request: { file: Buffer; fileName: string; objectKey: string; expirationSeconds: number }): Promise<{ url: string }>; getBosFileUrl?(request: { objectKey: string; expirationSeconds: number }): Promise<{ url: string }> }; group?: { getMembers?(id: string): Promise<{ type?: string; agentId?: number }[]>; getGroupInfo?(id: string): Promise<{ groupId: string | number; masterUserId: string }>; create(options: Record<string, unknown>): Promise<GroupResult> } }; robot?: { getInfo(): Promise<RobotIdentity> } }
+  }; file?: { upload(request: { file: Buffer; fileName: string; objectKey: string; expirationSeconds: number }): Promise<{ url: string }>; getBosFileUrl?(request: { objectKey: string; expirationSeconds: number }): Promise<{ url: string }> }; group?: { getMembers?(id: string): Promise<{ type?: string; agentId?: number }[]>; getGroupInfo?(id: string): Promise<{ groupId: string | number; masterUserId: string; name?: string }>; create(options: Record<string, unknown>): Promise<GroupResult> } }; robot?: { getInfo(): Promise<RobotIdentity> } }
   WSClient: new (options: Record<string, unknown>) => {
     on(event: string, callback: (event: unknown) => void): unknown
     connect(): Promise<void>; disconnect(): void; eventDispatcher?: unknown
@@ -48,6 +49,7 @@ export interface Sdk {
 }
 /** Deployment options and resolved secrets, never persisted in the bridge domain. */
 export interface TransportConfig {
+  groupTitles?: GroupTitleTarget
   allowMedia?: (input: Incoming) => boolean
   upload?: (request: UploadRequest) => Promise<ChatAttachment>
   read?: (item: ChatAttachment) => Promise<AttachmentData>
@@ -76,6 +78,7 @@ export function loadSdk(): Sdk {
 /** SDK lifecycle plus exact private/group formatting. */
 export class InfoFlowTransport {
   private readonly client: InstanceType<Sdk['Client']>
+  private readonly titles: GroupTitles
   private readonly socket: InstanceType<Sdk['WSClient']>
   private stopped = false
   private connection: Promise<void> | undefined
@@ -91,6 +94,11 @@ export class InfoFlowTransport {
     const options = { appKey: config.appKey, appSecret: config.appSecret, logger, timeout: config.sendTimeoutMs,
       ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}) }
     this.client = new sdk.Client({ ...options, agentId: config.accountId })
+    this.titles = new GroupTitles(async id => {
+      // The pinned SDK converts IDs to numbers internally; never query a rounded group ID.
+      if (!/^\d+$/.test(id) || !Number.isSafeInteger(Number(id))) return undefined
+      return (await this.client.im.group?.getGroupInfo?.(id))?.name
+    }, Math.min(config.endpointTimeoutMs, 3000), config.groupTitles, () => report('InfoFlow group name lookup failed; current title retained'))
     this.socket = new sdk.WSClient({ ...options, endpointTimeout: config.endpointTimeoutMs,
       ...(config.wsGateway ? { wsGateway: config.wsGateway } : {}), ...(config.wsConnectDomain ? { wsConnectDomain: config.wsConnectDomain } : {}) })
     // This SDK also emits through EventEmitter after its own async error dispatch.
@@ -103,9 +111,13 @@ export class InfoFlowTransport {
         if (this.stopped) return
         const input = decodeMessage(event, envelope, config.accountId, config.robotId, config.robotIds?.())
         if (!input) return
-        if (input.hasMedia && !config.allowMedia?.(input)) return
+        if (config.allowMedia ? !config.allowMedia(input) : input.hasMedia) return
         const task = (async () => {
           const { hasMedia, ...message } = input
+          if (message.conversation.kind === 'group') {
+            const title = await this.titles.get(message.conversation.id)
+            if (title) message.groupTitle = title
+          }
           if (hasMedia) message.media = { accountId: config.accountId }
           await receive(message, mentionedRobots(envelope))
         })().then(() => {}, () => { this.report('InfoFlow input or attachment could not be persisted; check media permissions and storage') })
@@ -120,6 +132,7 @@ export class InfoFlowTransport {
   /** Connect without blocking Host startup; initial failures use bounded exponential backoff. */
   start(): void {
     if (this.stopped || this.connection) return
+    this.titles.start()
     let timer: ReturnType<typeof setTimeout> | undefined
     const connecting = Promise.resolve().then(() => { if (!this.stopped) return this.socket.connect() })
     const deadline = new Promise<never>((_, reject) => {
@@ -209,6 +222,7 @@ export class InfoFlowTransport {
     this.stopped = true
     if (this.retry) clearTimeout(this.retry)
     this.socket.disconnect()
+    await this.titles.close()
     await this.connection
     await Promise.allSettled(this.handlers)
     // Keep the no-op error guard: the SDK may emit a final close error asynchronously.

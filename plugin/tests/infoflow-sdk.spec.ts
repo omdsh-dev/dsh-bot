@@ -116,3 +116,25 @@ it('sends small native images as base64 and files as expiring links using the pi
   expect(upload.mock.calls[0]![0]).toMatchObject({ expirationSeconds: 86400, fileName: 'report.txt' })
   await b.transport.close()
 })
+
+
+it('reads the official InfoFlow group name and ignores metadata failures without dropping messages', async () => {
+  const b = bench(), client = Reflect.get(b.transport, 'client')
+  const getGroupInfo = vi.fn(async () => ({ groupId: '123', name: '如流项目群', masterUserId: 'alice' }))
+  client.im.group = { getGroupInfo }
+  const event = { data: { raw: { groupid: '123', message: { header: { fromuserid: 'alice', messageid: '1' },
+    body: [{ type: 'AT', robotid: 'robot' }, { type: 'TEXT', content: 'hello' }] } } } }
+  await b.handlers.get('group.text')!(event)
+  expect(getGroupInfo).toHaveBeenCalledWith('123')
+  expect(b.receive).toHaveBeenLastCalledWith(expect.objectContaining({ groupTitle: '如流项目群' }), ['robot'])
+  event.data.raw.groupid = '124'
+  getGroupInfo.mockRejectedValueOnce(new Error('private-secret'))
+  await b.handlers.get('group.text')!(event)
+  expect(b.receive).toHaveBeenCalledTimes(2)
+  expect(b.receive.mock.calls[1]?.[0]).not.toHaveProperty('groupTitle')
+  expect(b.report.mock.calls.flat().join(' ')).not.toContain('private-secret')
+  event.data.raw.groupid = '9223372036854775807'
+  await b.handlers.get('group.text')!(event)
+  expect(getGroupInfo).toHaveBeenCalledTimes(2)
+  await b.transport.close()
+})

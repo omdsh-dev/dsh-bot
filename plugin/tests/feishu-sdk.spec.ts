@@ -19,7 +19,7 @@ it('uses the official create-only flow with explicit messaging permissions and c
   const b = bench(), controller = new AbortController(), qr = vi.fn()
   await register(b.sdk, { signal: controller.signal, name: 'Alpha', qr })
   expect(b.registration).toHaveBeenCalledWith(expect.objectContaining({ createOnly: true, source: 'dsh-bot', signal: controller.signal, onQRCodeReady: qr,
-    appPreset: expect.objectContaining({ name: 'Alpha' }), addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:chat:create', 'im:resource'] }, events: { items: { tenant: ['im.message.receive_v1'] } } } }))
+    appPreset: expect.objectContaining({ name: 'Alpha' }), addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:chat:create', 'im:resource', 'im:chat:read'] }, events: { items: { tenant: ['im.message.receive_v1'] } } } }))
   expect(await identity(b.sdk, 'cli_app', 'secret', 'feishu', 100)).toEqual({ openId: 'ou_robot', name: 'Alpha' })
   await b.transport.close()
 })
@@ -110,4 +110,22 @@ it('keeps HTTP 5xx and throttled group creation uncertain even with a business e
     expect(cause.message).toContain('待确认')
   }
   await b.transport.close()
+})
+
+
+it('loads a group name through the authenticated chat API and still accepts messages when metadata is unavailable', async () => {
+  const b = bench()
+  b.request.mockResolvedValueOnce({ code: 0, data: { name: '产品讨论群' } })
+  await b.emit(incoming('group'))
+  expect(b.request).toHaveBeenCalledWith({ method: 'GET', url: '/open-apis/im/v1/chats/oc_chat', timeout: 100 })
+  expect(b.receive).toHaveBeenLastCalledWith(expect.objectContaining({ groupTitle: '产品讨论群', text: 'hello' }))
+  await b.emit(incoming('group'))
+  expect(b.request).toHaveBeenCalledTimes(1)
+  await b.transport.close()
+  const denied = bench()
+  denied.request.mockRejectedValue(new Error('private-secret permission denied'))
+  await denied.emit(incoming('group'))
+  expect(denied.receive).toHaveBeenCalledWith(expect.objectContaining({ text: 'hello' }))
+  expect(denied.receive.mock.calls[0]?.[0]).not.toHaveProperty('groupTitle')
+  await denied.transport.close()
 })

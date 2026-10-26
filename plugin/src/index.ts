@@ -1050,7 +1050,13 @@ export class BotMode extends TypertRemoteService {
     return this.infoflow
   }
   /** Return configuration and connection status without secrets. */
-  @Remote infoflowSnapshot(): InfoFlowState { return this.infoflow?.snapshot() ?? { available: false, bindings: [], groups: [] } }
+  @Remote infoflowSnapshot(): InfoFlowState {
+    const view = this.infoflow?.snapshot() ?? { available: false, bindings: [], groups: [] }
+    return { ...view, groups: view.groups.map(group => ({ ...group, title: this.externalGroupTitle('infoflow', group.groupId) ?? group.title })) }
+  }
+  private externalGroupTitle(provider: 'feishu' | 'infoflow', id: string | null): string | undefined {
+    return id ? this.state.rooms.find(room => room.external?.provider === provider && room.external.kind === 'group' && room.external.id === id)?.title : undefined
+  }
   /** Verify and store one Bot's robot and credential references. */
   @Remote saveInfoflowBinding(request: SaveInfoFlowBindingRequest): Promise<InfoFlowBindingView> { return this.connector().save(request) }
   /** Read current robot identity without sending a message. */
@@ -1080,7 +1086,10 @@ export class BotMode extends TypertRemoteService {
   @Remote createFeishuGroup(request: CreateFeishuGroupRequest): Promise<Room> { return this.feishuConnector().createGroup(request) }
   /** Resume a retained group request without recreating a known remote group. */
   @Remote resumeFeishuGroup(requestId: string): Promise<Room> { return this.feishuConnector().resumeGroup(requestId) }
-  @Remote feishuSnapshot(): FeishuState { return this.feishu?.snapshot() ?? { available: false, bindings: [], registrations: [], groups: [] } }
+  @Remote feishuSnapshot(): FeishuState {
+    const view = this.feishu?.snapshot() ?? { available: false, bindings: [], registrations: [], groups: [] }
+    return { ...view, groups: view.groups.map(group => ({ ...group, title: this.externalGroupTitle('feishu', group.chatId) ?? group.title })) }
+  }
   @Remote saveFeishuBinding(request: SaveFeishuBindingRequest): Promise<FeishuBindingView> { return this.feishuConnector().save(request) }
   @Remote verifyFeishuBinding(botId: BotId): Promise<FeishuBindingView> { return this.feishuConnector().verify(botId) }
   @Remote toggleFeishuBinding(request: { botId: BotId; enabled: boolean }): Promise<FeishuBindingView> { return this.feishuConnector().toggle(request) }
@@ -1329,8 +1338,9 @@ export class BotMode extends TypertRemoteService {
         const previous = merge ? mergeExternalRooms(state, source.id, source.provider) : related[0]
         if (previous) {
           previous.members = this.members(state, [...previous.members.map(member => member.botId), ...request.botIds], previous.defaultBot, previous.members, true)
+          const title = request.title.trim()
+          if (title && title !== `${source.provider === 'feishu' ? '飞书' : '如流'} · ${source.id}`) previous.title = title
           if (source.accountId === `group:${source.id}`) {
-            if (request.title !== `${source.provider === 'feishu' ? '飞书' : '如流'} · ${source.id}`) previous.title = request.title
             previous.defaultBot = request.defaultBot
           }
           return previous

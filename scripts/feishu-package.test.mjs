@@ -27,6 +27,7 @@ const state = { sockets: [], sent: [], groups: [], registrations: 0 };
 class Client {
  constructor(options) { this.appId=options.appId; }
  async request(options) {
+  if(options.method==='GET'&&options.url.startsWith('/open-apis/im/v1/chats/')) return {code:0,data:{name:'飞书实际群名'}};
   if(options.method==='GET') return {code:0,bot:{open_id:'ou_bot_'+this.appId,app_name:'Robot '+this.appId}};
   if(options.url==='/open-apis/im/v1/chats') { state.groups.push(options); return {code:0,data:{chat_id:'oc_shared_group'}}; }
   state.sent.push({appId:this.appId,...options.data}); return {code:0};
@@ -186,7 +187,7 @@ export async function apply(ctx) {
     const human=room.messages.find(m=>m.external?.id==='om_multi');
     assert.deepEqual(room.messages.filter(m=>m.replyTo===human.id).map(m=>m.botId).sort(),['alpha','beta']);
     assert.deepEqual(human.external.sources.map(s=>s.accountId).sort(),['cli_alpha','cli_beta']);
-    assert.equal(room.title,'Managed Feishu group');
+    assert.equal(room.title,'飞书实际群名');
    }
   }
   assert.equal(bot.feishuSnapshot().groups[0].status,'ready');

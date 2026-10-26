@@ -387,6 +387,13 @@ export async function apply(ctx: Context): Promise<void> {
             assert.ok(!service.snapshot().rooms.some(room => room.external && room.members.some(member => member.botId === target)), 'Creation does not bind or invite the new Bot')
             assert.equal(service.teamView().audit.at(-1)!.actor!.provider, provider)
             assert.equal(service.teamView().audit.at(-1)!.actor!.senderId, 'admin')
+            if (kind === 'group') {
+              const before = service.snapshot().rooms.find(room => room.id === imRoom.id)!
+              const refreshed = await service.ensureExternalRoom({ conversation: { ...before.external!, accountId: 'im-app' }, title: `${provider} 群改名同步`, botIds: [], defaultBot: before.defaultBot })
+              assert.equal(refreshed.title, `${provider} 群改名同步`)
+              assert.deepEqual(refreshed.members, before.members)
+              assert.deepEqual(refreshed.messages, before.messages)
+            }
           }
           const guestRoom = await service.ensureExternalRoom({ conversation: { provider, accountId: 'im-app', kind: 'private', id: provider === 'feishu' ? 'oc_guest_chat' : 'guest' }, title: 'Non-admin fixture', botIds: [imHost.id], defaultBot: imHost.id })
           await service.submitExternalMessage({ roomId: guestRoom.id, text: 'Please create a Bot.', external: { id: 'guest-receipt', sender: { id: 'guest', name: 'Guest' } } })
@@ -456,6 +463,7 @@ createInterface({input:process.stdin}).on('line', line=>{
       assert.equal(service.teamView().settings.botId, 'team-main')
       assert.equal(service.teamView().audit.length, 6)
       assert.equal(service.teamView().audit.filter(item => item.actor).length, 4)
+      for (const provider of ['feishu', 'infoflow']) assert.equal(service.snapshot().rooms.find(room => room.external?.provider === provider && room.external.id === 'im-group')?.title, `${provider} 群改名同步`)
       for (const id of ['im-feishu-private', 'im-feishu-group', 'im-infoflow-private', 'im-infoflow-group']) assert.equal(service.snapshot().bots.find(bot => bot.id === id)?.capabilities, 'Research requested from IM')
       const cards = service.snapshot().rooms.find(room => room.defaultBot === 'card-bot')!.messages.flatMap(message => message.cards ?? [])
       assert.equal(cards[0]!.submitted!.values.detail, 'NATIVE_FORM_ANSWER')

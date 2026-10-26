@@ -1,5 +1,11 @@
 # Release notes
 
+## 0.12.1 — IM group names (local verification; npm publication paused)
+
+- Feishu and InfoFlow now load group names on incoming messages and refresh already linked groups every minute, including after restart.
+- Group metadata updates preserve histories, members, and default Bots. Missing permissions, blank names, and lookup failures retain the current title without blocking chat admission.
+- Feishu setup requests `im:chat:read` and provides a direct permission link for existing apps. Feishu 0.6.1 and InfoFlow 0.7.1 require Bot 0.12.1 for title updates.
+
 ## 0.12.0 — experimental next
 
 - Allow authenticated Feishu and InfoFlow connection administrators to create persistent local Bots by conversation, including directly addressed group messages, without appointing a Main Bot.

@@ -62,7 +62,8 @@
     "src/team.ts",
     "src/browser-capability.ts",
     "src/bot-discovery.ts",
-    "src/im-bot-creation.ts"
+    "src/im-bot-creation.ts",
+    "src/group-titles.ts"
   ],
   "references": [
     {

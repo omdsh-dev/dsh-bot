@@ -8,6 +8,7 @@ import type { Incoming } from '../infoflow/messages.ts'
 import type { Brand, FeishuBindingView } from './types.ts'
 import type { ChatAttachment, AttachmentData, UploadRequest } from '../types.ts'
 import { imageMime } from '../media.ts'
+import { GroupTitles, type GroupTitleTarget } from '../group-titles.ts'
 const logger = { error() {}, warn() {}, info() {}, debug() {}, trace() {} }
 const domain = (brand: Brand) => brand === 'lark' ? 'https://open.larksuite.com' : 'https://open.feishu.cn'
 export interface RegistrationOptions {
@@ -111,7 +112,7 @@ export async function createGroup(sdk: Sdk, appId: string, appSecret: string, br
 export function register(sdk: Sdk, options: RegistrationOptions): Promise<RegistrationResult> {
   return sdk.registerApp({ signal: options.signal, source: 'dsh-bot', createOnly: true, onQRCodeReady: options.qr,
     appPreset: { name: options.name, desc: 'DSH Bot 独立 AI 助手' },
-    addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:chat:create', 'im:resource'] },
+    addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:chat:create', 'im:resource', 'im:chat:read'] },
       events: { items: { tenant: ['im.message.receive_v1'] } } } })
 }
 export async function qrImage(url: string): Promise<string> {
@@ -153,14 +154,20 @@ export function decodeMessage(event: unknown, appId: string, botOpenId: string):
 }
 export class FeishuTransport {
   private readonly client: Api
+  private readonly titles: GroupTitles
   private readonly socket: InstanceType<Sdk['WSClient']>
   private stopped = false
   private connection: Promise<void> | undefined
   private readonly handlers = new Set<Promise<void>>()
-  constructor(sdk: Sdk, private readonly config: { appId: string; appSecret: string; brand: Brand; botOpenId: string; timeoutMs: number; allowUsers?: string[]; allowGroups?: string[]; allowAllGroups?: boolean | undefined }, receive: (input: Incoming) => Promise<unknown>,
+  constructor(sdk: Sdk, private readonly config: { appId: string; appSecret: string; brand: Brand; botOpenId: string; timeoutMs: number; groupTitles?: GroupTitleTarget; allowUsers?: string[]; allowGroups?: string[]; allowAllGroups?: boolean | undefined }, receive: (input: Incoming) => Promise<unknown>,
     status: (status: FeishuBindingView['status']) => void, private readonly report: () => void, private readonly upload?: (request: UploadRequest) => Promise<ChatAttachment>, private readonly read?: (item: ChatAttachment) => Promise<AttachmentData>) {
     const common = { appId: config.appId, appSecret: config.appSecret, domain: domain(config.brand), logger, cache: tokenCache() }
     this.client = new sdk.Client(common)
+    this.titles = new GroupTitles(async id => {
+      const result = object(await this.client.request({ method: 'GET', url: `/open-apis/im/v1/chats/${encodeURIComponent(id)}`, timeout: config.timeoutMs }))
+      if (result.code !== 0) throw new Error('Group metadata unavailable')
+      return object(result.data).name
+    }, Math.min(config.timeoutMs, 3000), config.groupTitles, report)
     this.socket = new sdk.WSClient({ ...common, handshakeTimeoutMs: config.timeoutMs,
       onReady: () => { if (!this.stopped) status('connected') }, onReconnected: () => { if (!this.stopped) status('connected') },
       onReconnecting: () => { if (!this.stopped) status('connecting') }, onError: () => { if (!this.stopped) status('error') } })
@@ -172,6 +179,10 @@ export class FeishuTransport {
         : config.allowGroups && !config.allowAllGroups && !config.allowGroups.includes(input.conversation.id)) return
       const task = (async () => {
         const { resources, ...message } = input
+        if (message.conversation.kind === 'group') {
+          const title = await this.titles.get(message.conversation.id)
+          if (title) message.groupTitle = title
+        }
         if (resources?.length) message.media = { accountId: config.appId, resources }
         await receive(message)
       })().then(() => {}, () => { this.report(); throw new Error('DSH could not persist this message or attachment; check media permissions and providers') })
@@ -184,7 +195,7 @@ export class FeishuTransport {
     }
   }
   private readonly begin: () => void
-  start(): void { if (!this.stopped && !this.connection) this.begin() }
+  start(): void { if (!this.stopped && !this.connection) { this.begin(); this.titles.start() } }
   async prepare(input: Incoming): Promise<Incoming> {
     try { return await this.prepareOnce(input) } catch (cause) { return transportError(cause) }
   }
@@ -234,5 +245,5 @@ export class FeishuTransport {
       data: { receive_id: delivery.conversation.id, msg_type: msgType, content: JSON.stringify(body),
         uuid: createHash('sha256').update(delivery.id).digest('hex').slice(0, 48) } }))
   }
-  async close(): Promise<void> { this.stopped = true; this.socket.close({ force: true }); await this.connection; await Promise.allSettled(this.handlers) }
+  async close(): Promise<void> { this.stopped = true; this.socket.close({ force: true }); await this.titles.close(); await this.connection; await Promise.allSettled(this.handlers) }
 }

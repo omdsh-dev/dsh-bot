@@ -593,3 +593,15 @@ it('keeps queued result callbacks pending and delivers their final text exactly 
   expect(b.state().pending).toHaveLength(0)
   await bridge.close()
 })
+
+
+it.each(['infoflow', 'feishu'] as const)('retains the %s group name through durable admission and queue reload', async provider => {
+  const b = bench(), bridge = b.create({ provider })
+  const incoming = { ...input('named-group', 'hello', 'alice', true), groupTitle: '产品讨论群' }
+  incoming.conversation.provider = provider
+  const ensure = vi.spyOn(b.bots, 'ensureExternalRoom')
+  await bridge.receive(incoming); await bridge.wake()
+  expect(ensure).toHaveBeenCalledWith(expect.objectContaining({ title: '产品讨论群' }))
+  expect(bridgeSchema.parse(b.state()).pending[0]?.input.groupTitle).toBe('产品讨论群')
+  await bridge.close(); await b.bridge.close()
+})

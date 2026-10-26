@@ -147,7 +147,7 @@ export class InfoFlowBridge {
 
   private binding(input: Incoming): Pending['binding'] {
     const privateChat = input.conversation.kind === 'private'
-    return { conversation: input.conversation, title: `${input.conversation.provider === 'feishu' ? '飞书' : '如流'} · ${privateChat ? input.message.sender.name : input.conversation.id}`,
+    return { conversation: input.conversation, title: (!privateChat && input.groupTitle?.trim()) || `${input.conversation.provider === 'feishu' ? '飞书' : '如流'} · ${privateChat ? input.message.sender.name : input.conversation.id}`,
       botIds: privateChat ? [this.config.defaultBot] : [...new Set([...this.config.botIds, ...this.config.groupBotIds?.(input.conversation.id) ?? []])], defaultBot: this.config.defaultBot }
   }
 

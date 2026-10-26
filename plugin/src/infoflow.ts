@@ -13,6 +13,7 @@ import { InfoFlowBridge, type BridgeConfig } from './infoflow/bridge.ts'
 import { infoflowDomain } from './infoflow/domain.ts'
 import { InfoFlowTransport, loadSdk } from './infoflow/sdk.ts'
 import { applyManaged } from './infoflow/managed.ts'
+import { groupTitleTarget } from './group-titles.ts'
 import type { BotId } from './types.ts'
 
 /** Validated connector settings. Secret values never appear in plugin config or snapshots. */
@@ -71,6 +72,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }, 'infoflow: disconnect, drain handlers and close durable queues')
   const report = (message: string) => { ctx.logger.warn(message) }
   const connection = new InfoFlowTransport(sdk, { ...config, appKey: key.value, appSecret: secret.value,
+    groupTitles: groupTitleTarget(ctx.botMode, 'infoflow', config.accountId, config.botIds.map(brandString<BotId>), id => config.allowAllGroups === true || config.allowGroups.includes(id)),
     upload: request => ctx.botMode.upload(request), read: item => ctx.botMode.readAttachment(item),
     allowMedia: input => input.conversation.kind === 'private' ? config.allowUsers.includes(input.message.sender.id) : config.allowAllGroups === true || config.allowGroups.includes(input.conversation.id),
   }, input => bridge!.receive(input), report)

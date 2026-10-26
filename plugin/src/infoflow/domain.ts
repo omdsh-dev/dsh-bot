@@ -28,7 +28,7 @@ export interface BridgeState { windows?: Partial<Record<'receipts' | 'notices', 
 const conversation = z.object({ provider: z.enum(['infoflow', 'feishu']), accountId: z.string().min(1), kind: z.enum(['private', 'group']), id: z.string().min(1) })
 const message = z.object({ id: z.string().min(1), sender: z.object({ id: z.string().min(1), name: z.string() }) })
 const attempts = z.object({ roomId: z.string().transform(brandString<RoomId>), attemptIds: z.array(z.string().transform(brandString<ChatMessageId>)) })
-const pendingSchema = z.object({ key: z.string(), input: z.object({ conversation, message, text: z.string(), attachments: z.array(attachmentSchema).optional(), media: z.object({ accountId: z.string(), resources: z.array(z.object({ key: z.string(), type: z.enum(['image', 'file', 'audio']), name: z.string() })).optional() }).optional(), targets: z.array(z.string().transform(brandString<BotId>)).optional() }),
+const pendingSchema = z.object({ key: z.string(), input: z.object({ conversation, message, groupTitle: z.string().optional(), text: z.string(), attachments: z.array(attachmentSchema).optional(), media: z.object({ accountId: z.string(), resources: z.array(z.object({ key: z.string(), type: z.enum(['image', 'file', 'audio']), name: z.string() })).optional() }).optional(), targets: z.array(z.string().transform(brandString<BotId>)).optional() }),
     binding: z.object({ conversation, title: z.string(), botIds: z.array(z.string().transform(brandString<BotId>)), defaultBot: z.string().transform(brandString<BotId>) }),
     submitted: attempts.optional(), stop: attempts.optional(), delivered: z.array(z.string().transform(brandString<ChatMessageId>)).optional(),
     announced: z.array(z.string().transform(brandString<ChatMessageId>)).optional(),
