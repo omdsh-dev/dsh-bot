@@ -33,6 +33,7 @@ it('rejects robot senders, malformed content and mentions of a different robot',
 it.each([
   { response: { code: 99991672, msg: 'secret detail' }, expected: 'permission-required' },
   { error: { response: { status: 403, data: { code: 99991672, msg: 'secret detail' } } }, expected: 'permission-required' },
+  { error: Object.assign(new Error('private SDK details'), { code: 'ERR_BAD_REQUEST', response: { status: 400, data: { code: 99991672 } } }), expected: 'permission-required' },
   { error: { response: { status: 403, data: { code: 230002 } } }, expected: 'unavailable' },
   { error: { response: { status: 503, data: { code: 99991672 } } }, expected: 'unavailable' },
   { error: { response: { status: 429, data: { code: 99991672 } } }, expected: 'unavailable' },

@@ -2,11 +2,11 @@
 
 ## Group-name permission guidance (2026-10-26)
 
-Bot 0.12.5 and Feishu 0.6.3 expose group-information access separately from messaging connection health. Only an explicit `99991672` business response or applicable client HTTP rejection raises the permission warning; network failures, rate limiting, server errors, other access errors and empty names remain unavailable/unknown. Successful later lookup clears the warning and keeps the existing automatic name refresh.
+Bot 0.12.6 and Feishu 0.6.4 expose group-information access separately from messaging connection health. Only an explicit `99991672` business response or applicable client HTTP rejection raises the permission warning; network failures, rate limiting, server errors, other access errors and empty names remain unavailable/unknown. Successful later lookup clears the warning and keeps the existing automatic name refresh.
 
 - The Feishu binding list and detail page show the state. Missing access links directly to that app's `im:chat:read` page and explains publishing/organization approval plus the conversational naming fallback. The create-app UI now explicitly says this scope is requested by default; registration already included it and does not silently expand existing app grants.
 - The current Bot's group-name context and naming-tool result include the same app-specific guidance. This does not add unsolicited IM sends or reminders during unrelated discussion. Binding changes, disable/re-enable and restart reset the transient check; unrelated app callbacks cannot change the state.
-- Build/type checks, all 292 source tests and both launcher/container checks passed, including permission recovery, app isolation, UI warning recovery and error classification. Installed-package and rollout results will be recorded after verification.
+- Initial 0.12.5/0.6.3 validation passed 292 source tests, four SDK contracts and both runtime matrices. Live comparison then reproduced a real SDK mismatch: HTTP 400 / business code 99991672 appeared as unavailable because Axios's outer ERR_BAD_REQUEST masked the nested response code. A source regression and a real-SDK/Axios regression both failed on that shape. 0.12.6/0.6.4 prioritize the nested provider code; final validation and rollout results are recorded below after completion.
 - InfoFlow 0.7.1 is unchanged. npm publication remains paused.
 
 

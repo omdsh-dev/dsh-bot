@@ -29,7 +29,7 @@ class Client {
  constructor(options){this.appId=options.appId;}
  async request(options){
   if(options.method!=='GET')throw new Error('No remote mutations are allowed');
-  if(options.url.startsWith('/open-apis/im/v1/chats/')){state.metadataReads++;return {code:99991672};}
+  if(options.url.startsWith('/open-apis/im/v1/chats/')){state.metadataReads++;if(this.appId==='cli_beta')throw Object.assign(new Error('permission fixture'),{code:'ERR_BAD_REQUEST',response:{status:400,data:{code:99991672}}});return {code:99991672};}
   return {code:0,bot:{open_id:'ou_bot_'+this.appId,app_name:this.appId}};
  }
 }

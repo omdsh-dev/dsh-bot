@@ -10,6 +10,25 @@ const sdk = require(process.env.DSH_FEISHU_SDK_FILE || '@larksuiteoapi/node-sdk'
 const { identity, createGroup, GroupCreateError } = await import(pathToFileURL(join(runtime, pluginPath, 'lib/types/feishu/sdk.js')))
 const silent = { error() {}, warn() {}, info() {}, debug() {}, trace() {} }
 
+test('real SDK Axios errors preserve the nested group-information permission code', async () => {
+  const { FeishuTransport } = await import(pathToFileURL(join(runtime, pluginPath, 'lib/types/feishu/sdk.js')))
+  const { AxiosError } = createRequire(require.resolve(process.env.DSH_FEISHU_SDK_FILE || '@larksuiteoapi/node-sdk'))('axios')
+  const states = []
+  const httpInstance = {
+    async post() { return { tenant_access_token: 'fixture-token', expire: 7200 } },
+    async request() { throw new AxiosError('private SDK details', 'ERR_BAD_REQUEST', undefined, undefined, { status: 400, data: { code: 99991672 } }) },
+  }
+  const real = { ...sdk, Client: class extends sdk.Client { constructor(options) { super({ ...options, httpInstance, logger: silent }) } }, WSClient: class { async start() {} close() {} } }
+  const transport = new FeishuTransport(real, { appId: 'cli_group_permission', appSecret: 'correct', brand: 'feishu', botOpenId: 'ou_bot', timeoutMs: 100,
+    groupTitles: { groups: () => ['oc_group'], update: async () => {} }, groupNameStatus: state => states.push(state) }, async () => { throw new Error('No message expected') }, () => {}, () => {})
+  try {
+    transport.start()
+    const deadline = Date.now() + 2000
+    while (!states.length && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10))
+    assert.deepEqual(states, ['permission-required'])
+  } finally { await transport.close() }
+})
+
 test('wrong secret cannot reuse a real SDK client token for the same app ID', async () => {
   let exchanges = 0
   const httpInstance = {

@@ -173,7 +173,8 @@ export class FeishuTransport {
         return title
       } catch (cause) {
         const response = object(object(cause).response), httpStatus = Number(response.status)
-        const code = Number(object(cause).code ?? object(response.data).code)
+        // Axios uses a string transport code (e.g. ERR_BAD_REQUEST); the provider's code lives in the response.
+        const code = Number(object(response.data).code ?? object(cause).code)
         const denied = code === 99991672 && (!Number.isFinite(httpStatus) || httpStatus >= 400 && httpStatus < 500 && httpStatus !== 429)
         if (!this.stopped) config.groupNameStatus?.(denied ? 'permission-required' : 'unavailable')
         throw new Error('Group metadata unavailable')
