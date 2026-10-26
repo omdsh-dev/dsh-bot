@@ -6,7 +6,9 @@ Bot 0.12.4 adds `set_group_name` for a connected IM administrator's direct reque
 
 - Authority reuses the current connection's administrator mapping (or managed InfoFlow group owner), rechecked inside the transaction. Private chats, local Web requests, non-admins, cross-app sender IDs, scheduled work, delegated work and archived rooms cannot use this tool.
 - The saved message carries an atomic operation receipt. Repeated calls return the current name without reverting later metadata; a different name requires a new request. Authoritative IM API/event names can still replace this Web fallback. No IM group rename or extra connector action is performed.
-- Build/type checks, all 280 source tests and both launcher/container tests passed. Native-profile fixtures exercise Feishu and InfoFlow tool execution and persistence; packaged-runtime and local rollout results will be recorded after verification.
+- Build/type checks, all 280 source tests and both launcher/container tests passed. The clean archive from `e043d7feff94de439cfcfb98a25be93e5030c980` passed five installed-package tests on each of DSH 0.1.5-rc.2 and 0.2.0-rc.2, including native Feishu/InfoFlow naming tool calls, non-admin tool exclusion, Web/Desktop delivery and restart. The shipped client test passed; all 218 staged files matched their archives and startup passed with the actual production runtime.
+- Local rollout installed Bot 0.12.4 with unchanged Feishu 0.6.2 and InfoFlow 0.7.1. Backup: `.runtime/live-upgrade-backups/2026-10-26T12-48-30-304Z`. All six Bots, fourteen chats and histories, two memories, two retained delivery failures, IM access lists and Main Bot grants were preserved; all eleven connections recovered. The live Web IM settings now show the conversational naming example. No real IM test messages were sent and existing names were not guessed.
+- Low disk space was resolved by removing eight inactive, reproducible staging directories (0.10.0–0.12.2). Release archives, live data and all upgrade backups were retained. New staging and the complete backup use independent APFS copy-on-write files.
 - npm publication remains paused.
 
 
