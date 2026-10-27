@@ -23,7 +23,7 @@ test('shared Feishu groups route each robot once while preserving DM isolation a
     const sdk = join(fixture.profile, 'node_modules/@larksuiteoapi/node-sdk'); await mkdir(sdk, { recursive: true })
     await writeFile(join(sdk, 'package.json'), JSON.stringify({ name: '@larksuiteoapi/node-sdk', version: '1.75.0', main: 'index.cjs' }))
     await writeFile(join(sdk, 'index.cjs'), String.raw`
-const state = { sockets: [], sent: [], groups: [], registrations: 0 };
+const state = { sockets: [], sent: [], groups: [], registrations: 0, authorizations: [] };
 class Client {
  constructor(options) { this.appId=options.appId; }
  async request(options) {
@@ -46,6 +46,13 @@ class WSClient {
  close() { this.active=false; }
 }
 async function registerApp(options) {
+ if(options.appId) {
+  if(options.createOnly) throw new Error('Unexpected create-only for an existing app');
+  state.authorizations.push(options);
+  options.onQRCodeReady({url:'https://accounts.feishu.cn/fixture',expireIn:600});
+  await new Promise(resolve=>setTimeout(resolve,30));
+  return {client_id:options.appId,client_secret:'returned-existing-secret',user_info:{open_id:'ou_different_operator',tenant_brand:'feishu'}};
+ }
  if(!options.createOnly) throw new Error('Expected create-only');
  state.registrations++; options.onQRCodeReady({url:'https://accounts.feishu.cn/fixture',expireIn:600});
  await new Promise(resolve=>setTimeout(resolve,30));
@@ -91,6 +98,15 @@ export async function apply(ctx) {
    assert.equal(bot.feishuSnapshot().bindings[0].enabled,false);
    assert.deepEqual(bot.feishuSnapshot().bindings[0].allowUsers,['ou_alpha_owner']);
    await bot.saveFeishuBinding({botId:'beta',appId:'cli_beta',appSecret:'offline-secret-beta',brand:'feishu',allowUsers:['ou_beta_owner'],allowGroups:[],admins:['ou_beta_owner']});
+   const beforePermissions=bot.feishuSnapshot().bindings.find(item=>item.botId==='beta');
+   const permissionAttempt=await bot.authorizeFeishuBot('beta');
+   assert.equal(permissionAttempt.purpose,'permissions');
+   assert.equal((await bot.authorizeFeishuBot('beta')).attemptId,permissionAttempt.attemptId);
+   await wait(()=>bot.feishuSnapshot().registrations.find(item=>item.botId==='beta')?.status==='complete');
+   assert.deepEqual(bot.feishuSnapshot().bindings.find(item=>item.botId==='beta'),beforePermissions);
+   assert.equal(sdk.state.registrations,1,'Existing-app consent must not create another app');
+   assert.equal(sdk.state.authorizations.length,1);
+   assert.deepEqual(sdk.state.authorizations[0].addons,{preset:false,scopes:{tenant:['im:chat:read','im:chat:create']}});
    for(const id of ['alpha','beta']) {
     const binding=bot.feishuSnapshot().bindings.find(item=>item.botId===id);
     await bot.toggleFeishuBinding({botId:id,enabled:true});

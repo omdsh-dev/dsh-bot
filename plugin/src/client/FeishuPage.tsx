@@ -66,28 +66,37 @@ function Editor({ bot, binding, registration, api, t, changed }: { bot: Bot; bin
   const list = (value: string) => value.split(/[,，\s]+/).filter(Boolean)
   return <section className={css.integrationEditor}>
     <div className={css.integrationIdentity}><Avatar id={bot.id} large/><div><h3>{bot.name}</h3><p>@{bot.id}</p></div><span className={css.integrationStatus} data-status={status}>{t(status === 'connected' ? 'fsConnected' : status === 'connecting' ? 'ifConnecting' : status === 'error' ? 'ifConnectionError' : 'ifDisabled')}</span></div>
-    {binding?.enabled && <div className={css.integrationNotice} role={binding.groupNameStatus === 'permission-required' ? 'alert' : 'status'}>
+    {(binding || manual) && <div className={css.integrationNotice}>
+      <strong>{t('fsBindingPermissions')}</strong><p>{t('fsBindingPermissionsHint')}</p>
+      <ul><li>{t('fsReadGroupPermission')}</li><li>{t('fsCreateGroupPermission')}</li></ul>
+      {binding?.enabled && <div role={binding.groupNameStatus === 'permission-required' ? 'alert' : 'status'}>
       <strong>{t(binding.groupNameStatus === 'permission-required' ? 'fsGroupNameNeedsAccess' : binding.groupNameStatus === 'available' ? 'fsGroupNameAvailable' : binding.groupNameStatus === 'unavailable' ? 'fsGroupNameUnavailable' : 'fsGroupNameUnknown')}</strong>
-      {binding.groupNameStatus === 'permission-required' && <><p>{t('fsGroupNamePermissionHelp')}</p><a href={`https://${binding.brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/app/${encodeURIComponent(binding.appId)}/auth?q=im%3Achat%3Aread`} target="_blank" rel="noreferrer noopener">{t('fsGroupNameAuthorize')}</a></>}
+      {binding.groupNameStatus === 'permission-required' && <p>{t('fsGroupNamePermissionHelp')}</p>}
       {binding.groupNameStatus === 'unavailable' && <p>{t('fsGroupNameRetryHelp')}</p>}
+      </div>}
+      {binding && <><Button variant="primary" disabled={busy || active || dirty} onClick={() => { void run(() => api.authorize(bot.id)) }}>{t('fsAuthorizeGroups')}</Button>
+        <details><summary>{t('fsPermissionFallback')}</summary><p>{t('fsPermissionFallbackHint')}</p>
+          <a href={`https://${binding.brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/app/${encodeURIComponent(binding.appId)}/auth?q=im%3Achat%3Aread`} target="_blank" rel="noreferrer noopener">{t('fsGroupNameAuthorize')}</a>{' · '}
+          <a href={`https://${binding.brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/app/${encodeURIComponent(binding.appId)}/auth?q=im%3Achat%3Acreate`} target="_blank" rel="noreferrer noopener">{t('fsGroupAuthorize')}</a>
+        </details></>}
     </div>}
     {!binding && <div className={css.integrationNotice}><strong>{t('fsCreateTitle')}</strong><p>{t('fsCreateHint')}</p>
       <div className={css.integrationActions}><Button variant="primary" disabled={busy || active} onClick={() => { void run(() => api.register(bot.id)) }}>{t('fsCreate')}</Button><Button disabled={active} onClick={() => { setManual(!manual) }}>{t('fsManual')}</Button></div>
     </div>}
     {registration && <div className={css.registration} role="status">
-      <strong>{t(registration.status === 'starting' ? 'fsStarting' : registration.status === 'waiting' ? 'fsWaiting' : registration.status === 'saving' ? 'fsSaving' : registration.status === 'complete' ? 'fsComplete' : registration.status === 'expired' ? 'fsExpired' : registration.status === 'canceled' ? 'fsCanceled' : 'fsRegistrationError')}</strong>
-      {registration.qrDataUrl && <img className={css.registrationQr} src={registration.qrDataUrl} width={240} height={240} alt={t('fsQrAlt')}/>}
+      <strong>{t(registration.status === 'starting' ? 'fsStarting' : registration.status === 'waiting' ? registration.purpose === 'permissions' ? 'fsPermissionWaiting' : 'fsWaiting' : registration.status === 'saving' ? 'fsSaving' : registration.status === 'complete' ? registration.purpose === 'permissions' ? 'fsPermissionComplete' : 'fsComplete' : registration.status === 'expired' ? 'fsExpired' : registration.status === 'canceled' ? 'fsCanceled' : 'fsRegistrationError')}</strong>
+      {registration.qrDataUrl && <img className={css.registrationQr} src={registration.qrDataUrl} width={240} height={240} alt={t(registration.purpose === 'permissions' ? 'fsPermissionQrAlt' : 'fsQrAlt')}/>}
       {registration.url && <a href={registration.url} target="_blank" rel="noreferrer noopener">{t('fsOpenLink')}</a>}
       {registration.expiresAt && active && <p>{t('fsExpires')} {new Date(registration.expiresAt).toLocaleTimeString()}</p>}
       {registration.message && <p>{registration.message}</p>}
       {active && <Button disabled={busy || registration.status === 'saving'} onClick={() => { void run(() => api.cancel(registration.attemptId)) }}>{t('fsCancel')}</Button>}
     </div>}
-    {binding && <p className={css.integrationHint}>{t('fsGroupPermission')} <a href={`https://${binding.brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/app/${encodeURIComponent(binding.appId)}/auth?q=im%3Achat%3Acreate`} target="_blank" rel="noreferrer noopener">{t('fsGroupAuthorize')}</a></p>}
     {binding && <div className={css.integrationNotice}><strong>{binding.robotName}</strong><p>App ID: {binding.appId}</p><p>Bot Open ID: {binding.botOpenId || '—'}</p>{binding.error && <p role="alert">{binding.error}</p>}</div>}
     {(binding || manual) && <form className={css.form} onSubmit={event => { event.preventDefault(); void run(async () => {
       await api.save({ botId: bot.id, appId, brand, ...(secret ? { appSecret: secret } : {}), allowUsers: list(users), allowGroups: list(groups), allowAllGroups: allGroups, admins: list(admins) })
       setSecret(''); setDirty(false)
-    }, 'ifSaved') }}>
+      if (!binding) { await changed(); await api.authorize(bot.id) }
+    }, binding ? 'ifSaved' : undefined) }}>
       <label>{t('fsPlatform')}<select disabled={!!binding || active} value={brand} onChange={event => { setBrand(event.target.value === 'lark' ? 'lark' : 'feishu'); setDirty(true) }}><option value="feishu">{t('feishu')}</option><option value="lark">Lark</option></select></label>
       <label>App ID<Input required value={appId} disabled={!!binding || active} placeholder="cli_…" onChange={event => { setAppId(event.target.value); setDirty(true) }}/></label>
       <label>App Secret<Input type="password" autoComplete="new-password" value={secret} disabled={active} placeholder={binding ? t('ifKeepSaved') : t('ifRequired')} onChange={event => { setSecret(event.target.value); setDirty(true) }}/></label>
@@ -97,13 +106,13 @@ function Editor({ bot, binding, registration, api, t, changed }: { bot: Bot; bin
       <p className={css.integrationHint}>{t('ifAllGroupsHint')}</p>
       {!allGroups && <label>{t('fsAllowGroups')}<Input aria-label={t('fsAllowGroups')} value={groups} disabled={active} placeholder="oc_…" onChange={event => { setGroups(event.target.value); setDirty(true) }}/><small>{t('fsAllowGroupsHint')}</small></label>}
       <label>{t('fsAdmins')}<Input aria-label={t('fsAdmins')} value={admins} disabled={active} placeholder="ou_…" onChange={event => { setAdmins(event.target.value); setDirty(true) }}/><small>{t('fsAdminsHint')}</small></label>
-      <div className={css.integrationActions}><Button type="submit" variant="primary" disabled={busy || active}>{t('ifSaveVerify')}</Button>
+      <div className={css.integrationActions}><Button type="submit" variant="primary" disabled={busy || active}>{t(binding ? 'ifSaveVerify' : 'fsBindAuthorize')}</Button>
         <Button disabled={busy || active || !binding || dirty} onClick={() => { void run(() => api.verify(bot.id), 'ifVerified') }}>{t('ifVerify')}</Button>
         <Button disabled={busy || active || !binding || dirty} onClick={() => { void run(() => api.toggle({ botId: bot.id, enabled: !binding?.enabled }), binding?.enabled ? 'ifStopped' : 'ifStarted') }}>{t(binding?.enabled ? 'ifDisable' : 'ifEnable')}</Button></div>
     </form>}
     {error && <p role="alert" className={css.error}>{error}</p>}{message && <p role="status" className={css.integrationHint}>{message}</p>}
     <p className={css.integrationHint}>{t('fsPermissionHint')}</p>
-    <p className={css.integrationHint}>{t('fsGroupNameHint')} {binding && <a href={`https://${binding.brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/app/${encodeURIComponent(binding.appId)}/auth?q=im%3Achat%3Aread`} target="_blank" rel="noreferrer noopener">{t('fsGroupNameAuthorize')}</a>}</p>
+    <p className={css.integrationHint}>{t('fsGroupNameHint')}</p>
     <details><summary>{t('fsGroupEventsSetup')}</summary><p className={css.integrationHint}>{t('fsGroupEventsHint')}</p>
       <p className={css.integrationHint}>{binding && <><a href={`https://${binding.brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/app/${encodeURIComponent(binding.appId)}/auth?q=im%3Achat.members%3Abot_access`} target="_blank" rel="noreferrer noopener">{t('fsGroupEventsAuthorize')}</a>{' · '}</>}<a href={`https://${binding?.brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/document/server-docs/group/chat-member/event/added-2`} target="_blank" rel="noreferrer noopener">{t('fsGroupEventsGuide')}</a></p>
     </details>

@@ -13,6 +13,8 @@ const logger = { error() {}, warn() {}, info() {}, debug() {}, trace() {} }
 const domain = (brand: Brand) => brand === 'lark' ? 'https://open.larksuite.com' : 'https://open.feishu.cn'
 export interface RegistrationOptions {
   signal: AbortSignal; name: string
+  /** Re-authorize this existing app; never enter the create-only flow. */
+  appId?: string; brand?: Brand
   qr(info: { url: string; expireIn: number }): void
 }
 export interface RegistrationResult { client_id: string; client_secret: string; user_info?: { open_id?: string; tenant_brand?: Brand } }
@@ -109,10 +111,14 @@ export async function createGroup(sdk: Sdk, appId: string, appSecret: string, br
   return chatId
 }
 /** Official user-confirmed registration with messaging and group-creation permissions. */
+const groupScopes = ['im:chat:read', 'im:chat:create']
 export function register(sdk: Sdk, options: RegistrationOptions): Promise<RegistrationResult> {
+  if (options.appId) return sdk.registerApp({ signal: options.signal, source: 'dsh-bot', appId: options.appId,
+    ...(options.brand === 'lark' ? { domain: 'accounts.larksuite.com' } : {}), onQRCodeReady: options.qr,
+    addons: { preset: false, scopes: { tenant: [...groupScopes] } } })
   return sdk.registerApp({ signal: options.signal, source: 'dsh-bot', createOnly: true, onQRCodeReady: options.qr,
     appPreset: { name: options.name, desc: 'DSH Bot 独立 AI 助手' },
-    addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:chat:create', 'im:resource', 'im:chat:read', 'im:chat.members:bot_access'] },
+    addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', ...groupScopes, 'im:resource', 'im:chat.members:bot_access'] },
       events: { items: { tenant: ['im.message.receive_v1', 'im.chat.member.bot.added_v1', 'im.chat.updated_v1'] } } } })
 }
 export async function qrImage(url: string): Promise<string> {

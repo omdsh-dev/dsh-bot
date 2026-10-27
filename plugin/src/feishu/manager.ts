@@ -71,7 +71,9 @@ export class FeishuManager implements FeishuControl {
   }
   async init(): Promise<void> {
     if (this.state.registrations.some(record => active(record.status))) await this.change(state => {
-      for (const record of state.registrations) if (active(record.status)) { record.status = 'interrupted'; record.message = '服务重启中断了授权。请先检查飞书后台是否已经创建应用，再决定绑定已有应用或重新扫码。' }
+      for (const record of state.registrations) if (active(record.status)) { record.status = 'interrupted'; record.message = record.purpose === 'permissions'
+        ? '服务重启中断了权限确认，可重新扫码补齐。原机器人绑定和访问设置已保留。'
+        : '服务重启中断了授权。请先检查飞书后台是否已经创建应用，再决定绑定已有应用或重新扫码。' }
     })
     if (this.state.groups.some(group => group.status === 'creating')) await this.change(state => {
       for (const group of state.groups) if (group.status === 'creating') { group.status = 'uncertain'; group.error = '服务重启中断了建群，请继续同一次请求' }
@@ -195,6 +197,11 @@ export class FeishuManager implements FeishuControl {
     return this.view(binding)
   }) }
   register(botId: BotId): Promise<FeishuRegistration> { return this.exclusive(async () => {
+    if (this.state.bindings.some(binding => binding.botId === botId)) throw new Error('这个 Bot 已绑定机器人，不能重复创建')
+    return this.beginRegistration(botId)
+  }) }
+  authorize(botId: BotId): Promise<FeishuRegistration> { return this.exclusive(() => this.beginRegistration(botId, this.get(botId))) }
+  private async beginRegistration(botId: BotId, existing?: Binding): Promise<FeishuRegistration> {
     this.ensureOpen()
     const bot = this.runtime.bots().find(item => item.id === botId)
     if (!bot) throw new Error('Bot 不存在')
@@ -203,22 +210,21 @@ export class FeishuManager implements FeishuControl {
     for (const [key, job] of this.jobs) if (job.view.botId === botId && job.done) this.jobs.delete(key)
     const pending = this.state.registrations.find(record => record.botId === botId && active(record.status))
     if (pending) return this.registration(pending)
-    if (this.state.bindings.some(binding => binding.botId === botId)) throw new Error('这个 Bot 已绑定机器人，不能重复创建')
     const attemptId = randomUUID()
-    const record: RegistrationRecord = { botId, attemptId, status: 'starting', message: null }
+    const record: RegistrationRecord = { botId, attemptId, ...(existing ? { purpose: 'permissions' as const } : {}), status: 'starting', message: null }
     await this.change(state => { state.registrations = [...state.registrations.filter(item => item.botId !== botId), record] })
     const job: RegistrationJob = { done: false, controller: new AbortController(), view: { ...record, url: null, qrDataUrl: null, expiresAt: null } }
     this.jobs.set(attemptId, job)
-    job.task = this.runRegistration(job, bot.name).finally(() => { job.done = true })
+    job.task = this.runRegistration(job, bot.name, existing).finally(() => { job.done = true })
     return this.registration(record)
-  }) }
+  }
   private async settle(job: RegistrationJob, status: FeishuRegistration['status'], message: string | null): Promise<void> {
     await this.change(state => { const record = state.registrations.find(item => item.attemptId === job.view.attemptId); if (record) { record.status = status; record.message = message } })
     job.view = { ...job.view, status, message, url: null, qrDataUrl: null, expiresAt: null }
   }
-  private async runRegistration(job: RegistrationJob, name: string): Promise<void> {
+  private async runRegistration(job: RegistrationJob, name: string, existing?: Binding): Promise<void> {
     try {
-      const result = await this.runtime.register({ name, signal: job.controller.signal, qr: info => {
+      const result = await this.runtime.register({ name, ...(existing ? { appId: existing.appId, brand: existing.brand } : {}), signal: job.controller.signal, qr: info => {
         if (job.controller.signal.aborted || job.view.status !== 'starting') return
         job.view = { ...job.view, status: 'waiting', url: null, qrDataUrl: null, expiresAt: Date.now() + info.expireIn * 1000 }
         // Generate locally: no third-party QR service receives the authorization URL.
@@ -227,8 +233,22 @@ export class FeishuManager implements FeishuControl {
         }).catch(() => { job.controller.abort() })
       } })
       await this.exclusive(async () => {
+        if (this.closed || job.controller.signal.aborted || !active(job.view.status)) return
         job.view = { ...job.view, status: 'saving', url: null, qrDataUrl: null }
         const id = appId(result.client_id); this.unique(id, job.view.botId)
+        if (existing) {
+          // Consent must match the selected app. Keep credentials, owners and all access settings intact.
+          const current = this.get(job.view.botId)
+          if (id !== existing.appId || current.appId !== existing.appId || current.brand !== existing.brand
+            || result.user_info?.tenant_brand && result.user_info.tenant_brand !== current.brand) throw new Error('Authorization app mismatch')
+          let notice = '已完成群信息读取和创建群聊的授权确认。请按飞书页面要求完成发布或组织审批；权限生效后会自动同步群名。'
+          try {
+            await this.checked(current, await this.secret(current))
+            if (current.enabled) { await this.runtime.stop(current.botId); await this.activate(current) }
+          } catch { notice = '权限确认已返回，原绑定已保留。请检查应用发布状态，再点击验证机器人；无需重新绑定。' }
+          await this.settle(job, 'complete', notice)
+          return
+        }
         if (!result.client_secret) throw new Error('No application credentials returned')
         const owner = result.user_info?.open_id
         const allowUsers = owner && /^ou_[\w-]+$/.test(owner) ? [owner] : []
@@ -249,7 +269,8 @@ export class FeishuManager implements FeishuControl {
         if (job.view.status === 'complete' || job.view.status === 'canceled') return
         const expired = job.view.expiresAt !== null && Date.now() >= job.view.expiresAt
         await this.settle(job, this.closed ? 'interrupted' : expired ? 'expired' : job.controller.signal.aborted ? 'canceled' : 'error',
-          this.closed ? '服务已停止，请先检查飞书后台是否已经创建应用。' : expired ? '二维码已过期，可以重新发起扫码。' : job.controller.signal.aborted ? '已取消等待。若已在飞书确认创建，请使用已有应用绑定。' : '创建或保存未完成，请先检查飞书后台；不要重复创建已有应用。')
+          existing ? '权限确认未完成，原绑定已保留。可重新扫码，或在当前应用的权限管理中一次开通群信息读取和创建群聊。'
+            : this.closed ? '服务已停止，请先检查飞书后台是否已经创建应用。' : expired ? '二维码已过期，可以重新发起扫码。' : job.controller.signal.aborted ? '已取消等待。若已在飞书确认创建，请使用已有应用绑定。' : '创建或保存未完成，请先检查飞书后台；不要重复创建已有应用。')
       }).catch(() => { job.view = { ...job.view, status: 'error', message: '无法保存授权结果，请检查 DSH 存储和飞书后台。', url: null, qrDataUrl: null } })
     }
   }
@@ -258,7 +279,7 @@ export class FeishuManager implements FeishuControl {
     if (!job || !active(job.view.status)) return
     if (job.view.status === 'saving') throw new Error('凭据正在保存，请稍候')
     job.controller.abort()
-    await this.settle(job, 'canceled', '已取消等待。若已在飞书确认创建，请使用已有应用绑定。')
+    await this.settle(job, 'canceled', job.view.purpose === 'permissions' ? '已取消权限确认等待，原机器人绑定和访问设置已保留。' : '已取消等待。若已在飞书确认创建，请使用已有应用绑定。')
   }) }
   async close(): Promise<void> { this.closed = true; for (const job of this.jobs.values()) job.controller.abort(); await Promise.allSettled([...this.jobs.values()].map(job => job.task)); await this.tail }
 }

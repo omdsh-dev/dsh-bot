@@ -8,5 +8,6 @@ export interface FeishuFace {
   verify(botId: BotId): Promise<FeishuBindingView>
   toggle(request: { botId: BotId; enabled: boolean }): Promise<FeishuBindingView>
   register(botId: BotId): Promise<FeishuRegistration>
+  authorize(botId: BotId): Promise<FeishuRegistration>
   cancel(attemptId: string): Promise<void>
 }

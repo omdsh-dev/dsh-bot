@@ -31,6 +31,50 @@ function bench(initial: Settings = { bindings: [], registrations: [], groups: []
     reject: () => reject(new Error('error with secret payload')) }
 }
 const manual = (botId: BotId, appId = `cli_${botId}`) => ({ botId, appId, appSecret: 'private-manual-secret', brand: 'feishu' as const, allowUsers: ['ou_owner'], allowGroups: [], admins: ['ou_owner'] })
+it.each([false, true])('reauthorizes the existing app once and preserves credentials and access settings (enabled=%s)', async enabled => {
+  const f = bench()
+  await f.manager.save({ ...manual(alpha), allowGroups: ['oc_existing'], allowAllGroups: true })
+  if (enabled) await f.manager.toggle({ botId: alpha, enabled })
+  const before = structuredClone(f.state().bindings), secrets = [...f.secrets.entries()]
+  const starts = vi.mocked(f.runtime.start).mock.calls.length
+  const [first, again] = await Promise.all([f.manager.authorize(alpha), f.manager.authorize(alpha)])
+  expect(first.purpose).toBe('permissions'); expect(first.attemptId).toBe(again.attemptId)
+  expect(f.register).toHaveBeenCalledTimes(1)
+  expect(f.register).toHaveBeenCalledWith(expect.objectContaining({ appId: 'cli_alpha', brand: 'feishu' }))
+  expect(f.state().bindings).toEqual(before)
+  f.finish(); await vi.waitFor(() => expect(f.manager.snapshot().registrations[0]?.status).toBe('complete'))
+  expect(f.state().bindings).toEqual(before); expect([...f.secrets.entries()]).toEqual(secrets)
+  expect(f.runtime.start).toHaveBeenCalledTimes(starts + (enabled ? 1 : 0))
+  expect(f.manager.snapshot().registrations[0]?.qrDataUrl).toBeNull()
+  await f.manager.close()
+})
+it('rejects mismatched authorization results without rebinding, rotating credentials or restarting connections', async () => {
+  const f = bench(); await f.manager.save(manual(alpha))
+  const before = structuredClone(f.state().bindings), secrets = [...f.secrets.entries()]
+  await f.manager.authorize(alpha); f.finish('cli_other')
+  await vi.waitFor(() => expect(f.manager.snapshot().registrations[0]?.status).toBe('error'))
+  expect(f.state().bindings).toEqual(before); expect([...f.secrets.entries()]).toEqual(secrets)
+  expect(f.runtime.start).not.toHaveBeenCalled()
+  await f.manager.close()
+})
+it('keeps permission cancellation and restart recoverable without late results changing a binding', async () => {
+  const f = bench(); await f.manager.save(manual(alpha))
+  let finish!: (result: RegistrationResult) => void
+  f.register.mockImplementationOnce(async () => new Promise(resolve => { finish = resolve }))
+  const pending = await f.manager.authorize(alpha), before = structuredClone(f.state().bindings)
+  const persisted = settingsDomain.global.schema.parse(f.state())
+  await f.manager.cancel(pending.attemptId)
+  finish({ client_id: 'cli_alpha', client_secret: 'late-secret' }); await f.manager.close()
+  expect(f.manager.snapshot().registrations[0]?.status).toBe('canceled')
+  expect(f.state().bindings).toEqual(before)
+  expect([...f.secrets.values()]).toEqual(['private-manual-secret'])
+  const restored = bench(persisted); await restored.manager.init()
+  expect(restored.manager.snapshot().registrations[0]).toMatchObject({ purpose: 'permissions', status: 'interrupted' })
+  expect(restored.manager.snapshot().registrations[0]?.message).not.toContain('创建应用')
+  await restored.manager.authorize(alpha)
+  expect(restored.register).toHaveBeenCalledWith(expect.objectContaining({ appId: 'cli_alpha' }))
+  await restored.manager.close()
+})
 it('keeps permission status separate from connection health and scopes it to the current enabled app', async () => {
   const f = bench()
   await f.manager.save(manual(alpha)); await f.manager.toggle({ botId: alpha, enabled: true })

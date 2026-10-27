@@ -10,6 +10,7 @@ export interface FeishuBindingView {
   allowUsers: string[]; allowGroups: string[]; allowAllGroups?: boolean | undefined; admins: string[]; credentialsConfigured: boolean
 }
 export interface FeishuRegistration {
+  purpose?: 'permissions' | undefined
   botId: BotId; attemptId: string; status: 'starting' | 'waiting' | 'saving' | 'complete' | 'canceled' | 'expired' | 'error' | 'interrupted'
   url: string | null; qrDataUrl: string | null; expiresAt: number | null; message: string | null
 }
@@ -30,5 +31,7 @@ export interface FeishuControl {
   verify(botId: BotId): Promise<FeishuBindingView>
   toggle(request: { botId: BotId; enabled: boolean }): Promise<FeishuBindingView>
   register(botId: BotId): Promise<FeishuRegistration>
+  /** Optional for compatibility with older companions. */
+  authorize?(botId: BotId): Promise<FeishuRegistration>
   cancel(attemptId: string): Promise<void>
 }

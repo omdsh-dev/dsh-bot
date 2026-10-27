@@ -3,11 +3,12 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
+import { gunzipSync } from 'node:zlib'
 import { pathToFileURL } from 'node:url'
 import { root, runtime, pluginPath } from './common.mjs'
 const require = createRequire(join(root, '.runtime/feishu-sdk/package.json'))
 const sdk = require(process.env.DSH_FEISHU_SDK_FILE || '@larksuiteoapi/node-sdk')
-const { identity, createGroup, GroupCreateError } = await import(pathToFileURL(join(runtime, pluginPath, 'lib/types/feishu/sdk.js')))
+const { identity, createGroup, GroupCreateError, register } = await import(pathToFileURL(join(runtime, pluginPath, 'lib/types/feishu/sdk.js')))
 const silent = { error() {}, warn() {}, info() {}, debug() {}, trace() {} }
 
 test('real SDK Axios errors preserve the nested group-information permission code', async () => {
@@ -116,4 +117,25 @@ test('real SDK HTTP permission failures stop media delivery while server and thr
       if (status === 400 || status === 403) assert.ok(!cause.message.includes('sensitive response'))
     }
   } finally { await transport.close() }
+})
+
+
+test('real registration SDK encodes both group scopes and the existing app into one consent URL', async () => {
+  const original = sdk.defaultHttpInstance.post
+  let qr, requests = 0
+  const controller = new AbortController()
+  sdk.defaultHttpInstance.post = async (_url, body) => {
+    requests++
+    assert.equal(new URLSearchParams(body).get('action'), 'begin')
+    return { device_code: 'offline-device', verification_uri_complete: 'https://accounts.feishu.cn/fixture', expires_in: 600, interval: 1 }
+  }
+  try {
+    await assert.rejects(register(sdk, { name: 'Existing', appId: 'cli_existing', brand: 'feishu', signal: controller.signal,
+      qr: info => { qr = new URL(info.url); controller.abort() } }))
+    assert.equal(requests, 1)
+    assert.equal(qr.searchParams.get('clientID'), 'cli_existing')
+    assert.equal(qr.searchParams.has('createOnly'), false)
+    const addons = JSON.parse(gunzipSync(Buffer.from(qr.searchParams.get('addons'), 'base64url')).toString())
+    assert.deepEqual(addons, { preset: false, scopes: { tenant: ['im:chat:read', 'im:chat:create'] } })
+  } finally { sdk.defaultHttpInstance.post = original }
 })

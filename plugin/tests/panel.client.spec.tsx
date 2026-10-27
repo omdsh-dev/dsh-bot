@@ -556,7 +556,7 @@ it('makes platform group creation optional and sends the owner and selected Bots
 
 it('opens one IM panel with both platforms and creates a Feishu robot only for the selected Bot', async () => {
   let registrations: import('../src/feishu/types.ts').FeishuRegistration[] = []
-  const feishu = { createGroup: vi.fn(), resumeGroup: vi.fn(), snapshot: vi.fn(async () => ({ available: true, bindings: [], registrations, groups: [] })), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), cancel: vi.fn(),
+  const feishu = { createGroup: vi.fn(), resumeGroup: vi.fn(), snapshot: vi.fn(async () => ({ available: true, bindings: [], registrations, groups: [] })), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), authorize: vi.fn(), cancel: vi.fn(),
     register: vi.fn(async (botId: BotId) => { const item = { botId, attemptId: 'attempt', status: 'waiting' as const, url: 'https://accounts.feishu.cn/fixture', qrDataUrl: 'data:image/png;base64,fixture', expiresAt: Date.now() + 600000, message: null }; registrations = [item]; return item }) }
   await bench({ feishu })
   expect(screen.queryByRole('button', { name: en.ifTitle })).toBeNull()
@@ -581,7 +581,7 @@ it('binds an existing Feishu app with a write-only secret and explicit allowlist
     status: 'disabled' as const, error: null, credentialsConfigured: true, allowUsers: ['ou_owner'], allowGroups: [], admins: ['ou_owner'] }
   let saved = false
   const feishu = { createGroup: vi.fn(), resumeGroup: vi.fn(), snapshot: vi.fn(async () => ({ available: true, bindings: saved ? [binding] : [], registrations: [], groups: [] })),
-    save: vi.fn(async () => { saved = true; return binding }), verify: vi.fn(), toggle: vi.fn(), cancel: vi.fn(), register: vi.fn() }
+    save: vi.fn(async () => { saved = true; return binding }), verify: vi.fn(), toggle: vi.fn(), authorize: vi.fn(), cancel: vi.fn(), register: vi.fn() }
   await bench({ feishu }, true); fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
   fireEvent.click(await screen.findByRole('button', { name: en.fsManual }))
   fireEvent.change(screen.getByLabelText('App ID'), { target: { value: 'cli_sage' } })
@@ -597,20 +597,21 @@ it('binds an existing Feishu app with a write-only secret and explicit allowlist
   expect((screen.getByLabelText('App Secret') as HTMLInputElement).value).toBe('private-secret')
   expect((screen.getByLabelText('App ID') as HTMLInputElement).value).toBe('cli_sage')
   expect(feishu.save).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('button', { name: en.ifSaveVerify }))
+  fireEvent.click(screen.getByRole('button', { name: en.fsBindAuthorize }))
   await waitFor(() => expect(feishu.save).toHaveBeenCalledWith({ botId: 'sage', appId: 'cli_sage', appSecret: 'private-secret', brand: 'feishu', allowUsers: ['ou_owner'], allowGroups: [], allowAllGroups: true, admins: [] }))
   await waitFor(() => expect((screen.getByLabelText('App Secret') as HTMLInputElement).value).toBe(''))
+  expect(feishu.authorize).toHaveBeenCalledWith('sage')
   expect(feishu.register).not.toHaveBeenCalled()
 })
 
 it('shows an app-specific permission warning and clears it after verification recovers', async () => {
   const state: FeishuState = { available: true, registrations: [], groups: [], bindings: [{ botId: 'sage' as BotId, appId: 'cli_sage', botOpenId: 'ou_bot', robotName: 'Sage robot', brand: 'feishu', enabled: true,
     status: 'connected', error: null, credentialsConfigured: true, allowUsers: ['ou_owner'], allowGroups: [], admins: ['ou_owner'], groupNameStatus: 'permission-required' }] }
-  const feishu = { createGroup: vi.fn(), resumeGroup: vi.fn(), snapshot: vi.fn(async () => structuredClone(state)), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), cancel: vi.fn(), register: vi.fn() }
+  const feishu = { createGroup: vi.fn(), resumeGroup: vi.fn(), snapshot: vi.fn(async () => structuredClone(state)), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), authorize: vi.fn(), cancel: vi.fn(), register: vi.fn() }
   await bench({ feishu }); fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
   const warning = await screen.findByRole('alert')
   expect(warning.textContent).toContain(en.fsGroupNamePermissionHelp)
-  expect(within(warning).getByRole('link').getAttribute('href')).toBe('https://open.feishu.cn/app/cli_sage/auth?q=im%3Achat%3Aread')
+  expect(screen.getByRole('link', { name: en.fsGroupNameAuthorize }).getAttribute('href')).toBe('https://open.feishu.cn/app/cli_sage/auth?q=im%3Achat%3Aread')
   expect(screen.getByText(en.fsConnected)).toBeTruthy()
   state.bindings[0]!.groupNameStatus = 'available'
   fireEvent.click(screen.getByRole('button', { name: en.ifVerify }))
@@ -626,7 +627,7 @@ it('shows an app-specific permission warning and clears it after verification re
 it('creates a Feishu group from the selected bot without requiring a manually copied Chat ID', async () => {
   const binding = { botId: 'sage' as BotId, appId: 'cli_sage', botOpenId: 'ou_bot', robotName: 'Sage robot', brand: 'feishu' as const, enabled: true,
     status: 'connected' as const, error: null, credentialsConfigured: true, allowUsers: ['ou_owner'], allowGroups: [], admins: ['ou_owner'] }
-  const feishu = { createGroup: vi.fn(), resumeGroup: vi.fn(), snapshot: vi.fn(async () => ({ available: true, bindings: [binding], registrations: [], groups: [] })), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), cancel: vi.fn(), register: vi.fn() }
+  const feishu = { createGroup: vi.fn(), resumeGroup: vi.fn(), snapshot: vi.fn(async () => ({ available: true, bindings: [binding], registrations: [], groups: [] })), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), authorize: vi.fn(), cancel: vi.fn(), register: vi.fn() }
   const f = await bench({ feishu }); feishu.createGroup.mockResolvedValue(f.room)
   fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
   await waitFor(() => expect((screen.getByRole('button', { name: en.fsNewGroup }) as HTMLButtonElement).disabled).toBe(false))
@@ -644,7 +645,7 @@ it('lets a rejected Feishu group switch creator and retry without reusing the fa
     botId: id as BotId, appId: `cli_${id}`, botOpenId: `ou_${id}`, robotName: id, brand: 'feishu', enabled: true,
     status: 'connected', error: null, credentialsConfigured: true, allowUsers: ['ou_owner'], allowGroups: [], admins: ['ou_owner'],
   })) }
-  const feishu = { createGroup: vi.fn(), resumeGroup: vi.fn(), snapshot: vi.fn(async () => state), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), cancel: vi.fn(), register: vi.fn() }
+  const feishu = { createGroup: vi.fn(), resumeGroup: vi.fn(), snapshot: vi.fn(async () => state), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), authorize: vi.fn(), cancel: vi.fn(), register: vi.fn() }
   const f = await bench({ feishu })
   feishu.createGroup.mockImplementationOnce(async request => {
     state.groups.push({ ...request, owner: 'ou_owner', createdAt: 1, chatId: null, roomId: null, status: 'failed', error: 'Missing im:chat:create' })
@@ -674,7 +675,7 @@ it.each(['uncertain', 'linking', 'unreadable'] as const)('retains the original r
   const feishu = { createGroup: vi.fn(), resumeGroup: vi.fn(), snapshot: vi.fn(async () => {
     if (submitted && outcome === 'unreadable') throw new Error('snapshot unavailable')
     return state
-  }), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), cancel: vi.fn(), register: vi.fn() }
+  }), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), authorize: vi.fn(), cancel: vi.fn(), register: vi.fn() }
   const f = await bench({ feishu })
   feishu.createGroup.mockImplementationOnce(async request => {
     submitted = true
@@ -703,7 +704,7 @@ it('reopens a rejected group with its draft and switches to a successful creator
     { requestId: 'failed-request', title: 'Keep my draft', botIds: ['sage', 'nova'] as BotId[], creatorBot: 'sage' as BotId, owner: 'ou_sage_owner', createdAt: 1, chatId: null, roomId: null, status: 'failed', error: 'Missing im:chat:create' },
     { requestId: 'ready-request', title: 'Existing group', botIds: ['nova'] as BotId[], creatorBot: 'nova' as BotId, owner: 'ou_nova_owner', createdAt: 1, chatId: 'oc_existing', roomId: 'existing' as RoomId, status: 'ready', error: null },
   ] }
-  const feishu = { createGroup: vi.fn(), resumeGroup: vi.fn(), snapshot: vi.fn(async () => state), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), cancel: vi.fn(), register: vi.fn() }
+  const feishu = { createGroup: vi.fn(), resumeGroup: vi.fn(), snapshot: vi.fn(async () => state), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), authorize: vi.fn(), cancel: vi.fn(), register: vi.fn() }
   const f = await bench({ feishu }); feishu.createGroup.mockResolvedValue(f.room)
   fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
   fireEvent.click(await screen.findByRole('button', { name: en.fsGroupEdit }))
@@ -843,4 +844,28 @@ it('creates a one-time schedule using local time without silently enabling repea
   fireEvent.change(screen.getByLabelText('Run time (your local time)'), { target: { value: '2030-03-12T09:30' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save and enable' }))
   await waitFor(() => expect(saveSchedule).toHaveBeenCalledWith(expect.objectContaining({ nextAt: new Date('2030-03-12T09:30').getTime(), intervalMinutes: 0, notify: false, allowDelegation: false })))
+})
+
+it('bundles both group scopes in the selected binding and requests existing-app consent without creating a bot', async () => {
+  const binding = { botId: 'sage' as BotId, appId: 'cli_sage', botOpenId: 'ou_bot', robotName: 'Sage robot', brand: 'lark' as const,
+    enabled: false, status: 'disabled' as const, error: null, credentialsConfigured: true, allowUsers: [], allowGroups: [], admins: [] }
+  const state: FeishuState = { available: true, bindings: [binding], registrations: [], groups: [] }
+  const feishu = { createGroup: vi.fn(), resumeGroup: vi.fn(), snapshot: vi.fn(async () => structuredClone(state)), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), cancel: vi.fn(), register: vi.fn(),
+    authorize: vi.fn(async (botId: BotId) => {
+      const registration = { botId, attemptId: 'permission-attempt', purpose: 'permissions' as const, status: 'waiting' as const,
+        url: 'https://accounts.larksuite.com/fixture', qrDataUrl: 'data:image/png;base64,fixture', expiresAt: Date.now() + 600000, message: null }
+      state.registrations = [registration]; return registration
+    }) }
+  await bench({ feishu }); fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
+  await screen.findByText(en.fsBindingPermissions)
+  expect(screen.getByText(en.fsReadGroupPermission)).toBeTruthy()
+  expect(screen.getByText(en.fsCreateGroupPermission)).toBeTruthy()
+  expect(screen.getByRole('link', { name: en.fsGroupNameAuthorize }).getAttribute('href')).toBe('https://open.larksuite.com/app/cli_sage/auth?q=im%3Achat%3Aread')
+  fireEvent.click(screen.getByRole('button', { name: en.fsAuthorizeGroups }))
+  await screen.findByRole('img', { name: en.fsPermissionQrAlt })
+  expect(feishu.authorize).toHaveBeenCalledWith('sage')
+  expect(feishu.save).not.toHaveBeenCalled(); expect(feishu.register).not.toHaveBeenCalled()
+  expect((screen.getByRole('button', { name: en.fsAuthorizeGroups }) as HTMLButtonElement).disabled).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: en.fsCancel }))
+  await waitFor(() => expect(feishu.cancel).toHaveBeenCalledWith('permission-attempt'))
 })

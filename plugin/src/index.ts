@@ -1095,6 +1095,11 @@ export class BotMode extends TypertRemoteService {
   @Remote verifyFeishuBinding(botId: BotId): Promise<FeishuBindingView> { return this.feishuConnector().verify(botId) }
   @Remote toggleFeishuBinding(request: { botId: BotId; enabled: boolean }): Promise<FeishuBindingView> { return this.feishuConnector().toggle(request) }
   @Remote registerFeishuBot(botId: BotId): Promise<FeishuRegistration> { return this.feishuConnector().register(botId) }
+  @Remote authorizeFeishuBot(botId: BotId): Promise<FeishuRegistration> {
+    const connector = this.feishuConnector()
+    if (!connector.authorize) throw new Error('请升级飞书连接器后使用扫码补齐权限')
+    return connector.authorize(botId)
+  }
   @Remote cancelFeishuRegistration(attemptId: string): Promise<void> { return this.feishuConnector().cancel(attemptId) }
 
   /**

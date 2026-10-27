@@ -96,6 +96,7 @@ function install(ctx: Context): void {
       verify: botId => value(ctx.remote.bots.verifyFeishuBinding(botId)),
       toggle: request => value(ctx.remote.bots.toggleFeishuBinding(request)),
       register: botId => value(ctx.remote.bots.registerFeishuBot(botId)),
+      authorize: botId => value(ctx.remote.bots.authorizeFeishuBot(botId)),
       cancel: attemptId => value(ctx.remote.bots.cancelFeishuRegistration(attemptId)),
     },
     infoflow: {
