@@ -1,5 +1,15 @@
 # Bot capability completion
 
+## Unified group permissions during Feishu binding (2026-10-28)
+
+Bot 0.12.7 and Feishu 0.6.5 include `im:chat:read` and `im:chat:create` together in IM binding. New-app registration requests both scopes; first-time manual binding saves the current app and immediately opens existing-app consent. Already-bound apps have one “扫码补齐两个权限” action. The official SDK receives the selected App ID and only these two incremental scopes, without `createOnly`, app metadata or event changes. Manual permission links remain folded as a fallback for unavailable platform rollout.
+
+- Existing-app results must match the original app and platform. Consent never changes stored credentials, IM administrators, allowlists or connection enablement. Enabled receivers restart after identity verification to refresh group metadata. Canceled, mismatched and interrupted results preserve the binding; late results after cancellation cannot overwrite it. The public RPC gives a clear upgrade error for older companions.
+- Build/type checks, 300 source tests, two launcher/container checks, six real-SDK contracts, five installed-package tests on each supported DSH runtime, and the shipped client test passed. The real pinned SDK test decodes the generated consent URL and verifies both scopes, the original App ID and absence of create-only mode. Package tests exercise the new existing-app operation and unchanged access settings through native Hosts. All 218 staged package files matched clean archives from `371d6e04c84eb83f1ede50e2585bc20e359573b5`; staged startup passed on the production runtime.
+- Local rollout completed on 2026-10-27 with backup `.runtime/live-upgrade-backups/2026-10-27T02-58-38-367Z`. Six Bots, fourteen chats and histories, two memories, two retained delivery failures, IM access settings and Main Bot grants were preserved. All eleven connections recovered. On 2026-10-28 the running service and live Web page were rechecked: both scope labels and the unified consent button are visible, and all connections remain healthy.
+- Existing tenant permissions have not been granted by this implementation or verification: all six Feishu bindings still report missing group-read access. An app administrator must confirm the bundled request and follow any platform publishing/approval requirements. No live IM test messages, app creation or group creation was performed. InfoFlow 0.7.1 is unchanged; npm publication remains paused.
+
+
 ## Group-name permission guidance (2026-10-26)
 
 Bot 0.12.6 and Feishu 0.6.4 expose group-information access separately from messaging connection health. Only an explicit `99991672` business response or applicable client HTTP rejection raises the permission warning; network failures, rate limiting, server errors, other access errors and empty names remain unavailable/unknown. Successful later lookup clears the warning and keeps the existing automatic name refresh.
