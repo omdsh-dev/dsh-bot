@@ -1,5 +1,13 @@
 # Bot capability completion
 
+## npm publication (2026-10-28)
+
+Bot 0.12.9, Feishu 0.6.6 and InfoFlow 0.7.2 are now published to npm `next`. All three public versions, tags and SHA-512 integrity values were verified, and downloaded registry archives match the previously tested clean local archives byte-for-byte. The existing `latest` tags are unchanged. This completes the publication that was paused in the historical rollout entries below.
+
+Bot and Feishu installed from the public registry through the actual plugin manager and started Desktop successfully on both DSH 0.1.5-rc.2 and 0.2.0-rc.2. The installer test now verifies that the real Feishu manager is attached and leaves it in place; the isolated base-package tests continue to exercise their simulated IM controls. This test-only correction fixes a duplicate-manager failure without changing the released archives. Local installer verification and both base archive checks also passed. InfoFlow's earlier native Host, real SDK contract and authorized live-platform acceptance apply to the exact archive now downloaded from npm; its enterprise SDK was not installed from the public registry by the Bot/Feishu installer check.
+
+Publication metadata, downloaded archives and installation logs are retained locally in `.runtime/release-ops-0.12.9/npm/` and excluded from the repository. The existing live profile already uses these release archives; publication did not change its bindings or invitation policy.
+
 ## InfoFlow human invitation allowlist (2026-10-28)
 
 Live acceptance follow-up: the user authorized two specific human accounts for a real group. The running product rejected empty-policy, unlisted-owner and unlisted-member requests before recording creation. With both accounts explicitly allowed, it created exactly one real group through the normal authenticated product endpoint. Subsequent official InfoFlow group-information and membership queries confirmed the authorized human owner, exactly two authorized human members and one selected robot, with no extra colleague. The initial metadata read failed; later read-only queries succeeded, without repeating creation. Retrying the original request returned the same room/group. A new request after invitation authority was withdrawn was rejected, and the exact pre-test policy was restored. The test group remains for the user's inspection. Private account identifiers and platform evidence are retained locally in `.runtime/release-ops-0.12.9/live-acceptance/` and are excluded from the repository. This completes real platform acceptance separately from the earlier simulated tests below.
