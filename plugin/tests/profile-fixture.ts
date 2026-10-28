@@ -1,4 +1,4 @@
-/** Keyless real-profile driver. Only the external model is replaced. */
+/** Keyless real-profile driver with a deterministic model and explicit IM control fixtures. */
 import assert from 'node:assert/strict'
 import { writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
@@ -12,6 +12,9 @@ const CONNECTOR_PROTOCOL = 2
 export const name = 'bot-mode-profile-fixture'
 export const inject = ['botMode', 'llm', 'storageDomain', 'agents']
 export async function apply(ctx: Context): Promise<void> {
+  // Installer tests load the actual companion; never replace its manager with a fixture.
+  const installedFeishu = process.env.BOT_TEST_INSTALLED_FEISHU === '1'
+  const fixtureProviders = (['feishu', 'infoflow'] as const).filter(provider => !installedFeishu || provider !== 'feishu')
   const requests: GenerateOptions[] = []
   let knowledgeMessageId = ''
   let browserUrl = ''
@@ -113,6 +116,12 @@ export async function apply(ctx: Context): Promise<void> {
   }
   try {
     const service = ctx.botMode
+    if (installedFeishu) {
+      const deadline = Date.now() + 5000
+      while (!service.feishuSnapshot().available && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20))
+      assert.equal(service.feishuSnapshot().available, true, 'The installed Feishu companion attaches its real manager')
+      assert.deepEqual(service.feishuSnapshot().bindings, [], 'Installer verification must use an unbound isolated profile')
+    }
     await service.configureKnowledge({ reviewEnabled: false })
     if (process.env.BOT_TEST_PHASE === 'resume') {
       assert.equal(service.snapshot().bots.find(bot => bot.id === 'team-worker')?.capabilities, 'Research and evidence gathering.')
@@ -363,7 +372,7 @@ export async function apply(ctx: Context): Promise<void> {
       assert.ok(!JSON.stringify(requests.at(-1)).includes(specialist.id), 'External private discovery cannot expose a different Bot')
       const unusedIM = async (): Promise<never> => { throw new Error('IM creation must not change connector configuration or send messages') }
       const imHost = await service.createBot({ id: 'im-host', name: 'IM host', instructions: 'Help administrators create specialist Bots.' })
-      for (const provider of ['feishu', 'infoflow'] as const) {
+      for (const provider of fixtureProviders) {
         const baseBinding = { botId: imHost.id, enabled: true, status: 'connected' as const, error: null, robotName: 'Fixture', credentialsConfigured: true,
           allowUsers: ['admin', 'guest'], allowGroups: ['im-group'], admins: ['admin'], groupNameStatus: 'permission-required' as const }
         const detachIM = provider === 'feishu' ? service.attachFeishu({
@@ -418,7 +427,7 @@ export async function apply(ctx: Context): Promise<void> {
           assert.ok(!JSON.stringify(requests.at(-1)!.tools).includes('create_bot'))
         } finally { detachIM() }
       }
-      assert.equal(service.teamView().audit.length, 6)
+      assert.equal(service.teamView().audit.length, 2 + fixtureProviders.length * 2)
       const cardBot = await service.createBot({ id: 'card-bot', name: 'Card Bot', instructions: 'Use native cards.' }), cardRoom = await service.openDirect(cardBot.id)
       await service.send({ roomId: cardRoom.id, text: 'CARD_VIEW_FIXTURE Ask for the next detail.' })
       const cardMessage = (await settled(cardRoom.id)).messages.at(-1)!
@@ -478,10 +487,10 @@ createInterface({input:process.stdin}).on('line', line=>{
       await service.saveBotCredential({ name: 'FIXTURE_TOKEN', description: 'Restored scoped fixture', value: 'ONLY_GRANTED_FIXTURE_TOKEN_123', botIds: [owner.id], shellBotIds: [owner.id] })
     } else if (process.env.BOT_TEST_PHASE === 'resume') {
       assert.equal(service.teamView().settings.botId, 'team-main')
-      assert.equal(service.teamView().audit.length, 6)
-      assert.equal(service.teamView().audit.filter(item => item.actor).length, 4)
-      for (const provider of ['feishu', 'infoflow']) assert.equal(service.snapshot().rooms.find(room => room.external?.provider === provider && room.external.id === 'im-group')?.title, `${provider} 对话补齐群`)
-      for (const id of ['im-feishu-private', 'im-feishu-group', 'im-infoflow-private', 'im-infoflow-group']) assert.equal(service.snapshot().bots.find(bot => bot.id === id)?.capabilities, 'Research requested from IM')
+      assert.equal(service.teamView().audit.length, 2 + fixtureProviders.length * 2)
+      assert.equal(service.teamView().audit.filter(item => item.actor).length, fixtureProviders.length * 2)
+      for (const provider of fixtureProviders) assert.equal(service.snapshot().rooms.find(room => room.external?.provider === provider && room.external.id === 'im-group')?.title, `${provider} 对话补齐群`)
+      for (const provider of fixtureProviders) for (const kind of ['private', 'group']) assert.equal(service.snapshot().bots.find(bot => bot.id === `im-${provider}-${kind}`)?.capabilities, 'Research requested from IM')
       const cards = service.snapshot().rooms.find(room => room.defaultBot === 'card-bot')!.messages.flatMap(message => message.cards ?? [])
       assert.equal(cards[0]!.submitted!.values.detail, 'NATIVE_FORM_ANSWER')
       assert.ok((await service.accessCatalog()).credentials.some(item => item.name === 'FIXTURE_TOKEN' && item.configured))

@@ -50,14 +50,14 @@ export async function verifyInstallation(registry = false) {
       if (loaded) assert.ok(loaded.layers.some(layer => layer.packageName === info.name))
       else assert.ok(manager.listPlugins().some(item => item.name === info.name && item.enabled))
     }
-    // Add the external model substitute only after the real package installation has completed.
+    // Add the deterministic test driver only after the real package installation has completed.
     for (const file of ['driver.js', 'cordis.patch.yml']) await copyFile(join(fixture.profile, file), join(paths.profile, file))
     const manifestFile = join(paths.profile, 'package.json')
     const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
     await writeFile(manifestFile, JSON.stringify({ ...manifest, type: 'module' }))
     const result = join(home, 'registry-result.json')
     host = new DesktopHostProcess(process.execPath, fixture.resources, paths.profile, undefined, {
-      ...fixture.environment, DSH_HOME: data, BOT_TEST_PHASE: 'first', BOT_TEST_RESULT: result,
+      ...fixture.environment, DSH_HOME: data, BOT_TEST_PHASE: 'first', BOT_TEST_RESULT: result, BOT_TEST_INSTALLED_FEISHU: '1',
     })
     let timer
     let ready
