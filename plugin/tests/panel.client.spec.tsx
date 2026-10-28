@@ -611,7 +611,7 @@ it('shows an app-specific permission warning and clears it after verification re
   await bench({ feishu }); fireEvent.click(screen.getByRole('button', { name: en.imTitle }))
   const warning = await screen.findByRole('alert')
   expect(warning.textContent).toContain(en.fsGroupNamePermissionHelp)
-  expect(screen.getByRole('link', { name: en.fsGroupNameAuthorize }).getAttribute('href')).toBe('https://open.feishu.cn/app/cli_sage/auth?q=im%3Achat%3Aread')
+  expect(screen.getByRole('link', { name: en.fsPermissionConsole }).getAttribute('href')).toBe('https://open.feishu.cn/app/cli_sage/auth')
   expect(screen.getByText(en.fsConnected)).toBeTruthy()
   state.bindings[0]!.groupNameStatus = 'available'
   fireEvent.click(screen.getByRole('button', { name: en.ifVerify }))
@@ -846,7 +846,7 @@ it('creates a one-time schedule using local time without silently enabling repea
   await waitFor(() => expect(saveSchedule).toHaveBeenCalledWith(expect.objectContaining({ nextAt: new Date('2030-03-12T09:30').getTime(), intervalMinutes: 0, notify: false, allowDelegation: false })))
 })
 
-it('bundles both group scopes in the selected binding and requests existing-app consent without creating a bot', async () => {
+it('bundles all connector permissions including images and files in the selected binding and requests existing-app consent without creating a bot', async () => {
   const binding = { botId: 'sage' as BotId, appId: 'cli_sage', botOpenId: 'ou_bot', robotName: 'Sage robot', brand: 'lark' as const,
     enabled: false, status: 'disabled' as const, error: null, credentialsConfigured: true, allowUsers: [], allowGroups: [], admins: [] }
   const state: FeishuState = { available: true, bindings: [binding], registrations: [], groups: [] }
@@ -860,12 +860,34 @@ it('bundles both group scopes in the selected binding and requests existing-app 
   await screen.findByText(en.fsBindingPermissions)
   expect(screen.getByText(en.fsReadGroupPermission)).toBeTruthy()
   expect(screen.getByText(en.fsCreateGroupPermission)).toBeTruthy()
-  expect(screen.getByRole('link', { name: en.fsGroupNameAuthorize }).getAttribute('href')).toBe('https://open.larksuite.com/app/cli_sage/auth?q=im%3Achat%3Aread')
-  fireEvent.click(screen.getByRole('button', { name: en.fsAuthorizeGroups }))
+  expect(screen.getByText(en.fsMessagingPermission)).toBeTruthy()
+  expect(screen.getByText(en.fsMediaPermission)).toBeTruthy()
+  expect(screen.getByText(en.fsMembershipPermission)).toBeTruthy()
+  fireEvent.click(screen.getByText(en.fsPermissionFallback))
+  const config = screen.getByRole('textbox', { name: en.fsPermissionConfig }) as HTMLTextAreaElement
+  expect(config.readOnly).toBe(true)
+  expect(JSON.parse(config.value)).toEqual({ scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:message:readonly', 'im:resource', 'im:chat:read', 'im:chat:create', 'im:chat.members:bot_access'] } })
+  expect(config.value).not.toContain('secret')
+  const previousClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard'), writeText = vi.fn(async (_value: string) => {})
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+  try {
+    fireEvent.click(screen.getByRole('button', { name: en.fsCopyPermissions }))
+    await screen.findByText(en.copied)
+    expect(writeText).toHaveBeenCalledWith(config.value)
+    writeText.mockRejectedValueOnce(new Error('clipboard denied'))
+    fireEvent.click(screen.getByRole('button', { name: en.fsCopyPermissions }))
+    await screen.findByText(en.fsPermissionCopyFailed)
+    expect(config.value).toContain('im:resource')
+  } finally {
+    if (previousClipboard) Object.defineProperty(navigator, 'clipboard', previousClipboard)
+    else Reflect.deleteProperty(navigator, 'clipboard')
+  }
+  expect(screen.getByRole('link', { name: en.fsPermissionConsole }).getAttribute('href')).toBe('https://open.larksuite.com/app/cli_sage/auth')
+  fireEvent.click(screen.getByRole('button', { name: en.fsAuthorizePermissions }))
   await screen.findByRole('img', { name: en.fsPermissionQrAlt })
   expect(feishu.authorize).toHaveBeenCalledWith('sage')
   expect(feishu.save).not.toHaveBeenCalled(); expect(feishu.register).not.toHaveBeenCalled()
-  expect((screen.getByRole('button', { name: en.fsAuthorizeGroups }) as HTMLButtonElement).disabled).toBe(true)
+  expect((screen.getByRole('button', { name: en.fsAuthorizePermissions }) as HTMLButtonElement).disabled).toBe(true)
   fireEvent.click(screen.getByRole('button', { name: en.fsCancel }))
   await waitFor(() => expect(feishu.cancel).toHaveBeenCalledWith('permission-attempt'))
 })

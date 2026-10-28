@@ -64,7 +64,8 @@
     "src/bot-discovery.ts",
     "src/im-bot-creation.ts",
     "src/im-group-name.ts",
-    "src/group-titles.ts"
+    "src/group-titles.ts",
+    "src/feishu/permissions.ts"
   ],
   "references": [
     {

@@ -241,7 +241,7 @@ export class FeishuManager implements FeishuControl {
           const current = this.get(job.view.botId)
           if (id !== existing.appId || current.appId !== existing.appId || current.brand !== existing.brand
             || result.user_info?.tenant_brand && result.user_info.tenant_brand !== current.brand) throw new Error('Authorization app mismatch')
-          let notice = '已完成群信息读取和创建群聊的授权确认。请按飞书页面要求完成发布或组织审批；权限生效后会自动同步群名。'
+          let notice = '接入权限确认已返回，申请包含消息收发、图片和文件、群信息、创建群聊及进群事件。请核对飞书确认页，并按平台要求完成发布或组织审批；权限生效后可使用对应能力。'
           try {
             await this.checked(current, await this.secret(current))
             if (current.enabled) { await this.runtime.stop(current.botId); await this.activate(current) }
@@ -269,7 +269,7 @@ export class FeishuManager implements FeishuControl {
         if (job.view.status === 'complete' || job.view.status === 'canceled') return
         const expired = job.view.expiresAt !== null && Date.now() >= job.view.expiresAt
         await this.settle(job, this.closed ? 'interrupted' : expired ? 'expired' : job.controller.signal.aborted ? 'canceled' : 'error',
-          existing ? '权限确认未完成，原绑定已保留。可重新扫码，或在当前应用的权限管理中一次开通群信息读取和创建群聊。'
+          existing ? '权限确认未完成，原绑定已保留。可重新扫码，或复制绑定页的完整权限配置，在当前应用的权限管理中批量导入。'
             : this.closed ? '服务已停止，请先检查飞书后台是否已经创建应用。' : expired ? '二维码已过期，可以重新发起扫码。' : job.controller.signal.aborted ? '已取消等待。若已在飞书确认创建，请使用已有应用绑定。' : '创建或保存未完成，请先检查飞书后台；不要重复创建已有应用。')
       }).catch(() => { job.view = { ...job.view, status: 'error', message: '无法保存授权结果，请检查 DSH 存储和飞书后台。', url: null, qrDataUrl: null } })
     }

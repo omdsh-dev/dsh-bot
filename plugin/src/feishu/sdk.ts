@@ -9,6 +9,7 @@ import type { Brand, FeishuBindingView } from './types.ts'
 import type { ChatAttachment, AttachmentData, UploadRequest } from '../types.ts'
 import { imageMime } from '../media.ts'
 import { GroupTitles, type GroupTitleTarget } from '../group-titles.ts'
+import { bindingScopes } from './permissions.ts'
 const logger = { error() {}, warn() {}, info() {}, debug() {}, trace() {} }
 const domain = (brand: Brand) => brand === 'lark' ? 'https://open.larksuite.com' : 'https://open.feishu.cn'
 export interface RegistrationOptions {
@@ -50,7 +51,7 @@ const permanentCodes = [99991672, 230002, 230003, 230006, 230013]
 function transportError(cause: unknown): never {
   const response = object(object(cause).response), status = Number(response.status)
   if (status >= 400 && status < 500 && status !== 429 && permanentCodes.includes(Number(object(response.data).code))) {
-    throw new PermanentChatError('飞书拒绝了请求，请检查应用权限（附件需要 im:resource）、发布状态和群成员')
+    throw new PermanentChatError('飞书拒绝了请求，请在 IM 接入中扫码补齐接入权限（附件下载需要 im:message:readonly，上传需要 im:resource），并检查发布状态和群成员')
   }
   throw cause
 }
@@ -110,15 +111,14 @@ export async function createGroup(sdk: Sdk, appId: string, appSecret: string, br
   if (result.code !== 0 || !/^oc_[\w-]+$/.test(chatId)) throw new Error('未取得群 ID，请使用同一请求继续，勿重复新建')
   return chatId
 }
-/** Official user-confirmed registration with messaging and group-creation permissions. */
-const groupScopes = ['im:chat:read', 'im:chat:create']
+/** New and existing apps request the same complete set of connector permissions. */
 export function register(sdk: Sdk, options: RegistrationOptions): Promise<RegistrationResult> {
   if (options.appId) return sdk.registerApp({ signal: options.signal, source: 'dsh-bot', appId: options.appId,
     ...(options.brand === 'lark' ? { domain: 'accounts.larksuite.com' } : {}), onQRCodeReady: options.qr,
-    addons: { preset: false, scopes: { tenant: [...groupScopes] } } })
+    addons: { preset: false, scopes: bindingScopes() } })
   return sdk.registerApp({ signal: options.signal, source: 'dsh-bot', createOnly: true, onQRCodeReady: options.qr,
     appPreset: { name: options.name, desc: 'DSH Bot 独立 AI 助手' },
-    addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', ...groupScopes, 'im:resource', 'im:chat.members:bot_access'] },
+    addons: { preset: false, scopes: bindingScopes(),
       events: { items: { tenant: ['im.message.receive_v1', 'im.chat.member.bot.added_v1', 'im.chat.updated_v1'] } } } })
 }
 export async function qrImage(url: string): Promise<string> {

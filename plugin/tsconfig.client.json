@@ -49,7 +49,8 @@
     "src/team-types.ts",
     "src/client/TeamControls.tsx",
     "src/client/HistoryBrowser.tsx",
-    "src/client/ModelPicker.tsx"
+    "src/client/ModelPicker.tsx",
+    "src/feishu/permissions.ts"
   ],
   "references": [
     {

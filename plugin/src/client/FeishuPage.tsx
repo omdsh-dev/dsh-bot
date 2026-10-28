@@ -5,9 +5,11 @@ import type { Bot, BotId, Room, RoomId } from '../types.ts'
 import type { Brand, FeishuBindingView, FeishuGroupView, FeishuRegistration, FeishuState } from '../feishu/types.ts'
 import type { BotKey } from './locales.ts'
 import type { FeishuFace } from './feishu-face.ts'
+import { bindingPermissionImport } from '../feishu/permissions.ts'
 import { Avatar } from './Avatar.tsx'
 import css from './Panel.module.css'
 type Translate = (key: BotKey) => string
+const permissionImport = bindingPermissionImport()
 export function FeishuPage({ bots, api, t, createGroup, openRoom, selectRoom }: { bots: Bot[]; api: FeishuFace | undefined; t: Translate; createGroup(id: BotId, failed?: FeishuGroupView): void; openRoom(room: Room): void; selectRoom(id: RoomId): void }) {
   const [snapshot, setSnapshot] = useState<FeishuState | null>(null)
   const [selected, setSelected] = useState<BotId | undefined>(bots[0]?.id)
@@ -53,6 +55,7 @@ function Editor({ bot, binding, registration, api, t, changed }: { bot: Bot; bin
   const [allGroups, setAllGroups] = useState(binding?.allowAllGroups === true)
   const [dirty, setDirty] = useState(false), [busy, setBusy] = useState(false), [manual, setManual] = useState(false)
   const [error, setError] = useState<string | null>(null), [message, setMessage] = useState<string | null>(null)
+  const [permissionCopy, setPermissionCopy] = useState<BotKey | null>(null)
   useEffect(() => {
     if (!dirty) { setAppId(binding?.appId ?? ''); setBrand(binding?.brand ?? 'feishu'); setUsers(binding?.allowUsers.join(', ') ?? ''); setGroups(binding?.allowGroups.join(', ') ?? ''); setAdmins(binding?.admins.join(', ') ?? ''); setAllGroups(binding?.allowAllGroups === true) }
   }, [binding, dirty])
@@ -68,17 +71,22 @@ function Editor({ bot, binding, registration, api, t, changed }: { bot: Bot; bin
     <div className={css.integrationIdentity}><Avatar id={bot.id} large/><div><h3>{bot.name}</h3><p>@{bot.id}</p></div><span className={css.integrationStatus} data-status={status}>{t(status === 'connected' ? 'fsConnected' : status === 'connecting' ? 'ifConnecting' : status === 'error' ? 'ifConnectionError' : 'ifDisabled')}</span></div>
     {(binding || manual) && <div className={css.integrationNotice}>
       <strong>{t('fsBindingPermissions')}</strong><p>{t('fsBindingPermissionsHint')}</p>
-      <ul><li>{t('fsReadGroupPermission')}</li><li>{t('fsCreateGroupPermission')}</li></ul>
+      <ul><li>{t('fsMessagingPermission')}</li><li>{t('fsMediaPermission')}</li><li>{t('fsReadGroupPermission')}</li><li>{t('fsCreateGroupPermission')}</li><li>{t('fsMembershipPermission')}</li></ul>
       {binding?.enabled && <div role={binding.groupNameStatus === 'permission-required' ? 'alert' : 'status'}>
       <strong>{t(binding.groupNameStatus === 'permission-required' ? 'fsGroupNameNeedsAccess' : binding.groupNameStatus === 'available' ? 'fsGroupNameAvailable' : binding.groupNameStatus === 'unavailable' ? 'fsGroupNameUnavailable' : 'fsGroupNameUnknown')}</strong>
       {binding.groupNameStatus === 'permission-required' && <p>{t('fsGroupNamePermissionHelp')}</p>}
       {binding.groupNameStatus === 'unavailable' && <p>{t('fsGroupNameRetryHelp')}</p>}
       </div>}
-      {binding && <><Button variant="primary" disabled={busy || active || dirty} onClick={() => { void run(() => api.authorize(bot.id)) }}>{t('fsAuthorizeGroups')}</Button>
-        <details><summary>{t('fsPermissionFallback')}</summary><p>{t('fsPermissionFallbackHint')}</p>
-          <a href={`https://${binding.brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/app/${encodeURIComponent(binding.appId)}/auth?q=im%3Achat%3Aread`} target="_blank" rel="noreferrer noopener">{t('fsGroupNameAuthorize')}</a>{' · '}
-          <a href={`https://${binding.brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/app/${encodeURIComponent(binding.appId)}/auth?q=im%3Achat%3Acreate`} target="_blank" rel="noreferrer noopener">{t('fsGroupAuthorize')}</a>
-        </details></>}
+      {binding && <Button variant="primary" disabled={busy || active || dirty} onClick={() => { void run(() => api.authorize(bot.id)) }}>{t('fsAuthorizePermissions')}</Button>}
+      <details><summary>{t('fsPermissionFallback')}</summary><p>{t('fsPermissionFallbackHint')}</p>
+        <textarea className={css.permissionConfig} aria-label={t('fsPermissionConfig')} rows={8} readOnly value={permissionImport}/>
+        <div className={css.integrationActions}><Button onClick={() => { void (async () => {
+          try { await navigator.clipboard.writeText(permissionImport); setPermissionCopy('copied') }
+          catch { setPermissionCopy('fsPermissionCopyFailed') }
+        })() }}>{t('fsCopyPermissions')}</Button>
+        {/^cli_[a-zA-Z0-9_-]+$/.test(appId.trim()) && <a href={`https://${brand === 'lark' ? 'open.larksuite.com' : 'open.feishu.cn'}/app/${encodeURIComponent(appId.trim())}/auth`} target="_blank" rel="noreferrer noopener">{t('fsPermissionConsole')}</a>}</div>
+        {permissionCopy && <p role="status">{t(permissionCopy)}</p>}
+      </details>
     </div>}
     {!binding && <div className={css.integrationNotice}><strong>{t('fsCreateTitle')}</strong><p>{t('fsCreateHint')}</p>
       <div className={css.integrationActions}><Button variant="primary" disabled={busy || active} onClick={() => { void run(() => api.register(bot.id)) }}>{t('fsCreate')}</Button><Button disabled={active} onClick={() => { setManual(!manual) }}>{t('fsManual')}</Button></div>

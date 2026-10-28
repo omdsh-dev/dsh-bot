@@ -106,7 +106,7 @@ export async function apply(ctx) {
    assert.deepEqual(bot.feishuSnapshot().bindings.find(item=>item.botId==='beta'),beforePermissions);
    assert.equal(sdk.state.registrations,1,'Existing-app consent must not create another app');
    assert.equal(sdk.state.authorizations.length,1);
-   assert.deepEqual(sdk.state.authorizations[0].addons,{preset:false,scopes:{tenant:['im:chat:read','im:chat:create']}});
+   assert.deepEqual(sdk.state.authorizations[0].addons,{preset:false,scopes:{tenant:['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:message:readonly', 'im:resource', 'im:chat:read', 'im:chat:create', 'im:chat.members:bot_access']}});
    for(const id of ['alpha','beta']) {
     const binding=bot.feishuSnapshot().bindings.find(item=>item.botId===id);
     await bot.toggleFeishuBinding({botId:id,enabled:true});

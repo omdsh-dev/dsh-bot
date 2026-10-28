@@ -120,7 +120,7 @@ test('real SDK HTTP permission failures stop media delivery while server and thr
 })
 
 
-test('real registration SDK encodes both group scopes and the existing app into one consent URL', async () => {
+test('real registration SDK encodes all connector scopes including media download/upload and the existing app into one consent URL', async () => {
   const original = sdk.defaultHttpInstance.post
   let qr, requests = 0
   const controller = new AbortController()
@@ -136,6 +136,6 @@ test('real registration SDK encodes both group scopes and the existing app into 
     assert.equal(qr.searchParams.get('clientID'), 'cli_existing')
     assert.equal(qr.searchParams.has('createOnly'), false)
     const addons = JSON.parse(gunzipSync(Buffer.from(qr.searchParams.get('addons'), 'base64url')).toString())
-    assert.deepEqual(addons, { preset: false, scopes: { tenant: ['im:chat:read', 'im:chat:create'] } })
+    assert.deepEqual(addons, { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:message:readonly', 'im:resource', 'im:chat:read', 'im:chat:create', 'im:chat.members:bot_access'] } })
   } finally { sdk.defaultHttpInstance.post = original }
 })

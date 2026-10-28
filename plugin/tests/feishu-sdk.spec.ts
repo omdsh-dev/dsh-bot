@@ -20,7 +20,7 @@ it('uses the official create-only flow with explicit messaging permissions and c
   const b = bench(), controller = new AbortController(), qr = vi.fn()
   await register(b.sdk, { signal: controller.signal, name: 'Alpha', qr })
   expect(b.registration).toHaveBeenCalledWith(expect.objectContaining({ createOnly: true, source: 'dsh-bot', signal: controller.signal, onQRCodeReady: qr,
-    appPreset: expect.objectContaining({ name: 'Alpha' }), addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:chat:read', 'im:chat:create', 'im:resource', 'im:chat.members:bot_access'] }, events: { items: { tenant: ['im.message.receive_v1', 'im.chat.member.bot.added_v1', 'im.chat.updated_v1'] } } } }))
+    appPreset: expect.objectContaining({ name: 'Alpha' }), addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:message:readonly', 'im:resource', 'im:chat:read', 'im:chat:create', 'im:chat.members:bot_access'] }, events: { items: { tenant: ['im.message.receive_v1', 'im.chat.member.bot.added_v1', 'im.chat.updated_v1'] } } } }))
   expect(await identity(b.sdk, 'cli_app', 'secret', 'feishu', 100)).toEqual({ openId: 'ou_robot', name: 'Alpha' })
   await b.transport.close()
 })
@@ -205,12 +205,12 @@ it('lets an allowed new group join with all-groups enabled and retries a sanitiz
   await b.transport.close()
 })
 
-it.each(['feishu', 'lark'] as const)('requests both group permissions for an existing %s app without creation or event changes', async brand => {
+it.each(['feishu', 'lark'] as const)('requests all connector permissions including media download and upload for an existing %s app without creation or event changes', async brand => {
   const b = bench(), controller = new AbortController(), qr = vi.fn()
   await register(b.sdk, { signal: controller.signal, name: 'Alpha', appId: 'cli_existing', brand, qr })
   const options = b.registration.mock.calls[0]![0]
   expect(options).toEqual({ signal: controller.signal, source: 'dsh-bot', appId: 'cli_existing', onQRCodeReady: qr,
     ...(brand === 'lark' ? { domain: 'accounts.larksuite.com' } : {}),
-    addons: { preset: false, scopes: { tenant: ['im:chat:read', 'im:chat:create'] } } })
+    addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:message:readonly', 'im:resource', 'im:chat:read', 'im:chat:create', 'im:chat.members:bot_access'] } } })
   await b.transport.close()
 })
