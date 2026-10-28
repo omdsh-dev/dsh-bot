@@ -1066,8 +1066,18 @@ export class BotMode extends TypertRemoteService {
   @Remote toggleInfoflowBinding(request: ToggleInfoFlowRequest): Promise<InfoFlowBindingView> { return this.connector().toggle(request) }
   /** Send a fixed test to a saved private-chat account without invoking the model. */
   @Remote testInfoflowMessage(request: TestInfoFlowRequest): Promise<void> { return this.connector().testMessage(request) }
+  /** Explicit local policy: never derive invitation rights from private-chat access or administrators. */
+  @Remote saveInfoflowGroupInviteAllowlist(users: string[]): Promise<string[]> {
+    const connector = this.connector()
+    if (!connector.saveGroupInviteAllowlist) throw new Error('请升级如流连接器后配置建群邀请白名单')
+    return connector.saveGroupInviteAllowlist(users)
+  }
   /** Explicitly create one platform group and its DSH conversation. */
-  @Remote createInfoflowGroup(request: CreateInfoFlowGroupRequest): Promise<Room> { return this.connector().createGroup(request) }
+  @Remote createInfoflowGroup(request: CreateInfoFlowGroupRequest): Promise<Room> {
+    const connector = this.connector()
+    if (!connector.snapshot().groupInviteAllowlist) throw new Error('请升级如流连接器后配置建群邀请白名单')
+    return connector.createGroup(request)
+  }
   /** Complete local linking for a group whose platform ID is already saved. */
   @Remote attachInfoflowGroup(request: { requestId: string; groupId: string }): Promise<Room> { return this.connector().attachGroup(request) }
   @Remote resumeInfoflowGroup(requestId: string): Promise<Room> { return this.connector().resumeGroup(requestId) }

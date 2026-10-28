@@ -66,6 +66,7 @@ export function BotPanel(props: Props) {
   const [groupRequestId, setGroupRequestId] = useState('')
   const [groupSubmitted, setGroupSubmitted] = useState(false)
   const [feishuGroups, setFeishuGroups] = useState<FeishuState | null>(null)
+  const [inviteAllowlist, setInviteAllowlist] = useState<string[] | null>(null)
   const [draft, setDraft] = useState('')
   const [reply, setReply] = useState<ChatMessageId | null>(null)
   const [busy, setBusy] = useState(false)
@@ -112,6 +113,14 @@ export function BotPanel(props: Props) {
     return () => { live = false }
   }, [form, syncGroup, props.feishu])
   useEffect(() => {
+    if (form !== 'group' || syncGroup !== 'infoflow' || !props.infoflow) return
+    let live = true
+    setInviteAllowlist(null)
+    void props.infoflow.snapshot().then(state => { if (live) setInviteAllowlist(state.groupInviteAllowlist ?? []) })
+      .catch(() => { if (live) setInviteAllowlist([]) })
+    return () => { live = false }
+  }, [form, syncGroup, props.infoflow])
+  useEffect(() => {
     if (!pendingBot) return
     const created = rooms.find(item => item.kind === 'dm' && !item.external && item.defaultBot === pendingBot)
     if (created) { select(created.id); setPendingBot(null); setDraft(''); setReply(null); follow.current = true }
@@ -127,7 +136,7 @@ export function BotPanel(props: Props) {
     return props.capabilities!.upload({ name: file.name, mediaType: file.type, base64, transcribe: file.type.startsWith('audio/') || file.name.toLowerCase().endsWith('.wav') })
   }
   const openForm = (next: 'bot' | 'edit' | 'group' | 'members', bot?: Bot) => {
-    setSyncGroup('none'); setGroupOwner(''); setHumanMembers(''); setGroupRequestId(crypto.randomUUID()); setGroupSubmitted(false); setFeishuGroups(null)
+    setSyncGroup('none'); setGroupOwner(''); setHumanMembers(''); setInviteAllowlist(null); setGroupRequestId(crypto.randomUUID()); setGroupSubmitted(false); setFeishuGroups(null)
     setForm(next); setError(null); setName(bot?.name ?? ''); setHandle(bot?.id ?? ''); setInstructions(bot?.instructions ?? ''); setBotCapabilities(bot?.capabilities ?? ''); setPreset(bot?.preset ?? 'standard')
     const ids = next === 'members' && room ? room.members.map(item => item.botId) : bots.slice(0, 2).map(bot => bot.id)
     setMembers(ids); setDefault(next === 'members' ? room?.defaultBot : ids[0])
@@ -137,6 +146,8 @@ export function BotPanel(props: Props) {
   }
   const botName = (id: BotId | null) => id === null ? t('you') : bots.find(bot => bot.id === id)?.name ?? id
   const groupLocked = busy || groupSubmitted
+  const invitedMembers = humanMembers.split(/[,，\s]+/).filter(Boolean)
+  const validInfoflowInvite = !!groupOwner && !!inviteAllowlist?.includes(groupOwner) && invitedMembers.every(user => inviteAllowlist.includes(user))
   const creatorBinding = feishuGroups?.bindings.find(binding => binding.botId === defaultBot)
   const alternativeCreator = feishuGroups?.bindings.find(binding => binding.botId !== defaultBot && binding.enabled && members.includes(binding.botId)
     && feishuGroups.groups.some(group => group.creatorBot === binding.botId && group.status === 'ready'))
@@ -343,7 +354,7 @@ export function BotPanel(props: Props) {
     </Modal>
     <Modal open={form !== null} onClose={closeForm} closeLabel={t('cancel')} title={t(form === 'bot' ? 'newBot' : form === 'edit' ? 'editBot' : form === 'group' ? 'newGroup' : 'settings')}
       description={t(form === 'bot' ? 'createHelp' : form === 'edit' ? 'editHelp' : 'groupHelp')} className={clsx(css.dialog)} contentClassName={clsx(css.dialogContent)}
-      footer={<><Button disabled={busy} onClick={closeForm}>{t('cancel')}</Button><Button form="bot-settings" type="submit" variant="primary" disabled={busy || ((form === 'group' || form === 'members') && !members.length)}>{t(form === 'members' || form === 'edit' ? 'save' : syncGroup === 'feishu' && groupSubmitted ? 'fsGroupResume' : 'create')}</Button></>}>
+      footer={<><Button disabled={busy} onClick={closeForm}>{t('cancel')}</Button><Button form="bot-settings" type="submit" variant="primary" disabled={busy || ((form === 'group' || form === 'members') && !members.length) || (syncGroup === 'infoflow' && !groupSubmitted && !validInfoflowInvite)}>{t(form === 'members' || form === 'edit' ? 'save' : syncGroup === 'feishu' && groupSubmitted ? 'fsGroupResume' : syncGroup === 'infoflow' ? 'ifCreateAndInvite' : 'create')}</Button></>}>
       <form id="bot-settings" className={css.form} onSubmit={(event) => { event.preventDefault(); void act(async () => {
         if (form === 'bot') { const created = await props.createBot({ id: handle, name, instructions, capabilities: botCapabilities, preset }); setPendingBot(created.id) }
         else if (form === 'edit') await props.updateBot({ id: handle as BotId, name, instructions, capabilities: botCapabilities })
@@ -352,7 +363,7 @@ export function BotPanel(props: Props) {
           const result = form === 'group' ? syncGroup === 'feishu' && props.feishu
             ? await createFeishuGroup()
             : syncGroup === 'infoflow' && props.infoflow
-            ? await (async () => { setGroupSubmitted(true); try { return await props.infoflow!.createGroup({ title: name, botIds: members, defaultBot, requestId: groupRequestId, owner: groupOwner, members: humanMembers.split(/[,，\s]+/).filter(Boolean) }) } catch (cause) { const state = await props.infoflow!.snapshot(); if (!state.groups.some(item => item.requestId === groupRequestId)) setGroupSubmitted(false); throw cause } })()
+            ? await (async () => { if (!groupSubmitted && !validInfoflowInvite) throw new Error(t('ifInvitePolicyEmpty')); setGroupSubmitted(true); try { return await props.infoflow!.createGroup({ title: name, botIds: members, defaultBot, requestId: groupRequestId, owner: groupOwner, members: invitedMembers }) } catch (cause) { const state = await props.infoflow!.snapshot(); setInviteAllowlist(state.groupInviteAllowlist ?? []); if (!state.groups.some(item => item.requestId === groupRequestId)) setGroupSubmitted(false); throw cause } })()
             : await props.createGroup({ title: name, botIds: members, defaultBot })
             : room ? await props.setMembers({ roomId: room.id, botIds: members, defaultBot }) : undefined
           if (result) choose(result)
@@ -392,10 +403,17 @@ export function BotPanel(props: Props) {
             </>}
           </section>}
           {form === 'group' && infoflowVisible && props.infoflow && <section className={css.groupIntegration}>
-            <label className={css.groupIntegrationToggle}><input type="checkbox" disabled={groupLocked} checked={syncGroup === 'infoflow'} onChange={event => { setSyncGroup(event.target.checked ? 'infoflow' : 'none'); setGroupOwner(''); setError(null) }}/><span>{t('ifCreateGroup')}</span></label>
+            <label className={css.groupIntegrationToggle}><input type="checkbox" disabled={groupLocked} checked={syncGroup === 'infoflow'} onChange={event => { setSyncGroup(event.target.checked ? 'infoflow' : 'none'); setGroupOwner(''); setHumanMembers(''); setError(null) }}/><span>{t('ifCreateGroup')}</span></label>
             {syncGroup === 'infoflow' && <><p className={css.integrationHint}>{t('ifCreateGroupHint')}</p>
-              <label>{t('ifGroupOwner')}<Input required disabled={groupLocked} value={groupOwner} onChange={event => { setGroupOwner(event.target.value) }}/></label>
-              <label>{t('ifHumanMembers')}<Input disabled={groupLocked} value={humanMembers} onChange={event => { setHumanMembers(event.target.value) }}/></label>
+              {!inviteAllowlist ? <p role="status">{t('loading')}</p> : !inviteAllowlist.length ? <p role="status">{t('ifInvitePolicyEmpty')}</p> : <>
+                <label>{t('ifGroupOwner')}<select aria-label={t('ifGroupOwner')} required disabled={groupLocked} value={groupOwner} onChange={event => { setGroupOwner(event.target.value); setHumanMembers(invitedMembers.filter(user => user !== event.target.value).join(', ')) }}>
+                  <option value="">{t('ifChooseGroupOwner')}</option>{inviteAllowlist.map(user => <option key={user} value={user}>{user}</option>)}
+                </select><small>{t('ifGroupOwnerHint')}</small></label>
+                <fieldset disabled={groupLocked}><legend>{t('ifHumanMembers')}</legend>{inviteAllowlist.filter(user => user !== groupOwner).map(user => <label className={css.infoflowCheck} key={user}>
+                  <input type="checkbox" checked={invitedMembers.includes(user)} onChange={event => setHumanMembers((event.target.checked ? [...invitedMembers, user] : invitedMembers.filter(item => item !== user)).join(', '))}/>{user}
+                </label>)}</fieldset>
+                <p role="status" className={css.integrationNotice}>{t('ifInviteSummary')} {groupOwner ? [...new Set([groupOwner, ...invitedMembers])].join('、') : t('ifChooseGroupOwner')}</p>
+              </>}
               {groupSubmitted && <p role="status" className={css.integrationHint}>{t('ifGroupRetryHint')}</p>}
             </>}
           </section>}

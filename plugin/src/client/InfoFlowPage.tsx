@@ -32,6 +32,7 @@ export function InfoFlowPage({ bots, api, t, openRoom }: { bots: Bot[]; api: Inf
           <li>{t('ifSetupCredentials')}</li><li>{t('ifSetupVisibility')}</li></ol>
         <p>{t('ifVisibilityHint')}</p>
       </section>
+      <GroupInvitePolicy api={api} allowed={snapshot.groupInviteAllowlist} t={t} changed={refresh}/>
       <div className={css.integrationBody}>
         <nav className={css.integrationBots} aria-label={t('ifChooseBot')}>{bots.map(item => {
           const binding = snapshot.bindings.find(value => value.botId === item.id)
@@ -49,6 +50,25 @@ export function InfoFlowPage({ bots, api, t, openRoom }: { bots: Bot[]; api: Inf
         {group.groupId && <Button onClick={() => { void api.resumeGroup(group.requestId).then(room => { openRoom(room) }).catch(cause => { setError(String(cause instanceof Error ? cause.message : cause)) }) }}>{t(group.roomId ? 'ifOpenChat' : 'ifResumeGroup')}</Button>}
       </article>)}</section>}
     </>}
+  </section>
+}
+
+function GroupInvitePolicy({ api, allowed, t, changed }: { api: InfoFlowFace; allowed: string[] | undefined; t: Translate; changed(): Promise<void> }) {
+  const [editing, setEditing] = useState(false), [draft, setDraft] = useState(''), [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const supported = !!api.saveGroupInviteAllowlist && allowed !== undefined
+  return <section className={css.infoflowGuide} aria-label={t('ifInvitePolicy')}>
+    <h3>{t('ifInvitePolicy')}</h3><p>{t('ifInvitePolicyHint')}</p>
+    {allowed?.length ? <ul>{allowed.map(user => <li key={user}>{user}</li>)}</ul> : <p>{t('ifInvitePolicyEmpty')}</p>}
+    {!supported ? <p role="status">{t('ifInvitePolicyUpgrade')}</p> : editing ? <form className={css.form} onSubmit={event => {
+      event.preventDefault(); setBusy(true); setError(null)
+      void api.saveGroupInviteAllowlist!(draft.split(/[,，\s]+/).filter(Boolean)).then(async () => { await changed(); setEditing(false) })
+        .catch(cause => setError(cause instanceof Error ? cause.message : String(cause))).finally(() => setBusy(false))
+    }}>
+      <label>{t('ifInvitePolicyAccounts')}<Input disabled={busy} value={draft} onChange={event => setDraft(event.target.value)}/></label>
+      <div className={css.integrationActions}><Button type="submit" disabled={busy}>{t('save')}</Button><Button type="button" disabled={busy} onClick={() => { setEditing(false); setError(null) }}>{t('cancel')}</Button></div>
+      {error && <p role="alert" className={css.error}>{error}</p>}
+    </form> : <Button onClick={() => { setDraft(allowed.join(', ')); setError(null); setEditing(true) }}>{t('ifInvitePolicyEdit')}</Button>}
   </section>
 }
 

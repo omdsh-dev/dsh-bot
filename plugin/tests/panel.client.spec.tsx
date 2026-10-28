@@ -541,17 +541,52 @@ it('configures each Bot through the InfoFlow page and never displays stored secr
 })
 
 it('makes platform group creation optional and sends the owner and selected Bots only when selected', async () => {
-  const infoflow = { snapshot: vi.fn(), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), testMessage: vi.fn(), createGroup: vi.fn(), resumeGroup: vi.fn(), attachGroup: vi.fn() }
+  const infoflow = { snapshot: vi.fn(async () => ({ available: true, bindings: [], groups: [], groupInviteAllowlist: ['alice', 'bob', 'carol'] })), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), testMessage: vi.fn(), createGroup: vi.fn(), resumeGroup: vi.fn(), attachGroup: vi.fn() }
   const f = await bench({ infoflow }, true); infoflow.createGroup.mockResolvedValue(f.room)
   fireEvent.click(screen.getByRole('button', { name: 'New group' }))
   const option = screen.getByLabelText('Also create an InfoFlow group')
   expect((option as HTMLInputElement).checked).toBe(false)
   fireEvent.click(option)
+  const owner = await screen.findByLabelText(en.ifGroupOwner)
+  expect((owner as HTMLSelectElement).value).toBe('')
+  expect((screen.getByRole('button', { name: en.ifCreateAndInvite }) as HTMLButtonElement).disabled).toBe(true)
   fireEvent.change(screen.getByLabelText('Group name'), { target: { value: 'Launch' } })
-  fireEvent.change(screen.getByLabelText('Group owner (account prefix)'), { target: { value: 'alice' } })
-  fireEvent.change(screen.getByLabelText('Invite members (comma-separated account prefixes, optional)'), { target: { value: 'bob, carol' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+  fireEvent.change(owner, { target: { value: 'alice' } })
+  const humans = screen.getByRole('group', { name: en.ifHumanMembers })
+  expect((within(humans).getByLabelText('bob') as HTMLInputElement).checked).toBe(false)
+  fireEvent.click(within(humans).getByLabelText('bob')); fireEvent.click(within(humans).getByLabelText('carol'))
+  expect(screen.getByText(`${en.ifInviteSummary} alice、bob、carol`)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: en.ifCreateAndInvite }))
   await waitFor(() => expect(infoflow.createGroup).toHaveBeenCalledWith(expect.objectContaining({ title: 'Launch', owner: 'alice', members: ['bob', 'carol'], botIds: ['sage', 'nova'], defaultBot: 'sage', requestId: expect.any(String) })))
+})
+
+it.each([undefined, []])('blocks InfoFlow group creation without an explicit invitation allowlist (%j)', async groupInviteAllowlist => {
+  const infoflow = { snapshot: vi.fn(async () => ({ available: true, bindings: [], groups: [], ...(groupInviteAllowlist ? { groupInviteAllowlist } : {}) })), save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), testMessage: vi.fn(), createGroup: vi.fn(), resumeGroup: vi.fn(), attachGroup: vi.fn() }
+  await bench({ infoflow }, true)
+  fireEvent.click(screen.getByRole('button', { name: en.newGroup })); fireEvent.click(screen.getByLabelText(en.ifCreateGroup))
+  await screen.findByText(en.ifInvitePolicyEmpty)
+  expect(screen.queryByLabelText(en.ifGroupOwner)).toBeNull()
+  const create = screen.getByRole('button', { name: en.ifCreateAndInvite })
+  expect((create as HTMLButtonElement).disabled).toBe(true)
+  fireEvent.click(create)
+  expect(infoflow.createGroup).not.toHaveBeenCalled()
+})
+
+it('saves and lists invitation policy independently without inviting people or changing a robot binding', async () => {
+  let groupInviteAllowlist: string[] = []
+  const infoflow = { snapshot: vi.fn(async () => ({ available: true, bindings: [], groups: [], groupInviteAllowlist })),
+    saveGroupInviteAllowlist: vi.fn(async (users: string[]) => { groupInviteAllowlist = users; return users }),
+    save: vi.fn(), verify: vi.fn(), toggle: vi.fn(), testMessage: vi.fn(), createGroup: vi.fn(), resumeGroup: vi.fn(), attachGroup: vi.fn() }
+  await bench({ infoflow }, true)
+  fireEvent.click(screen.getByRole('button', { name: en.imTitle })); fireEvent.click(screen.getByRole('tab', { name: en.infoflow }))
+  fireEvent.click(await screen.findByRole('button', { name: en.ifInvitePolicyEdit }))
+  const policy = within(screen.getByRole('region', { name: en.ifInvitePolicy }))
+  fireEvent.change(policy.getByLabelText(en.ifInvitePolicyAccounts), { target: { value: 'alice, bob' } })
+  fireEvent.click(policy.getByRole('button', { name: en.save }))
+  await waitFor(() => expect(infoflow.saveGroupInviteAllowlist).toHaveBeenCalledWith(['alice', 'bob']))
+  await waitFor(() => expect(policy.queryByLabelText(en.ifInvitePolicyAccounts)).toBeNull())
+  expect(policy.getByText('alice')).toBeTruthy(); expect(policy.getByText('bob')).toBeTruthy()
+  expect(infoflow.save).not.toHaveBeenCalled(); expect(infoflow.createGroup).not.toHaveBeenCalled(); expect(infoflow.testMessage).not.toHaveBeenCalled()
 })
 
 it('opens one IM panel with both platforms and creates a Feishu robot only for the selected Bot', async () => {

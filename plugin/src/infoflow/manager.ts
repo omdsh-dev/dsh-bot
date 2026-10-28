@@ -54,7 +54,15 @@ export class InfoFlowManager implements InfoFlowControl {
       credentialsConfigured: !!binding.appKeyRef && !!binding.appSecretRef,
       ...(this.statuses.get(binding.botId) ?? { status: binding.enabled ? 'connecting' : 'disabled', error: null }) }
   }
-  snapshot(): InfoFlowState { return { available: true, bindings: this.state.bindings.map(binding => this.view(binding)), groups: structuredClone(this.state.groups) } }
+  snapshot(): InfoFlowState { return { available: true, bindings: this.state.bindings.map(binding => this.view(binding)), groups: structuredClone(this.state.groups), groupInviteAllowlist: [...(this.state.groupInviteAllowlist ?? [])] } }
+  /** Local operator policy; messaging access and historical invitations never grant invitation rights. */
+  saveGroupInviteAllowlist(values: string[]): Promise<string[]> {
+    return this.exclusive(async () => {
+      const allowed = users(values)
+      await this.change(state => { state.groupInviteAllowlist = allowed })
+      return [...allowed]
+    })
+  }
   /** Runtime reports connection categories, never SDK exception objects. */
   connection(botId: BotId, status: InfoFlowBindingView['status'], error: string | null = null): void { this.statuses.set(botId, { status, error }) }
   private async secrets(binding: Binding) {
@@ -158,6 +166,9 @@ export class InfoFlowManager implements InfoFlowControl {
       const owner = users([request.owner])[0]
       if (!owner) throw new Error('请填写群主账号')
       const members = users(request.members)
+      const allowed = new Set(this.state.groupInviteAllowlist ?? [])
+      const rejected = [...new Set([owner, ...members])].filter(user => !allowed.has(user))
+      if (rejected.length) throw new Error(`群主和真人成员必须在建群邀请白名单中：${rejected.join('、')}。请先到 IM 接入 → 如流配置白名单，再核对要邀请的账号。`)
       const primary = this.binding(request.defaultBot)
       const api = this.runtime.api(primary, await this.secrets(primary))
       const record: InfoFlowGroupView = { requestId: request.requestId, title: request.title.trim(), botIds: ids, defaultBot: request.defaultBot,

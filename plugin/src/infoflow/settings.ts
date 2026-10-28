@@ -7,9 +7,10 @@ export interface Binding {
   botId: BotId; agentId: string; robotId: string; robotName: string; enabled: boolean
   appKeyRef: string; appSecretRef: string; allowUsers: string[]; allowGroups: string[]; allowAllGroups?: boolean | undefined; admins: string[]
 }
-export interface Settings { bindings: Binding[]; groups: InfoFlowGroupView[] }
+export interface Settings { bindings: Binding[]; groups: InfoFlowGroupView[]; groupInviteAllowlist?: string[] | undefined }
 const botId = z.string().transform(brandString<BotId>)
 const schema: z.ZodType<Settings> = z.object({
+  groupInviteAllowlist: z.array(z.string()).optional(),
   bindings: z.array(z.object({ botId, agentId: z.string(), robotId: z.string(), robotName: z.string(), enabled: z.boolean(),
     appKeyRef: z.string(), appSecretRef: z.string(), allowUsers: z.array(z.string()), allowGroups: z.array(z.string()), allowAllGroups: z.boolean().optional(), admins: z.array(z.string()) })),
   groups: z.array(z.object({ requestId: z.string(), title: z.string(), groupId: z.string(), roomId: z.string().transform(brandString<RoomId>).nullable(),

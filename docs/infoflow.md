@@ -18,7 +18,9 @@ Open **DSH Bots → IM connections → InfoFlow** to configure robots. The same 
 
 ## Optional group creation
 
-The create-group dialog has an unchecked **Also create an InfoFlow group** option. Choose Bots, group owner and human members; every selected Bot must have an enabled binding. The default Bot's robot creates the group and invites all selected robots. Platform permissions are required. Partial invitation failures preserve the group and show a warning.
+Bot 0.12.9 / InfoFlow 0.7.2 require an explicit **Group invitation allowlist** in **IM connections → InfoFlow**. The deployment-wide list starts empty; private-chat access, administrators and past group members do not grant invitation rights. Editing the list sends no invitations and does not change existing groups.
+
+The create-group dialog has an unchecked **Also create an InfoFlow group** option. The owner and other human members must be selected from the saved allowlist; no owner or additional member is selected automatically. The owner is a human account and also joins the real platform group. A summary shows every human account before submission. The server rejects the entire request before contacting the platform if any owner/member is outside the current list, including stale clients and direct RPC calls. Every selected Bot needs an enabled binding; verified robot Agent IDs stay separate from human accounts. Existing created groups remain recoverable without new invitations after policy changes. Older companions without policy support cannot create new groups through the updated Host. Other independent plugins, CLIs and the platform client have their own permission boundaries. Partial invitation failures preserve the group and show a warning.
 
 A durable request is stored before the remote call. Once returned, the group ID is saved before local association. Retrying that same request never creates another group. Known group IDs can recover their local association from the configuration page. For an uncertain outcome, enter the existing group ID on the retained request. The owner and selected robot memberships are verified before linking, without another create call.
 

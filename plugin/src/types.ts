@@ -183,7 +183,7 @@ export interface InfoFlowGroupView {
   requestId: string; title: string; groupId: string; roomId: RoomId | null; botIds: BotId[]; defaultBot: BotId
   owner: string; members: string[]; status: 'creating' | 'linking' | 'ready' | 'uncertain'; warning: string | null
 }
-export interface InfoFlowState { available: boolean; bindings: InfoFlowBindingView[]; groups: InfoFlowGroupView[] }
+export interface InfoFlowState { available: boolean; bindings: InfoFlowBindingView[]; groups: InfoFlowGroupView[]; groupInviteAllowlist?: string[] }
 /** Empty credential fields retain saved values. Only connect: true enables a new binding. */
 export interface SaveInfoFlowBindingRequest {
   botId: BotId; appKey?: string; appSecret?: string; agentId?: string; connect?: boolean; allowAllGroups?: boolean; allowUsers: string[]; allowGroups: string[]; admins: string[]

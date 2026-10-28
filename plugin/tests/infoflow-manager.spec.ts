@@ -43,8 +43,50 @@ async function configured() {
   const fixture = bench(); await fixture.manager.init()
   await fixture.manager.save(binding(a)); await fixture.manager.save(binding(b))
   await fixture.manager.toggle({ botId: a, enabled: true }); await fixture.manager.toggle({ botId: b, enabled: true })
+  await fixture.manager.saveGroupInviteAllowlist(['alice', 'bob'])
   return fixture
 }
+it.each(['owner', 'member'] as const)('blocks an unapproved human %s before calling the platform group API', async kind => {
+  const f = await configured()
+  const request = { ...group, owner: kind === 'owner' ? 'unapproved-colleague' : 'alice', members: kind === 'member' ? ['unapproved-colleague'] : [] }
+  await expect(f.manager.createGroup(request)).rejects.toThrow('白名单')
+  expect(f.create).not.toHaveBeenCalled()
+  expect(f.state().groups).toHaveLength(0)
+})
+it('starts with no invitation authority even for administrators and allowed private-chat accounts', async () => {
+  const f = await configured()
+  const legacy = structuredClone(f.state()); delete legacy.groupInviteAllowlist
+  const old = bench(legacy)
+  expect(old.manager.snapshot().groupInviteAllowlist).toEqual([])
+  await expect(old.manager.createGroup({ ...group, members: [] })).rejects.toThrow('白名单')
+  expect(old.create).not.toHaveBeenCalled()
+  expect(old.state()).toEqual(legacy)
+})
+it('persists explicit invitation policy, normalizes exact accounts and rejects a revoked stale request', async () => {
+  const f = await configured(), bindings = structuredClone(f.state().bindings)
+  expect(await f.manager.saveGroupInviteAllowlist([' alice@baidu.com ', 'alice', 'bob@baidu.com'])).toEqual(['alice', 'bob'])
+  expect(f.state().bindings).toEqual(bindings)
+  const restarted = new InfoFlowManager(f.store, f.runtime)
+  expect(restarted.snapshot().groupInviteAllowlist).toEqual(['alice', 'bob'])
+  await restarted.saveGroupInviteAllowlist(['alice'])
+  await expect(restarted.createGroup(group)).rejects.toThrow('白名单')
+  expect(f.create).not.toHaveBeenCalled()
+  await restarted.createGroup({ ...group, owner: 'alice@baidu.com', members: [] })
+  expect(f.create).toHaveBeenCalledExactlyOnceWith({ groupName: 'Project', groupOwner: 'alice', memberList: [], robotList: [11, 22] })
+  await restarted.saveGroupInviteAllowlist([])
+  await restarted.createGroup({ ...group, members: [] })
+  expect(f.create).toHaveBeenCalledTimes(1)
+})
+it('rejects the whole invitation for a mixed allowlist and preserves policy after failed writes', async () => {
+  const f = await configured()
+  await expect(f.manager.createGroup({ ...group, members: ['bob', 'unapproved-colleague'] })).rejects.toThrow('白名单')
+  expect(f.create).not.toHaveBeenCalled(); expect(f.state().groups).toHaveLength(0)
+  await expect(f.manager.saveGroupInviteAllowlist(['alice|unapproved-colleague'])).rejects.toThrow('账号前缀')
+  f.store.set.mockRejectedValueOnce(new Error('disk full'))
+  await expect(f.manager.saveGroupInviteAllowlist(['unapproved-colleague'])).rejects.toThrow('disk full')
+  expect(f.manager.snapshot().groupInviteAllowlist).toEqual(['alice', 'bob'])
+  expect(f.create).not.toHaveBeenCalled()
+})
 it('stores two robot bindings independently without returning or persisting credential values', async () => {
   const f = await configured()
   expect(f.manager.snapshot().bindings.map(item => [item.botId, item.agentId, item.allowUsers])).toEqual([[a, '11', ['alice']], [b, '22', ['alice']]])

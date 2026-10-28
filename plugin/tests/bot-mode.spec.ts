@@ -66,6 +66,15 @@ it.each(['feishu', 'infoflow'] as const)('syncs %s group names from a receiving 
   expect(configured.title).toBe('最初建群名称')
 })
 
+it('blocks group creation through an older InfoFlow companion without invitation policy support', () => {
+  const b = bench(), createGroup = vi.fn()
+  Reflect.set(b.service, 'infoflow', { snapshot: () => ({ available: true, bindings: [], groups: [] }), createGroup })
+  const request = { requestId: 'old-connector', title: 'Group', botIds: [b.state.bots[0]!.id], defaultBot: b.state.bots[0]!.id, owner: 'colleague', members: [] }
+  expect(() => b.service.createInfoflowGroup(request)).toThrow('升级如流连接器')
+  expect(() => b.service.saveInfoflowGroupInviteAllowlist(['colleague'])).toThrow('升级如流连接器')
+  expect(createGroup).not.toHaveBeenCalled()
+})
+
 it('persists a separate public capability description and preserves it when older callers omit it', async () => {
   const b = bench()
   const bot = await b.service.createBot({ id: 'writer', name: 'Writer', instructions: 'PRIVATE_INSTRUCTIONS', capabilities: '  Write product announcements  ' })

@@ -84,6 +84,13 @@ export async function apply(ctx) {
       assert.deepEqual(sdk.state.sent.filter(item=>item.group==='888').map(item=>item.agentId),[11]);
       assert.equal(requests,0);
       const request={requestId:'managed-group-1',title:'Shared robots',botIds:['alpha','beta'],defaultBot:'alpha',owner:'alice',members:[]};
+      assert.deepEqual(bot.infoflowSnapshot().groupInviteAllowlist,[]);
+      await assert.rejects(bot.createInfoflowGroup(request),/白名单/);
+      assert.equal(sdk.state.created.length,0);
+      await bot.saveInfoflowGroupInviteAllowlist(['alice@baidu.com']);
+      await assert.rejects(bot.createInfoflowGroup({...request,owner:'unapproved-colleague'}),/白名单/);
+      await assert.rejects(bot.createInfoflowGroup({...request,members:['unapproved-colleague']}),/白名单/);
+      assert.equal(sdk.state.created.length,0);
       const room=await bot.createInfoflowGroup(request);
       assert.equal((await bot.createInfoflowGroup(request)).id,room.id);
       assert.equal(sdk.state.created.length,1);

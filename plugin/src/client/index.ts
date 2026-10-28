@@ -100,6 +100,7 @@ function install(ctx: Context): void {
       cancel: attemptId => value(ctx.remote.bots.cancelFeishuRegistration(attemptId)),
     },
     infoflow: {
+      saveGroupInviteAllowlist: users => value(ctx.remote.bots.saveInfoflowGroupInviteAllowlist(users)),
       attachGroup: request => value(ctx.remote.bots.attachInfoflowGroup(request)),
       snapshot: () => value(ctx.remote.bots.infoflowSnapshot()),
       save: request => value(ctx.remote.bots.saveInfoflowBinding(request)),

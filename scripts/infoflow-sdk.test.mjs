@@ -7,7 +7,24 @@ import { pathToFileURL } from 'node:url'
 import { root, runtime, pluginPath } from './common.mjs'
 const require = createRequire(join(root, 'package.json'))
 const sdk = require(process.env.DSH_INFOFLOW_SDK_FILE || '@baidu/infoflow-sdk-nodejs')
-const { InfoFlowTransport } = await import(pathToFileURL(join(runtime, pluginPath, 'lib/types/infoflow/sdk.js')))
+const { InfoFlowTransport, robotApi } = await import(pathToFileURL(join(runtime, pluginPath, 'lib/types/infoflow/sdk.js')))
+
+test('real InfoFlow group SDK keeps approved human accounts separate from robot Agent IDs and adds no implicit colleague', async () => {
+  const requests = []
+  const real = { ...sdk, Client: class extends sdk.Client {
+    constructor(options) {
+      super(options)
+      this.im.group.httpClient.post = async (url, body) => { requests.push({ url, body }); return { errcode: 0, data: { groupId: 777 } } }
+    }
+  } }
+  const api = robotApi(real, { appKey: 'fixture', appSecret: 'fixture', agentId: '11', timeout: 100 })
+  for (const members of [[], ['approved-colleague']]) {
+    await api.createGroup({ groupName: 'Fixture', groupOwner: 'approved-owner', memberList: members, robotList: [11, 22] })
+    assert.deepEqual(requests.at(-1), { url: '/robot/group/create', body: {
+      friendlyLevel: 3, searchAbility: 0, groupName: 'Fixture', groupOwner: 'approved-owner@baidu.com', memberList: members.map(user => user + '@baidu.com'), robotList: [11, 22], managers: undefined,
+    } })
+  }
+})
 
 test('real InfoFlow SDK encodes private/group images and file links without persisting signed URLs', async () => {
   const requests = []

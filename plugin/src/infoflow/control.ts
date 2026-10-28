@@ -2,6 +2,7 @@
 import type { BotId, CreateInfoFlowGroupRequest, InfoFlowBindingView, InfoFlowState, Room, SaveInfoFlowBindingRequest, ToggleInfoFlowRequest, TestInfoFlowRequest } from '../types.ts'
 export interface InfoFlowControl {
   snapshot(): InfoFlowState
+  saveGroupInviteAllowlist?(users: string[]): Promise<string[]>
   save(request: SaveInfoFlowBindingRequest): Promise<InfoFlowBindingView>
   verify(botId: BotId): Promise<InfoFlowBindingView>
   toggle(request: ToggleInfoFlowRequest): Promise<InfoFlowBindingView>
