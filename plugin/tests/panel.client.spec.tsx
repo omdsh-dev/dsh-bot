@@ -926,3 +926,50 @@ it('bundles all connector permissions including images and files in the selected
   fireEvent.click(screen.getByRole('button', { name: en.fsCancel }))
   await waitFor(() => expect(feishu.cancel).toHaveBeenCalledWith('permission-attempt'))
 })
+
+it('uploads a pasted screenshot, previews it and sends it without a text draft', async () => {
+  const attachment = { type: 'image', attachment: { attachmentId: `sha256:${'a'.repeat(64)}`, name: 'Screenshot.png', bytes: 3, mediaType: 'image/png', width: 1, height: 1 } }
+  const upload = vi.fn(async () => attachment)
+  const b = await bench({ capabilities: { upload } as unknown as CapabilityFace })
+  fireEvent.paste(screen.getByRole('textbox', { name: en.message }), { clipboardData: { files: [new File(['png'], 'Screenshot.png', { type: 'image/png' })], getData: () => '' } })
+  await screen.findByRole('button', { name: `${en.removeAttachment}: Screenshot.png` })
+  expect(upload).toHaveBeenCalledExactlyOnceWith({ name: 'Screenshot.png', mediaType: 'image/png', base64: 'cG5n', transcribe: false })
+  fireEvent.click(screen.getByRole('button', { name: en.send }))
+  await waitFor(() => expect(b.face.send).toHaveBeenCalledWith({ roomId: 'studio', text: '', attachments: [attachment] }))
+})
+
+it.each(['count', 'bytes'])('applies the shared attachment %s limit to pasted images', async limit => {
+  const upload = vi.fn()
+  await bench({ capabilities: { upload } as unknown as CapabilityFace })
+  const image = new File(['png'], 'Screenshot.png', { type: 'image/png' })
+  if (limit === 'bytes') Object.defineProperty(image, 'size', { value: 20 * 1024 * 1024 + 1 })
+  fireEvent.paste(screen.getByRole('textbox', { name: en.message }), { clipboardData: { files: limit === 'count' ? Array.from({ length: 9 }, () => image) : [image], getData: () => '' } })
+  await screen.findByText(en.attachmentLimit)
+  expect(upload).not.toHaveBeenCalled()
+})
+
+it('shows a paste upload error and allows another upload after the failure', async () => {
+  const upload = vi.fn().mockRejectedValueOnce(new Error('Screenshot upload failed')).mockResolvedValueOnce({ type: 'image', attachment: { attachmentId: `sha256:${'b'.repeat(64)}`, name: 'Screenshot.png', bytes: 3, mediaType: 'image/png' } })
+  await bench({ capabilities: { upload } as unknown as CapabilityFace })
+  const input = screen.getByRole('textbox', { name: en.message })
+  const clipboardData = { files: [new File(['png'], 'Screenshot.png', { type: 'image/png' })], getData: () => '' }
+  fireEvent.paste(input, { clipboardData })
+  await screen.findByText('Screenshot upload failed')
+  fireEvent.paste(input, { clipboardData })
+  await screen.findByRole('button', { name: `${en.removeAttachment}: Screenshot.png` })
+  expect(upload).toHaveBeenCalledTimes(2)
+})
+
+it('does not move a pasted screenshot into another chat when its upload finishes late', async () => {
+  let finish!: (value: unknown) => void
+  const upload = vi.fn(() => new Promise(resolve => { finish = resolve }))
+  const b = await bench({ capabilities: { upload } as unknown as CapabilityFace })
+  fireEvent.paste(screen.getByRole('textbox', { name: en.message }), { clipboardData: { files: [new File(['png'], 'Screenshot.png', { type: 'image/png' })], getData: () => '' } })
+  await waitFor(() => expect(upload).toHaveBeenCalledOnce())
+  const roster = screen.getByRole('complementary', { name: en.chats })
+  fireEvent.click(within(roster).getByRole('button', { name: /Nova\s*@nova/ }))
+  finish({ type: 'image', attachment: { attachmentId: `sha256:${'c'.repeat(64)}`, name: 'Screenshot.png', bytes: 3, mediaType: 'image/png' } })
+  await waitFor(() => expect(screen.getByRole('button', { name: en.send }).hasAttribute('disabled')).toBe(true))
+  expect(screen.queryByRole('button', { name: `${en.removeAttachment}: Screenshot.png` })).toBeNull()
+  expect(b.face.send).not.toHaveBeenCalled()
+})

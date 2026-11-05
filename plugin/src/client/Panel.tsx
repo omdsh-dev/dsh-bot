@@ -135,6 +135,18 @@ export function BotPanel(props: Props) {
     const base64 = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onerror = () => reject(new Error('File read failed')); reader.onload = () => resolve(String(reader.result).split(',')[1]!); reader.readAsDataURL(file) })
     return props.capabilities!.upload({ name: file.name, mediaType: file.type, base64, transcribe: file.type.startsWith('audio/') || file.name.toLowerCase().endsWith('.wav') })
   }
+  const attachFiles = (files: File[]) => {
+    if (busy || !props.capabilities || !files.length) return
+    void act(async () => {
+      if (files.length + attachments.length > 8 || files.reduce((sum, file) => sum + file.size, 0) + attachments.reduce((sum, item) => sum + item.attachment.bytes, 0) > 20 * 1024 * 1024) throw new Error(t('attachmentLimit'))
+      const uploaded: ChatAttachment[] = []
+      for (const file of files) {
+        uploaded.push(await uploadFile(file))
+        if (selection.current.revision !== revision) return
+      }
+      setAttachments(current => [...current, ...uploaded])
+    })
+  }
   const openForm = (next: 'bot' | 'edit' | 'group' | 'members', bot?: Bot) => {
     setSyncGroup('none'); setGroupOwner(''); setHumanMembers(''); setInviteAllowlist(null); setGroupRequestId(crypto.randomUUID()); setGroupSubmitted(false); setFeishuGroups(null)
     setForm(next); setError(null); setName(bot?.name ?? ''); setHandle(bot?.id ?? ''); setInstructions(bot?.instructions ?? ''); setBotCapabilities(bot?.capabilities ?? ''); setPreset(bot?.preset ?? 'standard')
@@ -293,18 +305,11 @@ export function BotPanel(props: Props) {
         {room.external && <p role="note" className={css.history}>{room.kind === 'group' ? syncMessage ? t('syncHint') : localHint : t(room.external.provider === 'feishu' ? 'fsExternalHelp' : 'externalReadOnly')}</p>}
         {writable && <Composer key={room.id} bots={roomBots} t={t} draft={draft} onDraft={setDraft}
           hasAttachments={attachments.length > 0}
+          onFiles={props.capabilities ? attachFiles : undefined}
           toolbar={props.capabilities && <>
             <input ref={fileInput} type="file" hidden aria-label={t('attach')} multiple disabled={busy} onChange={event => {
               const files = Array.from(event.target.files ?? []); event.target.value = ''
-              void act(async () => {
-                if (files.length + attachments.length > 8 || files.reduce((sum, file) => sum + file.size, 0) + attachments.reduce((sum, item) => sum + item.attachment.bytes, 0) > 20 * 1024 * 1024) throw new Error(t('attachmentLimit'))
-                const uploaded: ChatAttachment[] = []
-                for (const file of files) {
-                  uploaded.push(await uploadFile(file))
-                  if (selection.current.revision !== revision) return
-                }
-                setAttachments(current => [...current, ...uploaded])
-              })
+              attachFiles(files)
             }}/>
             <Button size="sm" icon={<AttachmentIcon />} aria-label={t('attach')} title={t('attach')} disabled={busy} onClick={() => fileInput.current?.click()}/>
             <VoiceInput key={room.id} disabled={busy} label={t('recordVoice')} stopLabel={t('stopRecording')} onError={setError} onAudio={file => act(async () => {

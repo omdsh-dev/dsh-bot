@@ -19,6 +19,7 @@ interface ComposerProps {
   reply: ChatMessage | undefined
   onCancelReply: () => void
   onSend: () => void
+  onFiles?: (files: File[]) => void
   t: (key: BotKey) => string
 }
 
@@ -27,7 +28,7 @@ interface ComposerProps {
  * @param props - Room members, controlled draft, reply, and submit action.
  * @returns The composer and its inline recipient picker.
  */
-export function Composer({ bots, disabled, hasAttachments = false, toolbar, attachmentPreview, optionsContent, draft, onDraft, reply, onCancelReply, onSend, t }: ComposerProps) {
+export function Composer({ bots, disabled, hasAttachments = false, toolbar, attachmentPreview, optionsContent, draft, onDraft, reply, onCancelReply, onSend, onFiles, t }: ComposerProps) {
   const input = useRef<HTMLTextAreaElement>(null)
   const menuId = useId()
   const [caret, setCaret] = useState(0)
@@ -72,6 +73,17 @@ export function Composer({ bots, disabled, hasAttachments = false, toolbar, atta
         onChange={(event) => { onDraft(event.target.value); setCaret(event.target.selectionStart); setDismissed(false); setActive(0) }}
         onSelect={(event) => { setCaret(event.currentTarget.selectionStart) }}
         onBlur={() => { setDismissed(true) }}
+        onPaste={(event) => {
+          if (disabled || !onFiles) return
+          let images = Array.from(event.clipboardData.files ?? []).filter(file => file.type.startsWith('image/'))
+          if (!images.length) images = Array.from(event.clipboardData.items ?? [])
+            .filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+            .map(item => item.getAsFile()).filter((file): file is File => file !== null)
+          if (!images.length) return
+          // Keep native text insertion (including selection replacement) for mixed pastes.
+          if (!event.clipboardData.getData('text/plain')) event.preventDefault()
+          onFiles(images)
+        }}
         onKeyDown={(event) => {
           // Some IMEs emit the legacy 229 signal without isComposing.
           // oxlint-disable-next-line typescript/no-deprecated
