@@ -4,7 +4,10 @@ import type { Bot, BotId, Room } from '../types.ts'
 import type { Binding, RegistrationRecord, Settings } from './settings.ts'
 import type { CreateFeishuGroupRequest, FeishuGroupView, Brand, FeishuBindingView, FeishuControl, FeishuRegistration, FeishuState, SaveFeishuBindingRequest } from './types.ts'
 import { GroupCreateError, type GroupOptions, type Identity, type RegistrationOptions, type RegistrationResult } from './sdk.ts'
+import type { GroupBotInvite } from '../collaboration-types.ts'
 export interface ManagerRuntime {
+  inGroup?(binding: Binding, secret: string, groupId: string): Promise<boolean>
+  inviteRobots?(binding: Binding, secret: string, groupId: string, appIds: string[]): Promise<void>
   createGroup(binding: Binding, secret: string, options: GroupOptions): Promise<string>
   linkGroup(group: FeishuGroupView, bindings: Binding[]): Promise<Room>
   bots(): Bot[]
@@ -16,6 +19,8 @@ export interface ManagerRuntime {
   set(ref: string, secret: string): Promise<void>
   start(binding: Binding): Promise<void>
   stop(botId: BotId): Promise<void>
+  /** Refresh the live receiver after persisting group access, without interrupting its queue. */
+  allowGroup?(botId: BotId, groupId: string): boolean
 }
 export interface SettingsStore { get(): Settings; set(value: Settings): Promise<void> }
 interface RegistrationJob { done: boolean; controller: AbortController; task?: Promise<void>; view: FeishuRegistration }
@@ -110,6 +115,31 @@ export class FeishuManager implements FeishuControl {
     if (!group) throw new Error('建群请求不存在')
     return this.finishGroup(group)
   }) }
+  inviteBots(request: GroupBotInvite): Promise<void> { return this.exclusive(async () => {
+    this.ensureOpen()
+    if (!/^oc_[\w-]+$/.test(request.groupId) || !request.botIds.includes(request.defaultBot) || request.botIds.length > 6) throw new Error('无效的飞书群邀请')
+    const bindings = [...new Set(request.botIds)].map(id => this.get(id)), creator = this.get(request.defaultBot)
+    if (bindings.some(binding => !binding.enabled || binding.brand !== creator.brand || !this.runtime.bots().some(bot => bot.id === binding.botId && !bot.archived))) throw new Error('请选择已启用、同平台的机器人')
+    if (!this.runtime.inGroup || !this.runtime.inviteRobots) throw new Error('请升级飞书连接器')
+    const missing: Binding[] = []
+    for (const binding of bindings) if (!await this.runtime.inGroup(binding, await this.secret(binding), request.groupId)) missing.push(binding)
+    if (missing.length) {
+      if (missing.some(binding => binding.botId === creator.botId)) throw new Error('负责邀请的机器人必须已经在群内')
+      let problem: unknown
+      try { await this.runtime.inviteRobots(creator, await this.secret(creator), request.groupId, missing.map(binding => binding.appId)) } catch (cause) { problem = cause }
+      for (const binding of missing) if (!await this.runtime.inGroup(binding, await this.secret(binding), request.groupId)) throw problem instanceof Error ? problem : new Error('机器人尚未实际加入飞书群，请完成审批后继续邀请')
+    }
+    await this.change(state => {
+      for (const binding of state.bindings) if (request.botIds.includes(binding.botId) && !binding.allowGroups.includes(request.groupId)) binding.allowGroups.push(request.groupId)
+      const group = state.groups.find(item => item.chatId === request.groupId)
+      if (group) group.botIds = [...new Set([...group.botIds, ...request.botIds])].sort()
+    })
+    for (const binding of bindings) {
+      if (this.statuses.get(binding.botId)?.status !== 'error' && (this.runtime.allowGroup?.(binding.botId, request.groupId) ?? (binding.allowAllGroups || binding.allowGroups.includes(request.groupId)))) continue
+      await this.runtime.stop(binding.botId); await this.activate(this.get(binding.botId))
+    }
+    if (bindings.some(binding => this.statuses.get(binding.botId)?.status === 'error')) throw new Error('进群已确认，连接启动失败；请恢复连接后继续')
+  }) }
   private groupBindings(group: FeishuGroupView): Binding[] {
     const bindings = group.botIds.map(id => {
       if (!this.runtime.bots().some(bot => bot.id === id)) throw new Error(`Bot ${id} 不存在`)
@@ -144,12 +174,17 @@ export class FeishuManager implements FeishuControl {
     }
     try {
       const chatId = group.chatId
+      if (this.runtime.inGroup) for (const binding of bindings) {
+        if (!await this.runtime.inGroup(binding, await this.secret(binding), chatId)) throw new Error('机器人尚未加入群聊')
+      }
       await this.change(state => {
         for (const binding of state.bindings) if (group.botIds.includes(binding.botId) && !binding.allowGroups.includes(chatId)) binding.allowGroups.push(chatId)
       })
       const room = await this.runtime.linkGroup(group, bindings)
-      // Restart also on a retry: a previous process may have committed settings before replacing its receiver.
-      for (const id of group.botIds) { await this.runtime.stop(id); await this.activate(this.get(id)) }
+      for (const id of group.botIds) {
+        if (this.statuses.get(id)?.status !== 'error' && this.runtime.allowGroup?.(id, chatId)) continue
+        await this.runtime.stop(id); await this.activate(this.get(id))
+      }
       if (group.botIds.some(id => this.statuses.get(id)?.status === 'error')) throw new Error('连接启动失败')
       group.roomId = room.id; group.status = 'ready'; group.error = null; await persist()
       return room

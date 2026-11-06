@@ -155,6 +155,10 @@ Bot 0.12.6 与飞书连接器 0.6.4 将群信息查询结果显示在 **IM 接�
 
 ## 一次性授权清单
 
-三条接入路径共用 `plugin/src/feishu/permissions.ts` 中的 8 项应用身份权限。完整清单为 `im:message.p2p_msg:readonly`、`im:message.group_at_msg:readonly`、`im:message:send_as_bot`、`im:message:readonly`、`im:resource`、`im:chat:read`、`im:chat:create`、`im:chat.members:bot_access`。扫码新建仍配置消息接收、机器人进群和群配置修改事件；已有应用的补齐操作增量申请上述权限，保留事件配置、凭据、管理员及准入名单。
+三条接入路径共用 `plugin/src/feishu/permissions.ts` 中的 9 项应用身份权限。完整清单为 `im:message.p2p_msg:readonly`、`im:message.group_at_msg:readonly`、`im:message:send_as_bot`、`im:message:readonly`、`im:resource`、`im:chat:read`、`im:chat:create`、`im:chat.members:write_only`、`im:chat.members:bot_access`。扫码新建仍配置消息接收、机器人进群和群配置修改事件；已有应用的补齐操作增量申请上述权限，保留事件配置、凭据、管理员及准入名单。
 
 飞书管理员仍需确认本次整包申请，授权返回不等于企业审批已经完成。批量导入方式依据[飞书官方说明](https://aily.feishu.cn/hc/1u7kleqg_uv8vbhxz)。不需要为了这组 IM 能力申请文档、通讯录、日历或以用户身份操作的权限。
+
+## 邀请另一个 Bot 参与
+
+主包 0.13.0 / 飞书连接器 0.7.0 增加当前聊天的 Bot 邀请，统一权限申请包含 `im:chat.members:write_only`。已有应用需要重新完成统一授权。平台尚未批准或机器人尚未实际入群时，请求保持可继续状态；不会提前显示已加入。私聊转关联群和现有群加 Bot 的操作见[邀请说明](collaboration.zh.md)。

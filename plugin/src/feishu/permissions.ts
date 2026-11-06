@@ -8,6 +8,7 @@ export function bindingScopes(): { tenant: string[] } {
     'im:resource', // Upload images/files and access the bot's own resources.
     'im:chat:read',
     'im:chat:create',
+    'im:chat.members:write_only', // Invite a selected robot into an existing group.
     'im:chat.members:bot_access',
   ] }
 }

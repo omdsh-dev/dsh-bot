@@ -5,6 +5,10 @@ import type { AttachmentRequest, AttachmentData, CapabilityCatalog, QuestionAnsw
 import type { Memory, MemoryAction, MemoryCatalog, MemoryListRequest, MemoryPreviewRequest, MemorySelection, SaveMemoryRequest } from '../memory-types.ts'
 import type { AnalyzeMemoriesRequest, MemoryGovernanceView, ResolveMemorySuggestion } from '../memory-types.ts'
 export interface CapabilityFace {
+  taskView?(request: import('../types.ts').AttemptRequest): Promise<import('../task-control-types.ts').TaskInspection>
+  stopTask?(request: import('../task-types.ts').TaskRequest): Promise<import('../task-types.ts').TaskRecord>
+  verifyTask?(request: import('../task-types.ts').VerifyTaskRequest): Promise<import('../task-types.ts').TaskRecord>
+  resolveTaskOperation?(request: import('../task-operation-types.ts').ResolveOperationRequest): Promise<void>
   teamView(): Promise<import('../team-types.ts').TeamView>
   configureTeam(request: import('../team-types.ts').TeamSettings): Promise<void>
   submitCard(request: import('../card-types.ts').SubmitCardRequest): Promise<string>

@@ -7,6 +7,11 @@ import type { UsageLedger } from './usage-types.ts'
 import type { AccessState } from './access-types.ts'
 import type { ChatCard } from './card-types.ts'
 import type { TeamActor, TeamAudit, TeamSettings } from './team-types.ts'
+import type { BotInvitation, CollaborationProposal } from './collaboration-types.ts'
+import type { TaskPolicy, TaskPolicyInput } from './task-policy.ts'
+import type { TaskLedger } from './task-types.ts'
+import type { TaskOperationLedger } from './task-operation-types.ts'
+export type { TaskPolicy, TaskPolicyInput } from './task-policy.ts'
 export type * from './memory-types.ts'
 
 /** Stable, case-insensitive Bot handle. */
@@ -51,6 +56,10 @@ export interface ConfigureBudget { tokenLimit: number; costLimit: number; curren
 export interface Member { botId: BotId; sessionId: SessionId; cursor: number; segments?: ContextSegment[] | undefined; handoff?: string | undefined; memoryEpoch?: number | undefined; requiredMemoryEpoch?: number | undefined; contextDecisions?: { time: number; action: string; before: number; after: number; window: number }[] | undefined }
 /** A public user message or one Bot's response attempt. */
 export interface ChatMessage {
+  /** Immutable structured constraints of the human root, inherited by every delegated execution. */
+  taskPolicy?: TaskPolicy | undefined
+  collaboration?: { requestId: string; sourceRoomId: RoomId; invitedBot: BotId; coordinator: BotId } | undefined
+  proposals?: CollaborationProposal[] | undefined
   id: ChatMessageId
   botId: BotId | null
   text: string
@@ -70,6 +79,8 @@ export interface ChatMessage {
   awaiting?: ChatMessageId[] | undefined
   continuedBy?: ChatMessageId | undefined
   continuationOf?: ChatMessageId | undefined
+  /** Explicit retry lineage; the failed attempt stays in the audit trail. */
+  retryOf?: ChatMessageId | undefined
   resultIds?: ChatMessageId[] | undefined
   collaborationCanceled?: boolean | undefined
   /** Sent from DSH into an external group; neither the request nor its replies reach the platform. */
@@ -110,6 +121,10 @@ export interface Room {
 }
 /** Atomic persisted state; also the detached Client baseline. */
 export interface BotState {
+  /** Storage-only task metadata; exposed through room-scoped task APIs, not every feed frame. */
+  taskLedger?: TaskLedger | undefined
+  taskOperations?: TaskOperationLedger | undefined
+  invitations?: BotInvitation[] | undefined
   bots: Bot[]; rooms: Room[]
   historyVersion?: number | undefined
   access?: AccessState | undefined
@@ -166,7 +181,7 @@ export interface CreateGroupRequest { title: string; botIds: BotId[]; defaultBot
 /** Edit group membership while all its response attempts are settled. */
 export interface MembersRequest { roomId: RoomId; botIds: BotId[]; defaultBot: BotId }
 /** A public prompt with optional explicit recipients or reply routing. */
-export interface SendRequest { roomId: RoomId; text: string; targets?: BotId[]; replyTo?: ChatMessageId; allowDelegation?: boolean; attachments?: ChatAttachment[]; notify?: boolean }
+export interface SendRequest { roomId: RoomId; text: string; taskPolicy?: TaskPolicyInput | undefined; targets?: BotId[]; replyTo?: ChatMessageId; allowDelegation?: boolean; attachments?: ChatAttachment[]; notify?: boolean }
 /** A stop/retry command addresses one response attempt. */
 export interface AttemptRequest { roomId: RoomId; messageId: ChatMessageId }
 /** External /stop cancels the original request's complete delegation tree. */
@@ -210,3 +225,9 @@ export type * from './access-types.ts'
 export type * from './card-types.ts'
 export type * from './team-types.ts'
 export type { UsageReport, UsageBudget, BotUsageRow, UsageTotals } from './usage.ts'
+
+export type * from './collaboration-types.ts'
+
+export type * from './task-types.ts'
+export type * from './task-operation-types.ts'
+export type * from './task-control-types.ts'

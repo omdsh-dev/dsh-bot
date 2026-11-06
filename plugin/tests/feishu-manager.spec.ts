@@ -31,6 +31,25 @@ function bench(initial: Settings = { bindings: [], registrations: [], groups: []
     reject: () => reject(new Error('error with secret payload')) }
 }
 const manual = (botId: BotId, appId = `cli_${botId}`) => ({ botId, appId, appSecret: 'private-manual-secret', brand: 'feishu' as const, allowUsers: ['ou_owner'], allowGroups: [], admins: ['ou_owner'] })
+it('waits for actual Feishu membership and recovers a lost invitation response without adding again', async () => {
+  const f = await groupBench()
+  await f.manager.save({ ...manual(alpha), allowGroups: ['oc_existing'] })
+  vi.mocked(f.runtime.stop).mockClear()
+  let joined = false
+  f.runtime.inGroup = vi.fn(async binding => binding.botId === alpha || joined)
+  f.runtime.inviteRobots = vi.fn(async () => { throw new Error('权限或审批尚未完成') })
+  const request = { requestId: 'invite-existing', groupId: 'oc_existing', title: 'Group', botIds: [alpha, beta], defaultBot: alpha }
+  await expect(f.manager.inviteBots(request)).rejects.toThrow('审批')
+  expect(f.state().bindings.find(binding => binding.botId === beta)!.allowGroups).not.toContain(request.groupId)
+  expect(f.runtime.inviteRobots).toHaveBeenCalledWith(expect.objectContaining({ botId: alpha }), 'private-manual-secret', 'oc_existing', ['cli_beta'])
+  joined = true
+  await f.manager.inviteBots(request)
+  expect(f.runtime.inviteRobots).toHaveBeenCalledTimes(1)
+  expect(f.state().bindings.every(binding => binding.allowGroups.includes(request.groupId))).toBe(true)
+  expect(f.runtime.createGroup).not.toHaveBeenCalled()
+  expect(f.runtime.stop).not.toHaveBeenCalledWith(alpha)
+  expect(f.runtime.stop).toHaveBeenCalledWith(beta)
+})
 it.each([false, true])('reauthorizes the existing app once and preserves credentials and access settings (enabled=%s)', async enabled => {
   const f = bench()
   await f.manager.save({ ...manual(alpha), allowGroups: ['oc_existing'], allowAllGroups: true })

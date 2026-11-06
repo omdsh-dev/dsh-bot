@@ -1,6 +1,8 @@
 /** Host-only registration seam for the optional multi-robot manager. */
 import type { BotId, CreateInfoFlowGroupRequest, InfoFlowBindingView, InfoFlowState, Room, SaveInfoFlowBindingRequest, ToggleInfoFlowRequest, TestInfoFlowRequest } from '../types.ts'
+import type { GroupBotInvite } from '../collaboration-types.ts'
 export interface InfoFlowControl {
+  inviteBots?(request: GroupBotInvite): Promise<void>
   snapshot(): InfoFlowState
   saveGroupInviteAllowlist?(users: string[]): Promise<string[]>
   save(request: SaveInfoFlowBindingRequest): Promise<InfoFlowBindingView>

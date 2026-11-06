@@ -11,6 +11,10 @@
     "src/client/Panel.tsx",
     "src/client/locales.ts",
     "src/types.ts",
+    "src/task-policy.ts",
+    "src/task-types.ts",
+    "src/task-operation-types.ts",
+    "src/task-control-types.ts",
     "src/css-modules.d.ts",
     "src/client/registration.ts",
     "src/client/view-store.ts",
@@ -42,6 +46,7 @@
     "src/client/UsageLedger.tsx",
     "src/client/MemoryGovernance.tsx",
     "src/client/ContextInspector.tsx",
+    "src/client/TaskInspector.tsx",
     "src/access-types.ts",
     "src/client/AccessControls.tsx",
     "src/card-types.ts",
@@ -50,7 +55,9 @@
     "src/client/TeamControls.tsx",
     "src/client/HistoryBrowser.tsx",
     "src/client/ModelPicker.tsx",
-    "src/feishu/permissions.ts"
+    "src/feishu/permissions.ts",
+    "src/collaboration-types.ts",
+    "src/client/InviteBotDialog.tsx"
   ],
   "references": [
     {

@@ -52,6 +52,65 @@ async function bench(overrides: Partial<PanelFace> = {}, infoflowVisible = false
   return { face, model, room, rooms, bots }
 }
 
+it('offers visible Bot capabilities, reviews context, and keeps an unsent DM draft after opening the linked group', async () => {
+  const candidates: import('../src/collaboration-types.ts').InvitationCandidate[] = [
+    { id: 'sage' as BotId, name: 'Sage', capabilities: 'Plan products', status: 'member' },
+    { id: 'nova' as BotId, name: 'Nova', capabilities: 'Review risks', status: 'available' },
+  ]
+  const invite = vi.fn<NonNullable<PanelFace['collaboration']>['invite']>()
+  const b = await bench({ collaboration: { view: async () => ({ candidates, ownerChoices: [], pending: [] }), invite } })
+  fireEvent.click(screen.getByRole('button', { name: 'Sage @sage' }))
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'UNSENT_PRIVATE_DRAFT' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Invite Bot' }))
+  const dialog = await screen.findByRole('dialog', { name: 'Invite a Bot to discuss' })
+  await within(dialog).findByText('Review risks')
+  fireEvent.click(within(dialog).getByRole('radio', { name: /Nova/ }))
+  fireEvent.change(within(dialog).getByRole('textbox', { name: 'Shared background (editable)' }), { target: { value: 'Please check the agreed scope' } })
+  invite.mockImplementationOnce(async request => {
+    const group: Room = { ...b.room, id: 'linked' as RoomId, title: 'Sage · Nova', messages: [{ ...b.room.messages[0]!, text: request.background, collaboration: { requestId: request.requestId, sourceRoomId: 'dm-sage' as RoomId, invitedBot: 'nova' as BotId, coordinator: 'sage' as BotId } }] }
+    b.model.replace({ bots: b.bots, rooms: [...b.rooms, group] }); return group
+  })
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Invite and continue' }))
+  await screen.findByRole('heading', { name: /Sage · Nova/ })
+  expect(invite).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ roomId: 'dm-sage', botId: 'nova', background: 'Please check the agreed scope', messageIds: [] }))
+  expect(JSON.stringify(invite.mock.calls)).not.toContain('UNSENT_PRIVATE_DRAFT')
+  fireEvent.click(screen.getByRole('button', { name: 'Original chat' }))
+  await waitFor(() => expect((screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement).value).toBe('UNSENT_PRIVATE_DRAFT'))
+})
+
+it('keeps the existing group draft when an invitation finishes in the same room', async () => {
+  const invite = vi.fn<NonNullable<PanelFace['collaboration']>['invite']>()
+  const b = await bench({ collaboration: { view: async () => ({ candidates: [{ id: 'third' as BotId, name: 'Third', capabilities: 'Review', status: 'available' }], ownerChoices: [], pending: [] }), invite } })
+  invite.mockImplementation(async () => b.room)
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'Unsent group draft' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Invite Bot' }))
+  const dialog = await screen.findByRole('dialog', { name: 'Invite a Bot to discuss' })
+  fireEvent.click(await within(dialog).findByRole('radio'))
+  fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'Review this scope' } })
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Invite and continue' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect((screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement).value).toBe('Unsent group draft')
+})
+
+it('retains the same submitted invitation on uncertain failure instead of allowing an accidental new group', async () => {
+  const pending: import('../src/collaboration-types.ts').BotInvitation[] = []
+  const invite = vi.fn<NonNullable<PanelFace['collaboration']>['invite']>(async request => {
+    pending.splice(0, pending.length, { request, coordinator: 'sage' as BotId, title: 'Group', text: request.background, attachments: [], createdAt: 0, status: 'pending' })
+    throw new Error('Platform result pending')
+  })
+  await bench({ collaboration: { view: async () => ({ candidates: [{ id: 'other' as BotId, name: 'Other', capabilities: 'Review', status: 'available' }], ownerChoices: [], pending }), invite } })
+  fireEvent.click(screen.getByRole('button', { name: 'Invite Bot' }))
+  const dialog = await screen.findByRole('dialog', { name: 'Invite a Bot to discuss' })
+  fireEvent.click(await within(dialog).findByRole('radio'))
+  fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'Review context' } })
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Invite and continue' }))
+  await within(dialog).findByText('Platform result pending')
+  expect((within(dialog).getByRole('textbox') as HTMLTextAreaElement).disabled).toBe(true)
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Resume invitation' }))
+  await waitFor(() => expect(invite).toHaveBeenCalledTimes(2))
+  expect(invite.mock.calls[0]).toEqual(invite.mock.calls[1])
+})
+
 it('renders card text without HTML execution and submits form values to the original message once', async () => {
   const submitCard = vi.fn(async () => 'new-human-message')
   const b = await bench({ capabilities: { submitCard } as unknown as CapabilityFace })
@@ -901,7 +960,7 @@ it('bundles all connector permissions including images and files in the selected
   fireEvent.click(screen.getByText(en.fsPermissionFallback))
   const config = screen.getByRole('textbox', { name: en.fsPermissionConfig }) as HTMLTextAreaElement
   expect(config.readOnly).toBe(true)
-  expect(JSON.parse(config.value)).toEqual({ scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:message:readonly', 'im:resource', 'im:chat:read', 'im:chat:create', 'im:chat.members:bot_access'] } })
+  expect(JSON.parse(config.value)).toEqual({ scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:message:readonly', 'im:resource', 'im:chat:read', 'im:chat:create', 'im:chat.members:write_only', 'im:chat.members:bot_access'] } })
   expect(config.value).not.toContain('secret')
   const previousClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard'), writeText = vi.fn(async (_value: string) => {})
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })

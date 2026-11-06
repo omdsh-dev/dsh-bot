@@ -15,7 +15,7 @@ import { QueueRegistry } from './infoflow/queues.ts'
 import { settingsDomain } from './feishu/settings.ts'
 import { FeishuManager } from './feishu/manager.ts'
 import { groupTitleTarget } from './group-titles.ts'
-import { FeishuTransport, createGroup, identity, loadSdk, qrImage, register } from './feishu/sdk.ts'
+import { FeishuTransport, inGroup, inviteRobots, createGroup, identity, loadSdk, qrImage, register } from './feishu/sdk.ts'
 export const name = 'bot-feishu'
 export const inject = ['botMode', 'storageDomain', 'credentials']
 export interface Config extends Pick<BridgeConfig, 'maxPending' | 'maxQueuePerRoom' | 'maxConcurrentRooms' | 'maxReceipts' | 'maxOutbox' | 'chunkSize' | 'retryMs' | 'maxRetryMs'> { endpointTimeoutMs: number; pollMs: number }
@@ -30,12 +30,15 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const queues = new QueueRegistry(ctx, 'feishu')
   const queueName = (botId: string, appId: string) => `bot_fs_${createHash('sha256').update(`${botId}:${appId}`).digest('hex').slice(0, 28)}`
   const settings = await ctx.storageDomain.open(settingsDomain)
-  const connections = new Map<BotId, { bridge: InfoFlowBridge; transport: FeishuTransport; close(): Promise<void> }>()
+  const connections = new Map<BotId, { bridge: InfoFlowBridge; transport: FeishuTransport; allowGroup(groupId: string): void; close(): Promise<void> }>()
   const stop = async (botId: BotId) => { const current = connections.get(botId); if (current) { connections.delete(botId); await current.close() } }
   const report = () => { ctx.logger.warn('Feishu operation failed; check connection status and retained work') }
   const resolve = async (ref: string) => (await ctx.credentials.resolve(credentialRef(ref)))?.value
   const manager = new FeishuManager(settings.global, {
     bots: () => ctx.botMode.snapshot().bots,
+    allowGroup: (botId, groupId) => { const current = connections.get(botId); if (!current) return false; current.allowGroup(groupId); return true },
+    inGroup: (binding, secret, groupId) => inGroup(loadSdk(config.endpointTimeoutMs), binding.appId, secret, binding.brand, config.endpointTimeoutMs, groupId),
+    inviteRobots: (binding, secret, groupId, appIds) => inviteRobots(loadSdk(config.endpointTimeoutMs), binding.appId, secret, binding.brand, config.endpointTimeoutMs, groupId, appIds),
     createGroup: (binding, secret, options) => createGroup(loadSdk(config.endpointTimeoutMs), binding.appId, secret, binding.brand, config.endpointTimeoutMs, options),
     linkGroup: async (group, bindings) => {
       if (!group.chatId) throw new Error('Created chat ID required')
@@ -73,7 +76,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           botIds: [binding.botId], defaultBot: binding.botId, allowUsers: binding.allowUsers, allowGroups: binding.allowGroups, allowAllGroups: binding.allowAllGroups === true, admins: binding.admins }, report)
         const currentBridge = bridge, currentTransport = transport
         queues.bind(binding.botId, name, bridge)
-        connections.set(binding.botId, { bridge, transport, close: async () => { await currentTransport.close(); await currentBridge.close() } })
+        connections.set(binding.botId, { bridge, transport, allowGroup: groupId => { if (!binding.allowGroups.includes(groupId)) binding.allowGroups.push(groupId) }, close: async () => { await currentTransport.close(); await currentBridge.close() } })
         transport.start()
       } catch (cause) { await Promise.allSettled([transport?.close(), bridge?.close()]); throw cause }
       finally { queues.cancel(name) }

@@ -28,10 +28,12 @@ test(`all three archives accept DSH ${target.version} without exact host pins`, 
     }
     assert.ok(!satisfies('0.1.4', manifest.peerDependencies['@deepseek-ai/dsh'], { includePrerelease: true }))
     if (name !== 'package') {
-      assert.ok(satisfies('0.10.0', manifest.peerDependencies['@zzzpyyy/dsh-bot']))
-      assert.ok(!satisfies('0.9.1', manifest.peerDependencies['@zzzpyyy/dsh-bot']))
-      assert.ok(!satisfies('0.8.1', manifest.peerDependencies['@zzzpyyy/dsh-bot']), 'Offset-aware history requires the 0.10 Host contract')
-      assert.ok(!satisfies('1.0.0', manifest.peerDependencies['@zzzpyyy/dsh-bot']))
+      const range = manifest.peerDependencies['@zzzpyyy/dsh-bot']
+      assert.equal(range, compatibility.bot, 'Connectors must ship the declared Bot Host contract')
+      for (const version of ['0.12.1', '0.13.0']) assert.ok(satisfies(version, range), `Qualified Bot ${version} must satisfy ${range}`)
+      for (const version of ['0.8.1', '0.9.1', '0.10.0', '0.12.0', '1.0.0']) {
+        assert.ok(!satisfies(version, range), `Bot ${version} does not provide the current connector Host contract`)
+      }
     }
   }
 })

@@ -4,6 +4,7 @@ import type { InfoFlowControl } from './control.ts'
 import type { Binding, Settings } from './settings.ts'
 import type { BotId, CreateInfoFlowGroupRequest, InfoFlowBindingView, InfoFlowGroupView, InfoFlowState, Room, SaveInfoFlowBindingRequest, ToggleInfoFlowRequest, TestInfoFlowRequest } from '../types.ts'
 import type { RobotApi, RobotIdentity } from './sdk.ts'
+import type { GroupBotInvite } from '../collaboration-types.ts'
 
 export interface ManagerRuntime {
   bots(): BotId[]
@@ -13,6 +14,8 @@ export interface ManagerRuntime {
   set(ref: string, value: string): Promise<void>
   start(binding: Binding): Promise<void>
   stop(botId: BotId): Promise<void>
+  /** Refresh the live receiver after persisting group access, without interrupting its queue. */
+  allowGroup?(botId: BotId, groupId: string): boolean
   link(group: InfoFlowGroupView): Promise<Room>
 }
 export interface SettingsStore { get(): Settings; set(value: Settings): Promise<void> }
@@ -188,8 +191,45 @@ export class InfoFlowManager implements InfoFlowControl {
       return this.finishGroup(this.state.groups.find(item => item.requestId === request.requestId)!)
     })
   }
+  /** Idempotent robot membership: query first and verify after any uncertain write. */
+  inviteBots(request: GroupBotInvite): Promise<void> { return this.exclusive(async () => {
+    const groupId = identityId(request.groupId), primary = this.binding(request.defaultBot)
+    const ids = [...new Set(request.botIds)]
+    if (!ids.includes(request.defaultBot) || ids.length > 8 || ids.some(id => !this.runtime.bots().includes(id))) throw new Error('无效的群聊 Bot 列表')
+    const bindings = ids.map(id => this.binding(id))
+    if (bindings.some(binding => !binding.enabled)) throw new Error('请先绑定并启用参与的机器人')
+    const api = this.runtime.api(primary, await this.secrets(primary))
+    if (!api.groupInfo || !api.addRobots) throw new Error('请升级如流 SDK 以验证机器人进群')
+    try {
+      const info = await api.groupInfo(groupId)
+      const missing = bindings.map(binding => binding.agentId).filter(id => !info.agentIds.includes(id))
+      if (missing.length) {
+        try { await api.addRobots(groupId, missing) } catch { /* Verify the actual result before allowing a retry. */ }
+        const confirmed = await api.groupInfo(groupId)
+        if (bindings.some(binding => !confirmed.agentIds.includes(binding.agentId))) throw new Error('membership-unconfirmed')
+      }
+    } catch { throw new Error('如流尚未确认所有机器人进群，请检查邀请权限或在如流添加后继续本次邀请。不会邀请真人。') }
+    await this.change(state => {
+      for (const binding of state.bindings) if (ids.includes(binding.botId) && !binding.allowGroups.includes(groupId)) binding.allowGroups.push(groupId)
+      const group = state.groups.find(item => item.groupId === groupId)
+      if (group) group.botIds = [...new Set([...group.botIds, ...ids])]
+    })
+    const group = this.state.groups.find(item => item.groupId === groupId)
+    if (group) await this.runtime.link(group)
+    for (const binding of bindings) {
+      if (this.statuses.get(binding.botId)?.status !== 'error' && (this.runtime.allowGroup?.(binding.botId, groupId) ?? (binding.allowAllGroups || binding.allowGroups.includes(groupId)))) continue
+      await this.runtime.stop(binding.botId)
+      try { await this.runtime.start(this.binding(binding.botId)) }
+      catch { this.connection(binding.botId, 'error', '进群已确认，连接启动失败'); throw new Error('进群已确认，连接启动失败；请恢复连接后继续') }
+    }
+  }) }
   private async finishGroup(group: InfoFlowGroupView): Promise<Room> {
     if (!group.groupId) throw new Error('这次建群结果尚未确认，请在如流检查；不能重复创建')
+    const binding = this.binding(group.defaultBot), api = this.runtime.api(binding, await this.secrets(binding))
+    if (api.groupInfo || group.warning) {
+      const info = await api.groupInfo?.(group.groupId)
+      if (!info || String(info.groupId) !== group.groupId || users([info.masterUserId])[0] !== group.owner || group.botIds.some(id => !info.agentIds.includes(this.binding(id).agentId))) throw new Error('群已创建，但仍有机器人未加入；请在如流补齐后继续，不会重复建群')
+    }
     const room = await this.runtime.link(group)
     await this.change(state => { const item = state.groups.find(item => item.requestId === group.requestId)!; item.roomId = room.id; item.status = 'ready' })
     return room

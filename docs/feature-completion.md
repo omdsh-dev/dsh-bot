@@ -1,5 +1,17 @@
 # Bot capability completion
 
+## Task runtime foundation (2026-11-03, source implementation)
+
+Root request IDs now link task/run/event metadata across delegation and retries. Structured request constraints intersect Bot policies; tool intents commit before dispatch and uncertain effects require explicit operator reconciliation. The task inspector provides non-model status, cancellation and acceptance controls. This is not full foreground/background conversational scheduling, semantic monitoring, remote exactly-once, or native subagent policy propagation. See [implementation and recovery boundaries](task-runtime.zh.md). No release or production deployment is implied.
+
+## Bot invitations (2026-10-29, implementation and local validation)
+
+Source versions are Bot 0.13.0, Feishu 0.7.0 and InfoFlow 0.8.0. Invitations show capabilities and a reviewed, editable background. A DM creates a linked group with fresh Sessions; an existing group retains its coordinator, Sessions and queued work. Only selected DM messages and attachments are copied. Native proposal/confirmation tools require a later human turn; IM discovery and confirmation recheck the sender's administrator authority for both Bots.
+
+Platform membership is verified before completion. Existing group invitations add robot identities only; InfoFlow DM creation requires an explicit allowlisted owner. Retry receipts survive persistence, and previously joined robots are not invited twice. Shared group queues and unchanged source connections stay alive when the roster expands. Feishu's unified consent request now includes nine scopes, adding `im:chat.members:write_only`.
+
+This entry does not record npm publication or a real external invitation. Outside-group one-off assistance remains deferred. See [user instructions](collaboration.zh.md). Validation and local rollout results are recorded below once complete.
+
 ## npm publication (2026-10-28)
 
 Bot 0.12.9, Feishu 0.6.6 and InfoFlow 0.7.2 are now published to npm `next`. All three public versions, tags and SHA-512 integrity values were verified, and downloaded registry archives match the previously tested clean local archives byte-for-byte. The existing `latest` tags are unchanged. This completes the publication that was paused in the historical rollout entries below.

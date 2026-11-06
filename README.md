@@ -55,7 +55,7 @@ This release uses the experimental `next` tag on npm.
 
 **Specify a version or `@next` when installing.** The examples below pin this release. To install the version currently tagged `next`, use `@zzzpyyy/dsh-bot@next`, `@zzzpyyy/dsh-bot-feishu@next`, or `@zzzpyyy/dsh-bot-infoflow@next`. Installing a bare package name uses `latest`, which points to older releases as of **2026-10-26**.
 
-Use the same package set above on DSH **0.1.5-rc.2** and **0.2.0-rc.2**. Later DSH versions are admitted without a new plugin release, but acceptance is not a guarantee of compatibility with untested or changed interfaces. Feishu and InfoFlow accept Bot `>=0.10.0 <1.0.0`, for compatible updates within this contract. Upgrading from Bot 0.9 requires upgrading the connectors together because historical snapshots now load on demand. See the [compatibility policy and matrix](docs/compatibility.md).
+Use the same package set above on DSH **0.1.5-rc.2** and **0.2.0-rc.2**. Later DSH versions are admitted without a new plugin release, but acceptance is not a guarantee of compatibility with untested or changed interfaces. Feishu and InfoFlow accept Bot `>=0.12.1 <1.0.0`, for compatible updates within the current Host contract, including group-name synchronization. Upgrading from Bot 0.9 requires upgrading the connectors together because historical snapshots now load on demand. See the [compatibility policy and matrix](docs/compatibility.md).
 
 In **Desktop → plugin manager**, install `@zzzpyyy/dsh-bot@0.12.0`, then add the optional companion packages you need to the same profile.
 

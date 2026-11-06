@@ -11,7 +11,7 @@ import type { ChatAttachment, AttachmentData, UploadRequest } from '../types.ts'
 /** SDK management results are validated before they become saved configuration. */
 export interface RobotIdentity { agentId: number | string; imId?: number | string; name: string }
 export interface GroupResult { groupId: number | string; failList?: string[]; failRobotIds?: number[] }
-export interface RobotApi { identity(): Promise<RobotIdentity>; testMessage(user: string): Promise<void>; createGroup(options: Record<string, unknown>): Promise<GroupResult>; groupInfo?(id: string): Promise<{ groupId: string | number; masterUserId: string; agentIds: string[] }> }
+export interface RobotApi { identity(): Promise<RobotIdentity>; testMessage(user: string): Promise<void>; createGroup(options: Record<string, unknown>): Promise<GroupResult>; addRobots?(id: string, agentIds: string[]): Promise<void>; groupInfo?(id: string): Promise<{ groupId: string | number; masterUserId: string; agentIds: string[] }> }
 /** Suppress SDK payload/credential logging; the owner reports operation categories only. */
 const logger = { error() {}, warn() {}, info() {}, debug() {}, trace() {} }
 /** Read identity or create a user-requested group through the installed SDK. */
@@ -33,6 +33,12 @@ export function robotApi(sdk: Sdk, config: { appKey: string; appSecret: string; 
       return { ...info, agentIds: members.filter(member => member.type === 'agent').map(member => String(member.agentId)) }
     },
     createGroup: async options => { if (!client.im.group) throw new Error('SDK group API unavailable'); return client.im.group.create(options) },
+    addRobots: async (id, agentIds) => {
+      if (!/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id)) || agentIds.some(value => !/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value)))) throw new Error('Invalid group or robot ID')
+      if (!client.im.group?.addMembers) throw new Error('SDK group invitation unavailable')
+      // The second argument is deliberately empty: never put robot IDs in the human list.
+      await client.im.group.addMembers(id, [], agentIds)
+    },
   }
 }
 
@@ -41,7 +47,7 @@ export interface Sdk {
   Client: new (options: Record<string, unknown>) => { im: { message: {
     sendToUser(user: string, text: unknown, type: string): Promise<unknown>
     sendToGroupWithOptions(options: Record<string, unknown>): Promise<unknown>
-  }; file?: { upload(request: { file: Buffer; fileName: string; objectKey: string; expirationSeconds: number }): Promise<{ url: string }>; getBosFileUrl?(request: { objectKey: string; expirationSeconds: number }): Promise<{ url: string }> }; group?: { getMembers?(id: string): Promise<{ type?: string; agentId?: number }[]>; getGroupInfo?(id: string): Promise<{ groupId: string | number; masterUserId: string; name?: string }>; create(options: Record<string, unknown>): Promise<GroupResult> } }; robot?: { getInfo(): Promise<RobotIdentity> } }
+  }; file?: { upload(request: { file: Buffer; fileName: string; objectKey: string; expirationSeconds: number }): Promise<{ url: string }>; getBosFileUrl?(request: { objectKey: string; expirationSeconds: number }): Promise<{ url: string }> }; group?: { addMembers?(id: string, users: string[], agentIds: string[]): Promise<unknown>; getMembers?(id: string): Promise<{ type?: string; agentId?: number }[]>; getGroupInfo?(id: string): Promise<{ groupId: string | number; masterUserId: string; name?: string }>; create(options: Record<string, unknown>): Promise<GroupResult> } }; robot?: { getInfo(): Promise<RobotIdentity> } }
   WSClient: new (options: Record<string, unknown>) => {
     on(event: string, callback: (event: unknown) => void): unknown
     connect(): Promise<void>; disconnect(): void; eventDispatcher?: unknown

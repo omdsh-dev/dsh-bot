@@ -1,7 +1,7 @@
 /** Chat input with keyboard-safe addressing; dispatch remains a Host command. */
 import { useId, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { Bot, ChatMessage } from '../types.ts'
+import type { Bot, BotId, ChatMessage } from '../types.ts'
 import type { BotKey } from './locales.ts'
 import { Avatar } from './Avatar.tsx'
 import { CloseIcon, SendIcon } from './Icons.tsx'
@@ -9,6 +9,8 @@ import css from './Panel.module.css'
 
 interface ComposerProps {
   bots: Bot[]
+  invitable?: Bot[] | undefined
+  onInvite?: ((id: BotId) => void) | undefined
   disabled: boolean
   hasAttachments?: boolean
   toolbar?: ReactNode
@@ -19,7 +21,7 @@ interface ComposerProps {
   reply: ChatMessage | undefined
   onCancelReply: () => void
   onSend: () => void
-  onFiles?: (files: File[]) => void
+  onFiles?: ((files: File[]) => void) | undefined
   t: (key: BotKey) => string
 }
 
@@ -28,7 +30,7 @@ interface ComposerProps {
  * @param props - Room members, controlled draft, reply, and submit action.
  * @returns The composer and its inline recipient picker.
  */
-export function Composer({ bots, disabled, hasAttachments = false, toolbar, attachmentPreview, optionsContent, draft, onDraft, reply, onCancelReply, onSend, onFiles, t }: ComposerProps) {
+export function Composer({ bots, invitable = [], onInvite, disabled, hasAttachments = false, toolbar, attachmentPreview, optionsContent, draft, onDraft, reply, onCancelReply, onSend, onFiles, t }: ComposerProps) {
   const input = useRef<HTMLTextAreaElement>(null)
   const menuId = useId()
   const [caret, setCaret] = useState(0)
@@ -36,10 +38,12 @@ export function Composer({ bots, disabled, hasAttachments = false, toolbar, atta
   const [active, setActive] = useState(0)
   const match = /(?:^|\s)@([a-zA-Z0-9_-]*)$/.exec(draft.slice(0, caret))
   const query = match?.[1]?.toLowerCase()
-  const options = [{ id: 'all', name: t('everyone') }, ...bots].filter(bot => query !== undefined && (bot.id.includes(query) || bot.name.toLowerCase().includes(query)))
+  const options = [{ id: 'all', name: t('everyone') }, ...bots, ...invitable].filter(bot => query !== undefined && (bot.id.includes(query) || bot.name.toLowerCase().includes(query)))
   const open = !dismissed && query !== undefined && options.length > 0
   const activeIndex = Math.min(active, options.length - 1)
   const insert = (id: string) => {
+    const candidate = invitable.find(bot => bot.id === id)
+    if (candidate && onInvite) { setDismissed(true); onInvite(candidate.id); return }
     const start = caret - (query?.length ?? 0) - 1
     const text = `${draft.slice(0, start)}@${id} ${draft.slice(caret)}`
     const nextCaret = start + id.length + 2
@@ -64,8 +68,8 @@ export function Composer({ bots, disabled, hasAttachments = false, toolbar, atta
       {open && <div className={css.mentionMenu} role="listbox" id={menuId} aria-label={t('invite')}>
         <div className={css.menuLabel}>{t('invite')}</div>
         {options.map((bot, index) => <button type="button" key={bot.id} role="option" id={`${menuId}-${index}`} aria-selected={index === activeIndex}
-          onMouseDown={(event) => { event.preventDefault() }} onClick={() => { insert(bot.id) }}>
-          <Avatar id={bot.id} small /><strong>{bot.name}</strong><span>@{bot.id}</span>
+          disabled={disabled} onMouseDown={(event) => { event.preventDefault() }} onClick={() => { insert(bot.id) }}>
+          <Avatar id={bot.id} small /><strong>{bot.name}</strong><span>{invitable.some(item => item.id === bot.id) ? (t('you') === 'You' ? 'Invite to discuss' : '邀请一起讨论') : `@${bot.id}`}</span>
         </button>)}
       </div>}
       <textarea ref={input} aria-label={t('message')} placeholder={t(bots.length === 1 ? 'directPlaceholder' : 'placeholder')} rows={2} maxLength={32000} value={draft}

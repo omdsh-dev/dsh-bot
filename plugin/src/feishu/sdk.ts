@@ -111,6 +111,29 @@ export async function createGroup(sdk: Sdk, appId: string, appSecret: string, br
   if (result.code !== 0 || !/^oc_[\w-]+$/.test(chatId)) throw new Error('未取得群 ID，请使用同一请求继续，勿重复新建')
   return chatId
 }
+
+/** Verify the target using its own app identity; app-scoped Open IDs are never mixed. */
+export async function inGroup(sdk: Sdk, appId: string, appSecret: string, brand: Brand, timeout: number, chatId: string): Promise<boolean> {
+  if (!/^oc_[\w-]+$/.test(chatId)) throw new Error('Invalid Feishu chat ID')
+  const client = new sdk.Client({ appId, appSecret, domain: domain(brand), logger, cache: tokenCache() })
+  try {
+    const result = object(await client.request({ method: 'GET', url: `/open-apis/im/v1/chats/${chatId}/members/is_in_chat`, timeout }))
+    if (result.code !== 0 || typeof object(result.data).is_in_chat !== 'boolean') throw new Error('unconfirmed')
+    return object(result.data).is_in_chat === true
+  } catch { throw new Error('无法确认飞书机器人群成员状态，请检查群信息权限后继续') }
+}
+
+export async function inviteRobots(sdk: Sdk, appId: string, appSecret: string, brand: Brand, timeout: number, chatId: string, botAppIds: string[]): Promise<void> {
+  if (!/^oc_[\w-]+$/.test(chatId) || !botAppIds.length || botAppIds.length > 5 || botAppIds.some(id => !/^cli_[\w-]+$/.test(id))) throw new Error('Invalid Feishu robot invitation')
+  const client = new sdk.Client({ appId, appSecret, domain: domain(brand), logger, cache: tokenCache() })
+  try {
+    const result = object(await client.request({ method: 'POST', url: `/open-apis/im/v1/chats/${chatId}/members`, timeout,
+      params: { member_id_type: 'app_id', succeed_type: 0 }, data: { id_list: botAppIds } }))
+    if (result.code !== 0) throw new Error('unconfirmed')
+    const data = object(result.data)
+    if (['invalid_id_list', 'not_existed_id_list', 'pending_approval_id_list'].some(key => Array.isArray(data[key]) && data[key].length)) throw new Error('unconfirmed')
+  } catch { throw new Error('飞书邀请尚未确认。请检查 im:chat.members:write_only 权限、群成员邀请设置或组织审批，然后继续本次邀请。') }
+}
 /** New and existing apps request the same complete set of connector permissions. */
 export function register(sdk: Sdk, options: RegistrationOptions): Promise<RegistrationResult> {
   if (options.appId) return sdk.registerApp({ signal: options.signal, source: 'dsh-bot', appId: options.appId,

@@ -10,7 +10,14 @@ import { suggestionSchema } from './memory-governance.ts'
 import { accessSchema } from './access-state.ts'
 import { cardSchema } from './cards.ts'
 import { teamSettingsSchema, teamAuditSchema } from './team.ts'
+import { taskLedgerSchema } from './task-ledger.ts'
+import { taskOperationLedgerSchema } from './task-operations.ts'
+import { validateTaskPolicy } from './task-policy.ts'
 
+const taskPolicySchema = z.object({ fileMode: z.enum(['inherit', 'read-only', 'workspace-write']).optional(),
+  toolMode: z.enum(['inherit', 'none', 'allow']).optional(), tools: z.array(z.string()).max(200).optional() }).strict().superRefine((policy, ctx) => {
+  try { validateTaskPolicy(policy) } catch { ctx.addIssue({ code: 'custom', message: 'Invalid task policy' }) }
+})
 const botId = z.string().transform(brandString<BotId>)
 const messageId = z.string().transform(brandString<ChatMessageId>)
 const externalConversation = z.object({ provider: z.enum(['infoflow', 'feishu']), accountId: z.string().min(1),
@@ -25,16 +32,21 @@ export const attachmentSchema = z.object({ type: z.enum(['image', 'file']), atta
 const questionItem = z.object({ id: z.string(), question: z.string(), detail: z.string().optional(), header: z.string().optional(), options: z.array(z.object({ label: z.string(), description: z.string().optional() })).optional(), multiSelect: z.boolean().optional() })
 const answerSchema = z.object({ answers: z.array(z.object({ id: z.string(), selected: z.array(z.string()), custom: z.string().optional() })) })
 export const messageSchema = z.object({ id: messageId, botId: botId.nullable(), text: z.string(),
+      collaboration: z.object({ requestId: z.string(), sourceRoomId: z.string().transform(brandString<RoomId>), invitedBot: botId, coordinator: botId }).optional(),
+      proposals: z.array(z.object({ id: z.string(), botId, taskPolicy: taskPolicySchema.optional(), background: z.string().max(8000), actor: z.object({ provider: z.enum(['feishu', 'infoflow']), accountId: z.string(), senderId: z.string() }).optional() })).max(8).optional(),
       groupNameUpdate: z.object({ title: z.string(), callId: z.string(), time: z.number(), actor: z.object({ provider: z.enum(['feishu', 'infoflow']), accountId: z.string(), senderId: z.string() }) }).optional(),
-      cards: z.array(cardSchema).max(8).optional(),
+      cards: z.array(cardSchema).max(8).optional(), taskPolicy: taskPolicySchema.optional(),
       replyTo: messageId.nullable(), status: z.enum(['complete', 'queued', 'running', 'failed', 'canceled', 'interrupted']),
       error: z.string().nullable(), time: z.number(), external: externalMessage.optional(), allowDelegation: z.boolean().optional(),
       delegation: z.object({ rootId: messageId, task: z.string() }).optional(),
-      executionSessionId: z.string().transform(SessionId).optional(), requestedTasks: z.array(z.object({ botId, task: z.string() })).optional(), awaiting: z.array(messageId).optional(), continuedBy: messageId.optional(), continuationOf: messageId.optional(), resultIds: z.array(messageId).optional(), collaborationCanceled: z.boolean().optional(), localOnly: z.boolean().optional(),
+      executionSessionId: z.string().transform(SessionId).optional(), requestedTasks: z.array(z.object({ botId, task: z.string() })).optional(), awaiting: z.array(messageId).optional(), continuedBy: messageId.optional(), continuationOf: messageId.optional(), retryOf: messageId.optional(), resultIds: z.array(messageId).optional(), collaborationCanceled: z.boolean().optional(), localOnly: z.boolean().optional(),
       context: z.object({ sessionId: z.string(), measuredAt: z.number(), tokens: z.number(), window: z.number(), measurement: z.enum(['provider', 'meter', 'characters', 'unknown']), memories: z.array(z.object({ id: z.string(), revision: z.number() })), conflicts: z.array(z.array(z.string())), omitted: z.number(), recalls: z.number() }).optional(),
       attachments: z.array(attachmentSchema).max(8).optional(), questions: z.array(z.object({ id: z.string(), callId: z.string(), questions: z.array(questionItem) })).optional(), questionReply: z.object({ callId: z.string(), questions: z.array(questionItem), answer: answerSchema }).optional(), toolDetails: z.array(z.object({ name: z.string(), arguments: z.string(), result: z.string().optional() })).optional(), usage: usage.optional(), scheduleId: z.string().optional(), publishExternal: z.boolean().optional(), notifyBot: botId.optional() })
 const budgetSchema = z.object({ tokenLimit: z.number().nonnegative(), costLimit: z.number().nonnegative(), currency: z.string(), used: usage, since: z.number(), period: z.enum(['never', 'day', 'month']).optional(), reservationTokens: z.number().nonnegative().optional(), reservationCost: z.number().nonnegative().optional() })
 const schema: z.ZodType<BotState> = z.object({
+  taskLedger: taskLedgerSchema.optional(), taskOperations: taskOperationLedgerSchema.optional(),
+  invitations: z.array(z.object({ request: z.object({ requestId: z.string(), roomId: z.string().transform(brandString<RoomId>), botId, background: z.string(), messageIds: z.array(messageId).optional(), owner: z.string().optional() }),
+    coordinator: botId, title: z.string(), text: z.string(), taskPolicy: taskPolicySchema.optional(), attachments: z.array(attachmentSchema), createdAt: z.number(), status: z.enum(['pending', 'ready']), roomId: z.string().transform(brandString<RoomId>).optional() })).optional(),
   historyVersion: z.number().optional(),
   access: accessSchema.optional(),
   teamSettings: teamSettingsSchema.optional(),

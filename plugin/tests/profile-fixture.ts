@@ -42,6 +42,9 @@ export async function apply(ctx: Context): Promise<void> {
         { id: 'knowledge-status', name: 'task_status', args: {} },
       ].find(call => !hasResult(call.id))
       if (content.includes('DISCOVERY_FIXTURE') && !hasResult('discovery-list')) tool = { id: 'discovery-list', name: 'discover_bots', args: { query: '数据分析' } }
+      if (content.includes('INVITE_PROPOSE_FIXTURE') && !hasResult('invite-propose')) tool = { id: 'invite-propose', name: 'propose_collaboration', args: { botId: 'data-specialist', background: 'INVITATION_SHARED_BACKGROUND: verify the report.' } }
+      const invitationId = /INVITE_CONFIRM_FIXTURE:([a-f0-9]{40})/.exec(content)?.[1]
+      if (invitationId && !hasResult('invite-confirm')) tool = { id: 'invite-confirm', name: 'confirm_collaboration', args: { proposalId: invitationId } }
       const imTarget = content.match(/IM_CREATE_FIXTURE:([a-z-]+)/)?.[1]
       if (imTarget) tool = [
         { id: `im-discover-${imTarget}`, name: 'discover_bots', args: { query: 'Research' } },
@@ -124,6 +127,12 @@ export async function apply(ctx: Context): Promise<void> {
     }
     await service.configureKnowledge({ reviewEnabled: false })
     if (process.env.BOT_TEST_PHASE === 'resume') {
+      const restoredInvitation = service.snapshot().invitations?.find(item => item.status === 'ready')
+      assert.ok(restoredInvitation, 'The completed invitation survives native storage reload')
+      const invitationRoom = service.snapshot().rooms.find(room => room.id === restoredInvitation.roomId)!
+      const invitationMessages = invitationRoom.messages.length
+      assert.equal((await service.inviteBot(restoredInvitation.request)).id, invitationRoom.id)
+      assert.equal(service.snapshot().rooms.find(room => room.id === invitationRoom.id)!.messages.length, invitationMessages, 'Replay after process restart does not dispatch another response')
       assert.equal(service.snapshot().bots.find(bot => bot.id === 'team-worker')?.capabilities, 'Research and evidence gathering.')
       assert.equal(service.snapshot().infoflowVisible, false, 'An explicit hidden preference survives restart, including existing InfoFlow chats')
       assert.deepEqual(service.snapshot().bots.find(bot => bot.id === 'critic')!.policy,
@@ -359,6 +368,23 @@ export async function apply(ctx: Context): Promise<void> {
       assert.ok(!discoveryEvidence.includes('DISCOVERY_PRIVATE_PROMPT_MUST_NOT_LEAK'))
       assert.equal(service.snapshot().bots.length, countBeforeDiscovery, 'Recommendation lookup creates no Bot')
       assert.equal(service.teamView().audit.length, 0)
+      await service.send({ roomId: mainRoom.id, text: 'INVITE_PROPOSE_FIXTURE. PRIVATE_INVITATION_SOURCE_ONLY. Suggest this specialist with only the agreed background.' })
+      const proposed = await settled(mainRoom.id)
+      const proposal = proposed.messages.at(-1)!.proposals?.[0]
+      assert.ok(proposal, 'The native invitation tool creates a reviewable proposal')
+      assert.equal(service.snapshot().invitations?.length ?? 0, 0, 'A recommendation must not dispatch or create a group')
+      await service.send({ roomId: mainRoom.id, text: `INVITE_CONFIRM_FIXTURE:${proposal.id}. I accept this Bot and the displayed background.` })
+      await settled(mainRoom.id)
+      const invitation = service.snapshot().invitations!.find(item => item.request.requestId === proposal.id)!
+      assert.equal(invitation.status, 'ready')
+      const joined = await settled(invitation.roomId!)
+      assert.equal(joined.defaultBot, mainBot.id)
+      assert.equal(joined.members.length, 2)
+      assert.notEqual(joined.members.find(member => member.botId === mainBot.id)!.sessionId, mainRoom.members[0]!.sessionId)
+      const specialistRequests = requests.filter(request => JSON.stringify(request.messages).includes('INVITATION_SHARED_BACKGROUND') && JSON.stringify(request.messages).includes('DISCOVERY_PRIVATE_PROMPT_MUST_NOT_LEAK'))
+      assert.ok(specialistRequests.length > 0, 'The invited Bot actually executes in its independent group Session')
+      assert.ok(specialistRequests.every(request => !JSON.stringify(request.messages).includes('PRIVATE_INVITATION_SOURCE_ONLY')), 'Private source history is not transferred')
+      assert.equal((await service.inviteBot(invitation.request)).id, joined.id, 'The native persisted receipt deduplicates replay')
       await service.configureTeam({ revision: 0, botId: mainBot.id, operations: ['create-bot', 'create-group'] })
       await service.send({ roomId: mainRoom.id, text: 'TEAM_FIXTURE Create the requested worker and local team group.' })
       assert.equal((await settled(mainRoom.id)).messages.at(-1)!.status, 'complete')

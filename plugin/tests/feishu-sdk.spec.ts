@@ -1,11 +1,23 @@
 /** Official registration contract and text-only authenticated event transport. */
 import { expect, it, vi } from 'vitest'
-import { createGroup, GroupCreateError, decodeMessage, FeishuTransport, identity, register, type Sdk } from '../src/feishu/sdk.ts'
+import { inGroup, inviteRobots, createGroup, GroupCreateError, decodeMessage, FeishuTransport, identity, register, type Sdk } from '../src/feishu/sdk.ts'
 import type { Delivery } from '../src/infoflow/domain.ts'
 const incoming = (kind = 'p2p', target = 'ou_robot') => ({ sender: { sender_type: 'user', sender_id: { open_id: 'ou_alice' } }, message: {
   message_id: 'om_one', chat_id: 'oc_chat', chat_type: kind, message_type: 'text', content: JSON.stringify({ text: '@_user_1 hello' }),
   mentions: [{ key: '@_user_1', id: { open_id: target } }],
 } })
+it('uses app IDs for invitations and treats pending approval as incomplete', async () => {
+  const b = bench()
+  b.request.mockResolvedValueOnce({ code: 0, data: { pending_approval_id_list: ['cli_beta'] } })
+  await expect(inviteRobots(b.sdk, 'cli_alpha', 'secret', 'feishu', 100, 'oc_chat', ['cli_beta'])).rejects.toThrow('审批')
+  expect(b.request).toHaveBeenLastCalledWith(expect.objectContaining({ method: 'POST', url: '/open-apis/im/v1/chats/oc_chat/members', params: { member_id_type: 'app_id', succeed_type: 0 }, data: { id_list: ['cli_beta'] } }))
+  b.request.mockResolvedValueOnce({ code: 0, data: { is_in_chat: true } })
+  expect(await inGroup(b.sdk, 'cli_beta', 'secret', 'feishu', 100, 'oc_chat')).toBe(true)
+  b.request.mockRejectedValueOnce(new Error('credential-bearing SDK error'))
+  await expect(inGroup(b.sdk, 'cli_beta', 'secret', 'feishu', 100, 'oc_chat')).rejects.toThrow('无法确认')
+  await expect(inviteRobots(b.sdk, 'cli_alpha', 'secret', 'feishu', 100, 'oc_chat', ['ou_human'])).rejects.toThrow('Invalid')
+  await b.transport.close()
+})
 function bench(receive = vi.fn(async (_input: unknown) => {}), config: Partial<ConstructorParameters<typeof FeishuTransport>[1]> = {}) {
   const request = vi.fn(async (_options: Record<string, unknown>): Promise<unknown> => ({ code: 0, bot: { open_id: 'ou_robot', app_name: 'Alpha' } }))
   const begin = vi.fn(async (_options: unknown) => {}), close = vi.fn(), registration = vi.fn(async (_options: Record<string, unknown>) => ({ client_id: 'cli_app', client_secret: 'secret' }))
@@ -20,7 +32,7 @@ it('uses the official create-only flow with explicit messaging permissions and c
   const b = bench(), controller = new AbortController(), qr = vi.fn()
   await register(b.sdk, { signal: controller.signal, name: 'Alpha', qr })
   expect(b.registration).toHaveBeenCalledWith(expect.objectContaining({ createOnly: true, source: 'dsh-bot', signal: controller.signal, onQRCodeReady: qr,
-    appPreset: expect.objectContaining({ name: 'Alpha' }), addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:message:readonly', 'im:resource', 'im:chat:read', 'im:chat:create', 'im:chat.members:bot_access'] }, events: { items: { tenant: ['im.message.receive_v1', 'im.chat.member.bot.added_v1', 'im.chat.updated_v1'] } } } }))
+    appPreset: expect.objectContaining({ name: 'Alpha' }), addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:message:readonly', 'im:resource', 'im:chat:read', 'im:chat:create', 'im:chat.members:write_only', 'im:chat.members:bot_access'] }, events: { items: { tenant: ['im.message.receive_v1', 'im.chat.member.bot.added_v1', 'im.chat.updated_v1'] } } } }))
   expect(await identity(b.sdk, 'cli_app', 'secret', 'feishu', 100)).toEqual({ openId: 'ou_robot', name: 'Alpha' })
   await b.transport.close()
 })
@@ -211,6 +223,6 @@ it.each(['feishu', 'lark'] as const)('requests all connector permissions includi
   const options = b.registration.mock.calls[0]![0]
   expect(options).toEqual({ signal: controller.signal, source: 'dsh-bot', appId: 'cli_existing', onQRCodeReady: qr,
     ...(brand === 'lark' ? { domain: 'accounts.larksuite.com' } : {}),
-    addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:message:readonly', 'im:resource', 'im:chat:read', 'im:chat:create', 'im:chat.members:bot_access'] } } })
+    addons: { preset: false, scopes: { tenant: ['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:message:readonly', 'im:resource', 'im:chat:read', 'im:chat:create', 'im:chat.members:write_only', 'im:chat.members:bot_access'] } } })
   await b.transport.close()
 })

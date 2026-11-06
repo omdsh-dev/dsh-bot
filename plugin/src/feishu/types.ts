@@ -1,5 +1,6 @@
 /** Public Feishu configuration; no credential values or OAuth device codes. */
 import type { BotId, Room, RoomId } from '../types.ts'
+import type { GroupBotInvite } from '../collaboration-types.ts'
 export type Brand = 'feishu' | 'lark'
 export type GroupNameStatus = 'unknown' | 'available' | 'permission-required' | 'unavailable'
 export interface FeishuBindingView {
@@ -24,6 +25,7 @@ export interface FeishuGroupView {
 export interface FeishuState { available: boolean; bindings: FeishuBindingView[]; registrations: FeishuRegistration[]; groups: FeishuGroupView[] }
 export interface SaveFeishuBindingRequest { botId: BotId; appId: string; appSecret?: string; brand: Brand; allowUsers: string[]; allowGroups: string[]; allowAllGroups?: boolean | undefined; admins: string[] }
 export interface FeishuControl {
+  inviteBots?(request: GroupBotInvite): Promise<void>
   createGroup(request: CreateFeishuGroupRequest): Promise<Room>
   resumeGroup(requestId: string): Promise<Room>
   snapshot(): FeishuState

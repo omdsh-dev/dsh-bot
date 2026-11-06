@@ -9,6 +9,7 @@ import type { StopRequest, AttemptRequest, Bot, BotId, ChatMessage, ChatAttachme
 import { Controls } from './Controls.tsx'
 import { UsagePage } from './UsagePage.tsx'
 import { ContextInspector } from './ContextInspector.tsx'
+import { TaskInspector } from './TaskInspector.tsx'
 import { VoiceInput } from './VoiceInput.tsx'
 import { AttachmentView } from './Attachments.tsx'
 import { Questions } from './Questions.tsx'
@@ -24,8 +25,11 @@ import { IMPanel } from './IMPanel.tsx'
 import type { FeishuFace } from './feishu-face.ts'
 import type { InfoFlowFace } from './infoflow-face.ts'
 import type { FeishuState } from '../feishu/types.ts'
+import { InviteBotDialog, type CollaborationFace } from './InviteBotDialog.tsx'
+import type { InviteBotRequest } from '../collaboration-types.ts'
 
 export interface PanelFace {
+  collaboration?: CollaborationFace
   capabilities?: CapabilityFace
   infoflow?: InfoFlowFace
   feishu?: FeishuFace
@@ -79,6 +83,7 @@ export function BotPanel(props: Props) {
   const fileInput = useRef<HTMLInputElement>(null)
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [delegation, setDelegation] = useState(false)
+  const [taskPolicyMode, setTaskPolicyMode] = useState<'inherit' | 'none' | 'read-only'>('inherit')
   const [syncMessage, setSyncMessage] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
   const [showChats, setShowChats] = useState(false)
@@ -90,6 +95,8 @@ export function BotPanel(props: Props) {
   const [preset, setPreset] = useState('standard')
   const [members, setMembers] = useState<BotId[]>([])
   const [defaultBot, setDefault] = useState<BotId | undefined>()
+  const [invitation, setInvitation] = useState<{ botId?: BotId; background?: string; proposalId?: string; resume?: InviteBotRequest } | null>(null)
+  const drafts = useRef(new Map<string, { text: string; attachments: ChatAttachment[]; reply: ChatMessageId | null; taskPolicyMode: 'inherit' | 'none' | 'read-only' }>())
   const room = rooms.find(item => (item.id === selected || !!selected && item.aliases?.includes(selected)) && !item.deleted) ?? rooms.find(item => !item.archived && !item.deleted)
   const selection = useRef({ id: room?.id, revision: 0 })
   if (selection.current.id !== room?.id) selection.current = { id: room?.id, revision: selection.current.revision + 1 }
@@ -103,7 +110,7 @@ export function BotPanel(props: Props) {
   const end = useRef<HTMLDivElement>(null)
   const timeline = useRef<HTMLDivElement>(null)
   const follow = useRef(true)
-  useEffect(() => { setOlder([]); setAttachments([]); setDraft(''); setReply(null); setDelegation(false); setSyncMessage(false) }, [room?.id])
+  useEffect(() => { const saved = room && drafts.current.get(room.id); setOlder([]); setAttachments(saved?.attachments ?? []); setDraft(saved?.text ?? ''); setReply(saved?.reply ?? null); setTaskPolicyMode(saved?.taskPolicyMode ?? 'inherit'); setDelegation(false); setSyncMessage(false); setInvitation(null) }, [room?.id])
   const labels = useMemo(() => ({ code: { copyLabel: t('copy'), copiedLabel: t('copied') }, footnotes: t('footnotes') }), [t])
   useEffect(() => { if (follow.current) end.current?.scrollIntoView({ block: 'end' }) }, [room?.id, room?.messages])
   useEffect(() => {
@@ -154,7 +161,8 @@ export function BotPanel(props: Props) {
     setMembers(ids); setDefault(next === 'members' ? room?.defaultBot : ids[0])
   }
   const choose = (next: Room) => {
-    setIntegration(false); setUsagePage(false); select(next.id); setReply(null); setDraft(''); setError(null); setShowChats(false); setDetails(false); follow.current = true
+    if (room) drafts.current.set(room.id, { text: draft, attachments, reply, taskPolicyMode })
+    setIntegration(false); setUsagePage(false); select(next.id); if (next.id !== room?.id) { setReply(null); setDraft('') }; setError(null); setShowChats(false); setDetails(false); follow.current = true
   }
   const botName = (id: BotId | null) => id === null ? t('you') : bots.find(bot => bot.id === id)?.name ?? id
   const groupLocked = busy || groupSubmitted
@@ -236,6 +244,7 @@ export function BotPanel(props: Props) {
         <header className={css.header}>
           <Button className={css.mobileChats} size="sm" aria-label={t('chats')} icon={<SidebarIcon />} onClick={() => { setShowChats(!showChats) }} />
           <RoomPortrait room={room} /><div className={css.headerText}><h2>{room.title}<span className={css.kindBadge} aria-hidden="true">{t(room.external ? room.external.provider : room.kind === 'group' ? 'groups' : 'botLabel')}</span></h2><p>{room.kind === 'group' ? roomBots.map(bot => bot.name).join(' · ') : `@${room.defaultBot} · ${t('privateChat')}`}</p></div>
+          {props.collaboration && !room.archived && <Button size="sm" disabled={busy || !snapshot.ready || !!snapshot.error} icon={<PlusIcon/>} onClick={() => setInvitation({})}>{t('you') === 'You' ? 'Invite Bot' : '邀请 Bot'}</Button>}
           <Button size="sm" className={css.infoButton} aria-label={t('chatInfo')} title={t('chatInfo')} onClick={() => { setDetails(true) }} icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1" strokeLinecap="round"/></svg>} />
           {room.kind === 'group' && !room.external && <Button size="sm" disabled={running} onClick={() => { openForm('members') }}>{t('settings')}</Button>}
         </header>
@@ -244,6 +253,12 @@ export function BotPanel(props: Props) {
           if (node) follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100
         }}>
           <div className={css.transcript}>
+            {room.kind === 'group' && <p className={css.history}>{t('you') === 'You' ? 'Coordinator' : '当前统筹'}：{botName(room.defaultBot)}</p>}
+            {snapshot.value.invitations?.filter(item => item.request.roomId === room.id).map(item => <div key={item.request.requestId} className={css.invitationNotice}>
+              <span>{botName(item.request.botId)} · {item.status === 'ready' ? (t('you') === 'You' ? 'Joined the discussion' : '已加入讨论') : (t('you') === 'You' ? 'Invitation pending' : '邀请待完成')}</span>
+              {item.status === 'pending' ? <Button size="sm" onClick={() => setInvitation({ resume: item.request })}>{t('you') === 'You' ? 'Resume' : '继续邀请'}</Button>
+                : item.roomId !== room.id && <Button size="sm" onClick={() => { const target = rooms.find(value => value.id === item.roomId); if (target) choose(target) }}>{t('you') === 'You' ? 'Open discussion' : '进入讨论'}</Button>}
+            </div>)}
             {props.capabilities && room.messageCount !== undefined && room.messageCount > messages.length && <Button size="sm" className={css.loadEarlier} disabled={busy} onClick={() => { void act(async () => {
               const page = await props.capabilities!.history({ roomId: room.id, ...(messages[0] ? { before: messages[0].id } : {}), limit: 50 })
               if (selection.current.revision !== revision) return
@@ -267,13 +282,16 @@ export function BotPanel(props: Props) {
                       {room.external && message.localOnly && <span className={css.speakerBadge} title={localHint}>{t('localOnly')}</span>}
                       <time dateTime={new Date(message.time).toISOString()}>{time(message.time)}</time></div>
                     <div className={css.bubble}>
+                      {message.collaboration && <div className={css.invitationNotice}><span>{t('you') === 'You' ? 'Shared background · Coordinator' : '共享背景 · 统筹'}：{botName(message.collaboration.coordinator)}</span>{message.collaboration.sourceRoomId !== room.id && <Button size="sm" onClick={() => { const source = rooms.find(value => value.id === message.collaboration!.sourceRoomId && !value.deleted); if (source) choose(source) }}>{t('you') === 'You' ? 'Original chat' : '返回原聊天'}</Button>}</div>}
                       {quoted && <div className={css.quote}><strong>{botName(quoted.botId)}</strong>
                         <span>{quoted.text.slice(0, 140)}</span></div>}
                       {message.text && (own ? <div className={css.body}>{message.text}</div>
                         : <MarkdownText text={message.text} labels={labels} />)}
+                      {props.collaboration && !room.archived && message.proposals?.map(proposal => <div key={proposal.id} className={css.invitationNotice}><span>{botName(proposal.botId)}</span><Button size="sm" disabled={busy} onClick={() => setInvitation({ botId: proposal.botId, background: proposal.background, proposalId: proposal.id })}>{t('you') === 'You' ? 'Invite to discuss' : '邀请一起讨论'}</Button></div>)}
                       {props.capabilities && message.cards?.map(card => <CardView key={`${card.id}:${card.revision}`} card={card} roomId={room.id} messageId={message.id} face={props.capabilities!} enabled={message.status === 'complete' && !room.archived && !room.deleted && (!room.external || room.kind === 'group')} english={t('you') === 'You'}/>)}
                       {message.attachments?.map(item => props.capabilities ? <AttachmentView key={item.attachment.attachmentId} item={item} face={props.capabilities} request={{ roomId: room.id, messageId: message.id, attachmentId: item.attachment.attachmentId }}/> : <p key={item.attachment.attachmentId}>📎 {item.attachment.name}</p>)}
                       {message.toolDetails?.map((tool, index) => <details className={css.toolDetails} key={index}><summary>{tool.name}</summary><pre>{tool.arguments}</pre>{tool.result && <pre>{tool.result}</pre>}</details>)}
+                      {!own && props.capabilities?.taskView && <TaskInspector face={props.capabilities} request={{ roomId: room.id, messageId: message.id }} english={t('you') === 'You'}/>}
                       {!own && props.capabilities?.contextView && <ContextInspector face={props.capabilities} request={{ roomId: room.id, messageId: message.id }} english={t('you') === 'You'}/>}
                       {props.capabilities && message.questions?.map(view => <Questions key={view.id} view={view} roomId={room.id} face={props.capabilities!} english={t('you') === 'You'}/>)}
                       {message.progress?.question && props.capabilities && <Questions key={message.progress.question.id} view={message.progress.question} roomId={room.id} face={props.capabilities} english={t('you') === 'You'}/>}
@@ -304,6 +322,8 @@ export function BotPanel(props: Props) {
         </div>
         {room.external && <p role="note" className={css.history}>{room.kind === 'group' ? syncMessage ? t('syncHint') : localHint : t(room.external.provider === 'feishu' ? 'fsExternalHelp' : 'externalReadOnly')}</p>}
         {writable && <Composer key={room.id} bots={roomBots} t={t} draft={draft} onDraft={setDraft}
+          invitable={props.collaboration ? bots.filter(bot => !bot.archived && !room.members.some(member => member.botId === bot.id)) : []}
+          onInvite={id => setInvitation({ botId: id })}
           hasAttachments={attachments.length > 0}
           onFiles={props.capabilities ? attachFiles : undefined}
           toolbar={props.capabilities && <>
@@ -323,16 +343,24 @@ export function BotPanel(props: Props) {
               <Button size="sm" icon={<CloseIcon />} aria-label={`${t('removeAttachment')}: ${item.attachment.name}`} title={t('removeAttachment')} onClick={() => setAttachments(current => current.filter((_, i) => i !== index))}/>
             </div>)}
           </div>}
-          optionsContent={props.capabilities && (room.kind === 'group' || running) && <div className={css.inputOptions}>
+          optionsContent={props.capabilities && (room.kind === 'group' || running || props.capabilities.taskView) && <div className={css.inputOptions}>
+            {props.capabilities.taskView && <label>{t('you') === 'You' ? 'Request restrictions' : '本次请求权限'}<select aria-label={t('you') === 'You' ? 'Request restrictions' : '本次请求权限'} value={taskPolicyMode} disabled={busy}
+              onChange={event => setTaskPolicyMode(event.target.value as typeof taskPolicyMode)}>
+              <option value="inherit">{t('you') === 'You' ? 'Use Bot permissions' : '沿用 Bot 权限'}</option>
+              <option value="none">{t('you') === 'You' ? 'No tools' : '禁用工具'}</option>
+              <option value="read-only">{t('you') === 'You' ? 'Native files / shell read-only' : '原生文件 / Shell 只读'}</option>
+            </select></label>}
+            {props.capabilities.taskView && taskPolicyMode === 'none' && <small>{t('you') === 'You' ? 'Blocks this project’s direct tool calls; independent external agents need their own restrictions.' : '禁用本项目中的直接工具调用；外部执行器中的独立子代理需单独约束。'}</small>}
+            {props.capabilities.taskView && taskPolicyMode === 'read-only' && <small>{t('you') === 'You' ? 'Native files/shell only; network/MCP writes and independent external agents are not restricted.' : '仅限制原生文件和 Shell；不限制网络/MCP 写入或外部执行器中的独立子代理。'}</small>}
             {room.kind === 'group' && <label><input type="checkbox" checked={delegation} onChange={event => setDelegation(event.target.checked)}/>{t('allowDelegation')}</label>}
             {room.external && <label><input type="checkbox" checked={syncMessage} onChange={event => setSyncMessage(event.target.checked)}/>{t('syncMessage')}</label>}
             {running && <span role="status">{t('queueHint')}</span>}
           </div>}
-          disabled={busy || !snapshot.ready || !!snapshot.error || form !== null || details || controls}
+          disabled={busy || !snapshot.ready || !!snapshot.error || form !== null || details || controls || invitation !== null}
           reply={room.messages.find(message => message.id === reply)}
           onCancelReply={() => { setReply(null) }}
           onSend={() => { void act(async () => {
-            await props.send({ roomId: room.id, text: draft, ...(reply ? { replyTo: reply } : {}), ...(delegation ? { allowDelegation: true } : {}), ...(attachments.length ? { attachments } : {}), ...(syncMessage ? { notify: true } : {}) })
+            await props.send({ roomId: room.id, text: draft, ...(taskPolicyMode === 'none' ? { taskPolicy: { toolMode: 'none' as const } } : taskPolicyMode === 'read-only' ? { taskPolicy: { fileMode: 'read-only' as const } } : {}), ...(reply ? { replyTo: reply } : {}), ...(delegation ? { allowDelegation: true } : {}), ...(attachments.length ? { attachments } : {}), ...(syncMessage ? { notify: true } : {}) })
             if (selection.current.revision !== revision) return
             setAttachments([])
             setDraft(current => current === draft ? '' : current); setReply(null); follow.current = true
@@ -340,6 +368,9 @@ export function BotPanel(props: Props) {
       </> : <div className={css.welcome}><Avatar id="dsh" large /><h2>{t('welcomeTitle')}</h2><p>{t('empty')}</p>
         <Button variant="primary" disabled={!snapshot.ready} onClick={() => { openForm('bot') }}>{t('newBot')}</Button></div>}
     </main>}
+    {invitation && room && props.collaboration && <InviteBotDialog key={`${room.id}:${invitation.resume?.requestId ?? invitation.botId ?? 'new'}`} room={room} face={props.collaboration}
+      initialBot={invitation.botId} proposalId={invitation.proposalId} initialBackground={invitation.background} resume={invitation.resume} english={t('you') === 'You'}
+      close={() => setInvitation(null)} done={result => { setInvitation(null); choose(result) }} bindings={() => { setInvitation(null); setIntegration(true) }}/>}
     <Modal open={controls} onClose={() => setControls(false)} closeLabel={t('cancel')} title={t('capabilities')} className={clsx(css.dialog, css.controlsDialog)} contentClassName={clsx(css.dialogContent, css.settingsScroll)}>
       {props.capabilities && <Controls key={`${room?.id}:${controlsTab}`} initialTab={controlsTab} state={snapshot.value} room={room} face={props.capabilities} updateBot={props.updateBot} english={t('you') === 'You'} openRoom={next => { choose(next); setControls(false) }}/>}
     </Modal>

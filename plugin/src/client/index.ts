@@ -52,7 +52,12 @@ function install(ctx: Context): void {
   control.start()
   ctx.effect(() => () => control.dispose(), 'bot-mode: state stream')
   const face: PanelFace = {
+    collaboration: { view: roomId => value(ctx.remote.bots.invitationView(roomId)), invite: request => value(ctx.remote.bots.inviteBot(request)) },
     capabilities: {
+      taskView: request => value(ctx.remote.bots.taskView(request)),
+      stopTask: request => value(ctx.remote.bots.stopTask(request)),
+      verifyTask: request => value(ctx.remote.bots.verifyTask(request)),
+      resolveTaskOperation: request => value(ctx.remote.bots.resolveTaskOperation(request)),
       teamView: () => value(ctx.remote.bots.teamView()), configureTeam: request => value(ctx.remote.bots.configureTeam(request)),
       submitCard: request => value(ctx.remote.bots.submitCard(request)),
       accessCatalog: () => value(ctx.remote.bots.accessCatalog()), saveCapability: request => value(ctx.remote.bots.saveCapability(request)),

@@ -26,6 +26,26 @@ function bench(initial: Settings = { bindings: [], groups: [] }) {
   return { manager: new InfoFlowManager(store, runtime), runtime, secrets, create, testMessage, link, store, state: () => state }
 }
 function binding(botId: BotId): SaveInfoFlowBindingRequest { return { botId, appKey: botId === a ? 'key-a' : 'key-b', appSecret: 'private-secret', allowUsers: ['alice@baidu.com'], allowGroups: [], admins: ['alice'] } }
+it('verifies robot-only invitations and does not grant local access after a partial platform result', async () => {
+  const f = await configured(), api = f.runtime.api
+  await f.manager.save({ ...binding(a), allowGroups: ['123'] })
+  vi.mocked(f.runtime.stop).mockClear()
+  let joined = false
+  const addRobots = vi.fn(async () => { throw new Error('unconfirmed secret payload') })
+  const groupInfo = vi.fn(async () => ({ groupId: '123', masterUserId: 'alice', agentIds: joined ? ['11', '22'] : ['11'] }))
+  f.runtime.api = (binding, credentials) => ({ ...api(binding, credentials), addRobots, groupInfo })
+  const request = { requestId: 'invite-existing', groupId: '123', title: 'Group', botIds: [a, b], defaultBot: a }
+  await expect(f.manager.inviteBots(request)).rejects.toThrow('尚未确认')
+  expect(f.state().bindings.find(binding => binding.botId === b)!.allowGroups).not.toContain('123')
+  expect(addRobots).toHaveBeenCalledExactlyOnceWith('123', ['22'])
+  joined = true
+  await f.manager.inviteBots(request)
+  expect(addRobots).toHaveBeenCalledTimes(1)
+  expect(f.state().bindings.every(binding => binding.allowGroups.includes('123'))).toBe(true)
+  expect(f.create).not.toHaveBeenCalled()
+  expect(f.runtime.stop).not.toHaveBeenCalledWith(a)
+  expect(f.runtime.stop).toHaveBeenCalledWith(b)
+})
 it('cleans superseded and uncommitted credential references while keeping the active binding usable', async () => {
   const f = bench()
   await f.manager.save(binding(a)); await f.manager.save(binding(a))
@@ -134,9 +154,13 @@ it('does not repeat a remote creation after a timeout or a process restart', asy
 it('recovers local linking failures without creating another group and surfaces partial invitations', async () => {
   const f = await configured(); f.link.mockRejectedValueOnce(new Error('disk full'))
   f.create.mockResolvedValueOnce({ groupId: '123456', failList: ['bob'], failRobotIds: [22] })
-  await expect(f.manager.createGroup(group)).rejects.toThrow('disk full')
+  await expect(f.manager.createGroup(group)).rejects.toThrow('未加入')
+  expect(f.link).not.toHaveBeenCalled()
   expect(f.manager.snapshot().groups[0]?.groupId).toBe('123456')
   expect(f.manager.snapshot().groups[0]?.warning).toContain('bob')
+  const api = f.runtime.api
+  f.runtime.api = (binding, credentials) => ({ ...api(binding, credentials), groupInfo: async () => ({ groupId: '123456', masterUserId: 'alice', agentIds: ['11', '22'] }) })
+  await expect(f.manager.resumeGroup(group.requestId)).rejects.toThrow('disk full')
   await f.manager.resumeGroup(group.requestId)
   expect(f.create).toHaveBeenCalledTimes(1)
 })
@@ -187,7 +211,7 @@ it('attaches an uncertain group only after checking its owner without creating i
   f.runtime.api = (binding, secrets) => ({ ...originalApi(binding, secrets), groupInfo })
   await expect(f.manager.attachGroup({ requestId: group.requestId, groupId: '123456' })).rejects.toThrow('owner')
   expect(f.manager.snapshot().groups[0]!.groupId).toBe('')
-  groupInfo.mockResolvedValueOnce({ groupId: '123456', masterUserId: 'alice', agentIds: ['11', '22'] })
+  groupInfo.mockResolvedValue({ groupId: '123456', masterUserId: 'alice', agentIds: ['11', '22'] })
   await f.manager.attachGroup({ requestId: group.requestId, groupId: '123456' })
   expect(f.manager.snapshot().groups[0]!.status).toBe('ready')
   expect(f.create).toHaveBeenCalledOnce()

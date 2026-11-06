@@ -10,7 +10,7 @@ import type { BotId, InfoFlowGroupView, Room } from '../types.ts'
 import { InfoFlowManager } from './manager.ts'
 import { settingsDomain, type Binding } from './settings.ts'
 import { QueueRegistry } from './queues.ts'
-import { InfoFlowBridge } from './bridge.ts'
+import { InfoFlowBridge, type BridgeConfig } from './bridge.ts'
 import { InfoFlowTransport, loadSdk, robotApi } from './sdk.ts'
 import { groupTitleTarget } from '../group-titles.ts'
 
@@ -18,8 +18,8 @@ import { groupTitleTarget } from '../group-titles.ts'
 export async function applyManaged(ctx: Context, config: Config): Promise<void> {
   const queues = new QueueRegistry(ctx, 'infoflow')
   const settings = await ctx.storageDomain.open(settingsDomain)
-  const connections = new Map<BotId, { transport: InfoFlowTransport; bridge: InfoFlowBridge; close(): Promise<void> }>()
-  const shared = new Map<string, { bridge: InfoFlowBridge; room: Room; close(): Promise<void> }>()
+  const connections = new Map<BotId, { transport: InfoFlowTransport; bridge: InfoFlowBridge; allowGroup(groupId: string): void; close(): Promise<void> }>()
+  const shared = new Map<string, { bridge: InfoFlowBridge; room: Room; botIds: BotId[]; config: BridgeConfig; close(): Promise<void> }>()
   const opening = new Map<string, Promise<Room>>()
   const report = (message: string) => { ctx.logger.warn(message) }
   const wake = async () => { await Promise.all([...connections.values(), ...shared.values()].map(item => item.bridge.wake())) }
@@ -28,13 +28,24 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
   const resolve = async (ref: string) => (await ctx.credentials.resolve(credentialRef(ref)))?.value
   const link = (group: InfoFlowGroupView): Promise<Room> => {
     const existing = shared.get(group.groupId)
-    if (existing) return Promise.resolve(ctx.botMode.snapshot().rooms.find(room => room.id === existing.room.id) ?? existing.room)
+    if (existing && JSON.stringify(existing.botIds) === JSON.stringify(group.botIds)) return Promise.resolve(ctx.botMode.snapshot().rooms.find(room => room.id === existing.room.id) ?? existing.room)
     const pending = opening.get(group.groupId)
     if (pending) return pending
     const task = (async () => {
       const accountId = `group:${group.groupId}`
       const room = await ctx.botMode.ensureExternalRoom({ conversation: { provider: 'infoflow', accountId, kind: 'group', id: group.groupId },
         title: group.title, preserveTitle: true, botIds: group.botIds, defaultBot: group.defaultBot })
+      if (existing) {
+        // Keep pending receipts and the running source Bot alive while admitting a new peer.
+        existing.config.botIds = [...group.botIds]
+        existing.botIds = [...group.botIds]
+        existing.room = room
+        return room
+      }
+      const bridgeConfig: BridgeConfig = { ...config, notifyScheduled: true, allowDelegation: true,
+        mentionId: botId => manager.snapshot().bindings.find(binding => binding.botId === botId)?.agentId,
+        accountId, botIds: [...group.botIds], defaultBot: group.defaultBot,
+        allowUsers: [], allowGroups: [group.groupId], admins: [group.owner] }
       const name = queueName(accountId)
       const domain = await queues.open(name)
       try {
@@ -46,11 +57,9 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
           const target = connections.get(delivery.botId ?? group.defaultBot)
           if (!target) throw new PermanentChatError('Replying robot is disabled')
           await target.transport.send(delivery)
-        } }, { ...config, notifyScheduled: true, allowDelegation: true, mentionId: botId => manager.snapshot().bindings.find(binding => binding.botId === botId)?.agentId,
-          accountId, botIds: group.botIds, defaultBot: group.defaultBot,
-          allowUsers: [], allowGroups: [group.groupId], admins: [group.owner] }, report)
+        } }, bridgeConfig, report)
         queues.bind(accountId, name, bridge)
-        shared.set(group.groupId, { bridge, room, close: async () => { await bridge.close() } })
+        shared.set(group.groupId, { bridge, room, botIds: [...group.botIds], config: bridgeConfig, close: async () => { await bridge.close() } })
         return room
       } finally { queues.cancel(name) }
     })().finally(() => { opening.delete(group.groupId) })
@@ -59,6 +68,7 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
   }
   const manager = new InfoFlowManager(settings.global, {
     bots: () => ctx.botMode.snapshot().bots.map(bot => bot.id), resolve,
+    allowGroup: (botId, groupId) => { const current = connections.get(botId); if (!current) return false; current.allowGroup(groupId); return true },
     unset: ref => ctx.credentials.unset(credentialRef(ref)),
     set: (ref, value) => ctx.credentials.set(credentialRef(ref), value), stop, link,
     api: (binding, secrets) => robotApi(loadSdk(), { ...secrets, agentId: binding.agentId, timeout: config.endpointTimeoutMs, ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}) }),
@@ -110,7 +120,7 @@ export async function applyManaged(ctx: Context, config: Config): Promise<void> 
           botIds: [binding.botId], defaultBot: binding.botId, allowUsers: binding.allowUsers, allowGroups: binding.allowGroups, allowAllGroups: binding.allowAllGroups === true, admins: binding.admins }, report)
         bridge = owner
         queues.bind(binding.botId, name, owner)
-        connections.set(binding.botId, { transport: connection, bridge: owner, close: async () => { await connection.close(); await owner.close() } })
+        connections.set(binding.botId, { transport: connection, bridge: owner, allowGroup: groupId => { if (!binding.allowGroups.includes(groupId)) binding.allowGroups.push(groupId) }, close: async () => { await connection.close(); await owner.close() } })
         connection.start()
       } catch (error) { await Promise.allSettled([transport?.close(), bridge?.close()]); throw error }
       finally { queues.cancel(name) }

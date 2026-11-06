@@ -29,7 +29,7 @@ class Client {
     this.im = { message: {
       sendToUser: async (user, text) => { state.sent.push({ agentId: id, user, text }); },
       sendToGroupWithOptions: async value => { state.sent.push({ agentId: id, group: value.groupId, text: value.body.map(block => block.content || '').join('') }); }
-    }, group: { getGroupInfo: async groupId => ({groupId,name:'如流实际群名',masterUserId:'alice'}), create: async options => { state.created.push(options); return { groupId: '777' }; } } };
+    }, group: { getMembers: async () => [{type:'agent',agentId:11},{type:'agent',agentId:22}], getGroupInfo: async groupId => ({groupId,name:'如流实际群名',masterUserId:'alice'}), create: async options => { state.created.push(options); return { groupId: '777' }; } } };
   }
 }
 class WSClient {

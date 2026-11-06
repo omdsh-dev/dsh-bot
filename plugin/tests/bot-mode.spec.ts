@@ -43,6 +43,100 @@ function bench() {
   return { service, state, set, close, assemble, followup, wake, ctx, variable, execute, run }
 }
 
+it.each(['feishu', 'infoflow'] as const)('limits %s invitation discovery to connected Bots administered by the verified sender', provider => {
+  const b = bench(), room = b.state.rooms[0]!, human = room.messages[0]!, delivery = room.messages[1]!
+  room.external = { provider, accountId: 'app', kind: 'private', id: provider === 'infoflow' ? 'alice' : 'oc_dm' }
+  human.external = { id: 'receipt', sender: { id: 'alice', name: 'Same display name' } }
+  b.state.bots.push({ ...b.state.bots[0]!, id: 'reviewer' as BotId })
+  const common = { enabled: true, status: 'connected', allowUsers: ['alice'], allowGroups: [], admins: ['alice'] }
+  const bindings = [
+    { ...common, botId: 'sage', appId: 'app', agentId: 'app' },
+    { ...common, botId: 'reviewer', appId: 'other-app', agentId: 'other-app' },
+  ]
+  Reflect.set(b.service, provider, { snapshot: () => ({ available: true, bindings, groups: [] }) })
+  const candidates = (): BotId[] => Reflect.get(b.service, 'invitableIMBots').call(b.service, room, delivery)
+  if (provider === 'feishu') {
+    expect(candidates()).not.toContain('reviewer') // Identical Open ID strings in different apps are not an identity link.
+    b.state.userIdentities = [{ id: 'verified-person', name: 'Alice', aliases: [JSON.stringify(['feishu', 'app', 'alice']), JSON.stringify(['feishu', 'other-app', 'alice'])] }]
+    expect(candidates()).toContain('reviewer')
+    b.state.userIdentities = []
+    human.external.sources = [{ accountId: 'other-app', senderId: 'alice' }]
+  }
+  expect(candidates()).toContain('reviewer')
+  bindings[1]!.admins = ['someone-else']; expect(candidates()).not.toContain('reviewer')
+  bindings[1]!.admins = ['alice']; bindings[1]!.status = 'connecting'; expect(candidates()).not.toContain('reviewer')
+  bindings[1]!.status = 'connected'; bindings[0]!.admins = []; expect(candidates()).toEqual([])
+})
+
+it('invites from a busy DM atomically, shares only selected context, retains the coordinator and deduplicates retries', async () => {
+  const b = bench(), source = b.state.rooms[0]!
+  delete source.external
+  source.messages[0]!.text = 'PRIVATE_UNSELECTED_HISTORY'
+  source.messages.push({ ...source.messages[0]!, id: 'selected' as ChatMessageId, text: 'Selected conclusion' })
+  const invited = { ...b.state.bots[0]!, id: 'reviewer' as BotId, name: 'Reviewer', instructions: 'PRIVATE_REVIEWER_PROMPT' }
+  b.state.bots.push(invited)
+  const launch = vi.fn(); Reflect.set(b.service, 'launch', launch)
+  const request = { requestId: 'invite-dm-0001', roomId: source.id, botId: invited.id, background: 'Check this plan', messageIds: ['selected' as ChatMessageId] }
+  const [room, again] = await Promise.all([b.service.inviteBot(request), b.service.inviteBot(request)])
+  expect(room.id).toBe(again.id); expect(room.defaultBot).toBe(source.defaultBot)
+  expect(room.members).toHaveLength(2)
+  expect(room.members[0]!.sessionId).not.toBe(source.members[0]!.sessionId)
+  expect(room.messages[0]).toMatchObject({ botId: null, collaboration: { sourceRoomId: source.id, coordinator: source.defaultBot, invitedBot: invited.id } })
+  expect(room.messages[0]!.text).toContain('Selected conclusion')
+  expect(JSON.stringify(room)).not.toContain('PRIVATE_UNSELECTED_HISTORY')
+  expect(JSON.stringify(room)).not.toContain('PRIVATE_REVIEWER_PROMPT')
+  expect(b.service.snapshot().rooms.find(item => item.id === source.id)).toMatchObject({ kind: 'dm', members: source.members, messages: source.messages })
+  expect(launch).toHaveBeenCalledTimes(1)
+  await expect(b.service.inviteBot({ ...request, background: 'different' })).rejects.toThrow('重试')
+  Reflect.set(b.service, 'invitationJobs', undefined)
+  expect((await b.service.inviteBot(request)).id).toBe(room.id)
+  expect(launch).toHaveBeenCalledTimes(1)
+})
+
+it('adds a Bot to a busy group without replacing existing Sessions or changing the default responder', async () => {
+  const b = bench(), source = b.state.rooms[0]!
+  delete source.external; source.kind = 'group'
+  b.state.bots.push({ ...b.state.bots[0]!, id: 'reviewer' as BotId, name: 'Reviewer' })
+  const launch = vi.fn(); Reflect.set(b.service, 'launch', launch)
+  const result = await b.service.inviteBot({ requestId: 'invite-busy-group', roomId: source.id, botId: 'reviewer' as BotId, background: 'Review after the current task' })
+  expect(result.id).toBe(source.id); expect(result.members[0]).toEqual(source.members[0]); expect(result.defaultBot).toBe(source.defaultBot)
+  expect(result.messages.at(-1)).toMatchObject({ botId: 'reviewer', status: 'queued' })
+  expect(launch).not.toHaveBeenCalled()
+})
+
+it('does not persist or dispatch invitations with foreign messages, unfinished context or failed storage', async () => {
+  const b = bench(), source = b.state.rooms[0]!
+  delete source.external; b.state.bots.push({ ...b.state.bots[0]!, id: 'reviewer' as BotId })
+  const launch = vi.fn(); Reflect.set(b.service, 'launch', launch)
+  const request = { requestId: 'invite-validation', roomId: source.id, botId: 'reviewer' as BotId, background: 'Review' }
+  for (const id of ['foreign', 'attempt']) await expect(b.service.inviteBot({ ...request, messageIds: [id as ChatMessageId] })).rejects.toThrow('消息')
+  b.set.mockRejectedValueOnce(new Error('disk full'))
+  await expect(b.service.inviteBot(request)).rejects.toThrow('disk full')
+  expect(b.service.snapshot().rooms).toHaveLength(1); expect(b.service.snapshot().invitations).toBeUndefined(); expect(launch).not.toHaveBeenCalled()
+})
+
+it('keeps an IM invitation pending until the platform confirms it, then resumes the same request', async () => {
+  const b = bench(), source = b.state.rooms[0]!
+  b.state.bots.push({ ...b.state.bots[0]!, id: 'reviewer' as BotId })
+  const bindings = b.state.bots.map(bot => ({ botId: bot.id, enabled: true, status: 'connected', allowUsers: [], allowGroups: [], admins: [] }))
+  const createGroup = vi.fn(async (request: import('../src/types.ts').CreateInfoFlowGroupRequest) => b.service.ensureExternalRoom({ title: request.title,
+    conversation: { provider: 'infoflow', accountId: 'group:123', kind: 'group', id: '123' }, botIds: request.botIds, defaultBot: request.defaultBot }))
+  createGroup.mockRejectedValueOnce(new Error('platform uncertain'))
+  Reflect.set(b.service, 'infoflow', { snapshot: () => ({ bindings, groups: [], groupInviteAllowlist: ['alice'] }), createGroup, saveGroupInviteAllowlist: vi.fn() })
+  Reflect.set(b.service, 'launch', vi.fn())
+  const request = { requestId: 'invite-platform-01', roomId: source.id, botId: 'reviewer' as BotId, background: 'Check plan', owner: 'alice' }
+  await expect(b.service.inviteBot({ ...request, owner: 'other-colleague' })).rejects.toThrow('白名单')
+  expect(createGroup).not.toHaveBeenCalled()
+  await expect(b.service.inviteBot(request)).rejects.toThrow('uncertain')
+  expect(b.service.snapshot().rooms).toHaveLength(1)
+  expect(b.service.invitationView(source.id).pending).toHaveLength(1)
+  const room = await b.service.inviteBot(request)
+  expect(room.external).toMatchObject({ provider: 'infoflow', id: '123' })
+  expect(room.messages[0]).toMatchObject({ publishExternal: true, localOnly: false })
+  expect(createGroup).toHaveBeenLastCalledWith(expect.objectContaining({ requestId: request.requestId, owner: 'alice', members: [] }))
+  expect(b.service.invitationView(source.id).pending).toHaveLength(0)
+})
+
 it.each(['feishu', 'infoflow'] as const)('syncs %s group names from a receiving app without replacing history or its default Bot', async provider => {
   const b = bench(), room = b.state.rooms[0]!
   room.kind = 'group'

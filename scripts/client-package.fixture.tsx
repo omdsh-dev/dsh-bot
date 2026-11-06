@@ -30,7 +30,19 @@ it('mounts the archive UI, renders native controls, and sends through its Remote
   const locale = new LocaleRuntime(runtime.ctx); locale.setLocale('en')
   const bot = { id: 'sage', name: 'Sage', instructions: 'Review', preset: 'standard' }
   const state = { bots: [bot], rooms: [{ id: 'dm', title: 'Sage', kind: 'dm', defaultBot: bot.id,
-    members: [{ botId: bot.id, sessionId: 'session', cursor: 0 }], messages: [] }] }
+    members: [{ botId: bot.id, sessionId: 'session', cursor: 0 }], messages: [
+      { id: 'question', botId: null, text: 'Inspect a local task', replyTo: null, status: 'complete', error: null, time: 1000 },
+      { id: 'answer', botId: bot.id, text: 'Interrupted result', replyTo: 'question', status: 'interrupted', error: null, time: 2000 },
+    ] }] }
+  const operation = { id: 'receipt', roomId: 'dm', messageId: 'answer', callId: 'call-1', name: 'offline_write', status: 'unknown', startedAt: 1000 }
+  const task = { id: 'question', rootMessageId: 'question', roomId: 'dm', status: 'interrupted', createdAt: 1000, updatedAt: 2000,
+    runs: [{ id: 'answer', botId: bot.id, status: 'interrupted', createdAt: 1000, updatedAt: 2000, resultIds: [], awaiting: [] }],
+    events: [{ sequence: 1, time: 1000, kind: 'created', status: 'queued' }], nextSequence: 2, droppedEvents: 0 }
+  const taskView = vi.fn(async () => ({ ok: true, value: structuredClone({ task, operations: [operation] }) }))
+  const resolveTaskOperation = vi.fn(async () => {
+    operation.resolution = { outcome: 'verified_applied', time: 3000 }
+    return { ok: true, value: undefined }
+  })
   const send = vi.fn(async () => ({ ok: true, value: {} }))
   const createBot = vi.fn(async request => ({ ok: true, value: request }))
   const usageReport = vi.fn(async () => ({ ok: true, value: { generatedAt: 1000, bots: [], budgets: [] } }))
@@ -49,14 +61,14 @@ it('mounts the archive UI, renders native controls, and sends through its Remote
     ctx.slots.installLocale(locale)
     ctx.provide('layout', { toggleSidebar() {} })
     ctx.provide('uiWorkspace', { openSession() {} })
-    const remote = { bots: { send, createBot, usageReport }, $mount: mount, $stream: () => ({
+    const remote = { bots: { send, createBot, usageReport, taskView, resolveTaskOperation }, $mount: mount, $stream: () => ({
       async *[Symbol.asyncIterator]() { yield { generation: 1, value: { type: 'baseline', value: state }, accept() {} } },
       async dispose() {}, restart() {},
     }) }
     // DSH 0.2's slot harness already owns a Remote double; 0.1 does not.
     if (runtime.remote) Object.assign(runtime.remote, remote)
     else ctx.provide('remote', remote)
-    ctx.provide('remote.bots', { send, createBot, usageReport })
+    ctx.provide('remote.bots', { send, createBot, usageReport, taskView, resolveTaskOperation })
     await client.apply(ctx)
   } })
   await runtime.root.declare({ main: { kind: 'keyed', scope: 'root' }, 'sidebar.panellist': { kind: 'list', scope: 'root' } },
@@ -70,10 +82,25 @@ it('mounts the archive UI, renders native controls, and sends through its Remote
   await screen.findByText('No Bot usage records yet. Start a conversation to see usage here.')
   expect(usageReport).toHaveBeenCalledOnce()
   fireEvent.click(screen.getByRole('button', { name: 'Back to chat' }))
+  expect(taskView).not.toHaveBeenCalled()
+  const taskDetails = screen.getByText('Task & recovery').closest('details')
+  taskDetails.open = true; fireEvent(taskDetails, new Event('toggle'))
+  await screen.findByText('Task ID: question')
+  expect(taskView).toHaveBeenCalledWith({ roomId: 'dm', messageId: 'answer' })
+  screen.getByText(/Tool operation receipts/).closest('details').open = true
+  const confirm = screen.getByRole('button', { name: 'Confirm applied' })
+  expect(confirm.disabled).toBe(true)
+  fireEvent.click(screen.getByRole('checkbox', { name: 'I checked the actual external state of offline_write (call-1)' }))
+  fireEvent.click(confirm)
+  await waitFor(() => expect(resolveTaskOperation).toHaveBeenCalledExactlyOnceWith({ roomId: 'dm', messageId: 'answer', callId: 'call-1', resolution: 'verified_applied' }))
+  await screen.findByText('User checked: applied')
+  expect(send).not.toHaveBeenCalled()
+  expect(screen.queryByRole('button', { name: 'Accept checked result' })).toBeNull()
+  fireEvent.change(screen.getByRole('combobox', { name: 'Request restrictions' }), { target: { value: 'none' } })
   fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'Archive compatibility check' } })
   expect(screen.getByRole('button', { name: 'Send' }).disabled).toBe(false)
   fireEvent.click(screen.getByRole('button', { name: 'Send' }))
-  await waitFor(() => expect(send).toHaveBeenCalledWith(expect.objectContaining({ roomId: 'dm', text: 'Archive compatibility check' })))
+  await waitFor(() => expect(send).toHaveBeenCalledWith(expect.objectContaining({ roomId: 'dm', text: 'Archive compatibility check', taskPolicy: { toolMode: 'none' } })))
   fireEvent.click(screen.getAllByRole('button', { name: 'Create Bot' })[0])
   fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Reviewer' } })
   fireEvent.change(screen.getByLabelText('Bot handle (ASCII)'), { target: { value: 'reviewer' } })

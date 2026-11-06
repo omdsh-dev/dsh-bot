@@ -1,5 +1,9 @@
 # 0.10 功能使用说明 / Capability guide
 
+## 邀请能力 Bot 参与当前讨论
+
+聊天顶部的「＋邀请 Bot」和输入框 `@` 列表提供可见的能力列表。确认可编辑的共享背景、选定消息与附件后，私聊创建关联群聊，群聊加入现有群；原 Bot 继续协调，各 Bot 保留独立 Session。飞书和如流在核验实际进群后才完成邀请，并可恢复未完成请求。详见[邀请 Bot 一起讨论](collaboration.zh.md)。
+
 设置入口位于左侧栏。首页提供记忆、模型、定时任务和聊天记录；用量限额、工具与账号、团队管理、消息发送问题、归档与删除位于「更多设置」。每个入口都有用途说明，进入后可返回设置首页。记忆、定时任务和聊天记录先显示已有内容，点击添加后才展开表单。列表无需先搜索，关键词仅用于缩小范围。
 
 本页界面说明适用于主包 `0.12.0`、飞书 `0.6.0`、如流 `0.7.0`。安装时请指定版本或 `@next`；发布进度与验收范围见[完成记录](feature-completion.md)。
@@ -142,3 +146,7 @@ The Main Bot cannot change its own identity, presets, model/tool/file policies, 
 macOS 和 Windows 在完成 `npm run setup` 后可运行 `npm run desktop`，进入 DSH 原生 Electron 窗口。首次启动会准备固定版本的 Electron、Node、Python 和 Office 依赖；原生欢迎页允许先跳过模型配置。默认数据位于项目 `.data/desktop`，与 Web 默认 `.data` 分开；可通过 `DSH_HOME` 指定已有独立桌面目录。
 
 `npm run desktop:entry` 在 `dist` 生成 macOS 的 `DSH Bots.app` 或 Windows 的 `DSH Bots.lnk`，可双击启动。入口依赖本机源码目录和 `.runtime`，移动源码后须重新生成；它不是包含完整运行时的签名安装包。原生 Host、渲染器隔离、账户配置与插件机制由 DSH 提供，普通启动不开放调试端口。运行 `npm run test:desktop` 可用临时目录验收原生欢迎页、Bot 创建、用量页面、重启恢复和进程退出，不会调用模型。
+
+## 请求级任务运行与恢复
+
+已增加任务/执行/生命周期元数据、结构化请求权限、「任务与恢复」控制入口及工具意图/回执。停止与查询不需要模型响应；未知操作需人工核对且不自动续跑。模型完成不是验收通过，原生子代理和外部执行器尚未继承完整约束。详见[任务运行底座与恢复边界](task-runtime.zh.md)。

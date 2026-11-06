@@ -8,6 +8,12 @@
   "files": [
     "src/index.ts",
     "src/types.ts",
+    "src/task-policy.ts",
+    "src/task-types.ts",
+    "src/task-operation-types.ts",
+    "src/task-control-types.ts",
+    "src/task-ledger.ts",
+    "src/task-operations.ts",
     "src/domain.ts",
     "src/routing.ts",
     "src/delegation.ts",
@@ -44,6 +50,7 @@
     "src/chat-search.ts",
     "src/run-deadline.ts",
     "src/knowledge-tools.ts",
+    "src/local-tool-failures.ts",
     "src/memory-review.ts",
     "src/context-continuity.ts",
     "src/memory-store.ts",
@@ -65,7 +72,9 @@
     "src/im-bot-creation.ts",
     "src/im-group-name.ts",
     "src/group-titles.ts",
-    "src/feishu/permissions.ts"
+    "src/feishu/permissions.ts",
+    "src/collaboration.ts",
+    "src/collaboration-types.ts"
   ],
   "references": [
     {

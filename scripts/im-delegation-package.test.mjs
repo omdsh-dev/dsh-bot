@@ -55,7 +55,9 @@ class Client {
   this.robot={getInfo:async()=>({agentId:id,imId:id*10+1,name:o.appKey})};
   this.im={message:{sendToUser:async(user,text)=>state.sent.push({bot:id,user,text}),
    sendToGroupWithOptions:async v=>{if(v.msgtype==='MD'&&v.body.length>2)throw new Error('msg body wrong, markdown count exceed limit (errcode: 40067)');return state.sent.push({bot:id,group:v.groupId,msgtype:v.msgtype,body:v.body,text:v.body.map(b=>b.content||'').join('')});}},
-   group:{create:async()=>({groupId:'777'})}};
+   group:{create:async()=>({groupId:'777'}),
+    getGroupInfo:async groupId=>({groupId,name:'Delegation',masterUserId:'ou_alice'}),
+    getMembers:async()=>[11,22,33].map(agentId=>({type:'agent',agentId}))}};
  }
 }
 class WSClient {
@@ -109,7 +111,11 @@ export async function apply(ctx){
    // First contact in a previously unseen group must discover configured peers too.
    // Do not seed a room through a whitelist: that hid the real all-groups failure.
    for(const id of ['alpha','beta','gamma']) await bot.saveFeishuBinding({botId:id,appId:'cli_'+id,brand:'feishu',allowUsers:['ou_alice'],allowGroups:[],allowAllGroups:true,admins:['ou_alice']});
-   await bot.createInfoflowGroup({requestId:'delegation-group-1',title:'Delegation',botIds:['alpha','beta','gamma'],defaultBot:'alpha',owner:'ou_alice',members:[]});
+   const groupRequest={requestId:'delegation-group-1',title:'Delegation',botIds:['alpha','beta','gamma'],defaultBot:'alpha',owner:'ou_alice',members:[]};
+   // Binding access and administrator rights do not grant permission to invite humans.
+   await assert.rejects(bot.createInfoflowGroup(groupRequest),/白名单/);
+   await bot.saveInfoflowGroupInviteAllowlist(['ou_alice']);
+   await bot.createInfoflowGroup(groupRequest);
   }
   await wait(()=>bot.feishuSnapshot().bindings.every(b=>b.status==='connected')&&bot.infoflowSnapshot().bindings.every(b=>b.status==='connected'),'connections unavailable');
   assert.ok(bot.feishuSnapshot().bindings.every(b=>b.allowAllGroups===true&&b.allowGroups.length===0),'All-groups access must survive restart without a group whitelist');

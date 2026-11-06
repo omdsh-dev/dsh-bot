@@ -25,6 +25,16 @@ function bench(receive = vi.fn(async (_input: unknown) => {})) {
 function delivery(kind: 'private' | 'group'): Delivery {
   return { id: 'chunk-1', conversation: { provider: 'infoflow', accountId: 'app', kind, id: '9223372036854775807' }, user: 'alice', text: 'hello', attempts: 0, nextAt: 0 }
 }
+it('passes only robot Agent IDs to the SDK robot parameter and never to its human account list', async () => {
+  const addMembers = vi.fn(async () => ({}))
+  const sdk = { Client: class { im = { message: { sendToUser: vi.fn(async () => {}), sendToGroupWithOptions: vi.fn(async () => {}) }, group: { create: vi.fn(async () => ({ groupId: 123 })), addMembers } } }, WSClient: class { on() {} async connect() {} disconnect() {} } }
+  const api = robotApi(sdk, { appKey: 'fixture', appSecret: 'fixture', agentId: '11', timeout: 100 })
+  await api.addRobots!('123', ['22'])
+  expect(addMembers).toHaveBeenCalledExactlyOnceWith('123', [], ['22'])
+  await expect(api.addRobots!('123', ['wangyaozuo'])).rejects.toThrow('Invalid')
+  await expect(api.addRobots!('9007199254740993', ['22'])).rejects.toThrow('Invalid')
+  expect(addMembers).toHaveBeenCalledTimes(1)
+})
 
 it('uses distinct private/group Markdown formats and preserves recipient IDs', async () => {
   const b = bench()

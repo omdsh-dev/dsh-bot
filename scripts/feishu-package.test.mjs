@@ -27,6 +27,7 @@ const state = { sockets: [], sent: [], groups: [], registrations: 0, authorizati
 class Client {
  constructor(options) { this.appId=options.appId; }
  async request(options) {
+  if(options.method==='GET'&&options.url.endsWith('/members/is_in_chat')) return {code:0,data:{is_in_chat:true}};
   if(options.method==='GET'&&options.url.startsWith('/open-apis/im/v1/chats/')) return {code:0,data:{name:'飞书实际群名'}};
   if(options.method==='GET') return {code:0,bot:{open_id:'ou_bot_'+this.appId,app_name:'Robot '+this.appId}};
   if(options.url==='/open-apis/im/v1/chats') { state.groups.push(options); return {code:0,data:{chat_id:'oc_shared_group'}}; }
@@ -106,7 +107,7 @@ export async function apply(ctx) {
    assert.deepEqual(bot.feishuSnapshot().bindings.find(item=>item.botId==='beta'),beforePermissions);
    assert.equal(sdk.state.registrations,1,'Existing-app consent must not create another app');
    assert.equal(sdk.state.authorizations.length,1);
-   assert.deepEqual(sdk.state.authorizations[0].addons,{preset:false,scopes:{tenant:['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:message:readonly', 'im:resource', 'im:chat:read', 'im:chat:create', 'im:chat.members:bot_access']}});
+   assert.deepEqual(sdk.state.authorizations[0].addons,{preset:false,scopes:{tenant:['im:message.p2p_msg:readonly', 'im:message.group_at_msg:readonly', 'im:message:send_as_bot', 'im:message:readonly', 'im:resource', 'im:chat:read', 'im:chat:create', 'im:chat.members:write_only', 'im:chat.members:bot_access']}});
    for(const id of ['alpha','beta']) {
     const binding=bot.feishuSnapshot().bindings.find(item=>item.botId===id);
     await bot.toggleFeishuBinding({botId:id,enabled:true});

@@ -1,4 +1,6 @@
 /** Merge legacy per-account external group histories without replacing native Bot Sessions. */
+import { isDeepStrictEqual } from 'node:util'
+import { mergeRoomTasks } from './task-ledger.ts'
 import type { BotState, ChatMessage, ChatMessageId, Room } from './types.ts'
 
 /** Shared group identity; private chats remain scoped to the receiving app. */
@@ -6,8 +8,10 @@ export function isExternalGroup(room: Room): boolean { return room.external?.kin
 
 /** Merge all legacy entries for one chat in a single BotMode storage transaction.
  * Retired room IDs remain aliases for pending connector work; response IDs and Sessions survive.
+ * Duplicate deliveries of one human message must carry the same task policy; a mismatch throws
+ * before any state changes so a restriction is never dropped. Ledger tasks follow their canonical root.
  */
-export function mergeExternalRooms(state: BotState, chatId: string, provider: 'feishu' | 'infoflow' = 'feishu'): Room | undefined {
+export function mergeExternalRooms(state: BotState, chatId: string, provider: 'feishu' | 'infoflow' = 'feishu', now = Date.now()): Room | undefined {
   const rooms = state.rooms.filter(room => isExternalGroup(room) && room.external!.provider === provider && room.external!.id === chatId)
   const accountId = `group:${chatId}`
   const target = rooms.find(room => room.external!.accountId === accountId) ?? rooms[0]
@@ -32,6 +36,7 @@ export function mergeExternalRooms(state: BotState, chatId: string, provider: 'f
         message.external.sources = sources
         const previous = byReceipt.get(message.external.id)
         if (previous) {
+          if (!isDeepStrictEqual(previous.taskPolicy, message.taskPolicy)) throw new Error('Conflicting task policy for the same external message; resolve it before merging')
           for (const source of sources) if (!previous.external!.sources!.some(item => item.accountId === source.accountId)) previous.external!.sources!.push(source)
           aliases.set(message.id, previous.id)
           continue
@@ -45,12 +50,16 @@ export function mergeExternalRooms(state: BotState, chatId: string, provider: 'f
     if (message.replyTo) message.replyTo = aliases.get(message.replyTo) ?? message.replyTo
     if (message.delegation) message.delegation.rootId = aliases.get(message.delegation.rootId) ?? message.delegation.rootId
   }
+  // Build the ledger copy before committing so a ledger failure leaves every room untouched.
+  const roomIds = new Set(rooms.flatMap(room => [room.id as string, ...(room.aliases ?? [])]))
+  const taskLedger = state.taskLedger && mergeRoomTasks(state.taskLedger, roomIds, target.id, aliases, now)
   messages.sort((left, right) => left.time - right.time)
   target.aliases = [...new Set(rooms.flatMap(room => [...(room.aliases ?? []), ...(room.id !== target.id ? [room.id] : [])]))]
   target.external = { provider, accountId, kind: 'group', id: chatId }
   const participants = new Map(rooms.flatMap(room => (room.participants ?? []).map(person => [person.id, person] as const)))
   if (participants.size) target.participants = [...participants.values()]
   target.members = [...members.values()]; target.messages = messages
+  if (taskLedger) state.taskLedger = taskLedger
   state.rooms = state.rooms.filter(room => !rooms.includes(room) || room === target)
   return target
 }
