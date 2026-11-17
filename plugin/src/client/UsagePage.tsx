@@ -3,6 +3,7 @@ import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { UsageReport, UsageTotals } from '../usage.ts'
 import type { CapabilityFace } from './capability-face.ts'
 import type { UsageFilter } from '../usage-types.ts'
+import { UsageOverview } from './UsageOverview.tsx'
 import { UsageLedger } from './UsageLedger.tsx'
 import css from './Panel.module.css'
 
@@ -51,6 +52,8 @@ export function UsagePage({ face, english, connectionError, back, openBudget }: 
     </div>
     {(error || connectionError) && <p role="alert" className={css.controlError}>{l('更新失败，已显示的数据可能过时。', 'Update failed. Displayed data may be stale.')} {error || connectionError}</p>}
     {report && <>
+      <UsageOverview report={report} filter={filter} change={setFilter} botId={selected} selectBot={setBotId} english={english}/>
+      <details className={css.usageDetails}><summary>{l('详细账本与预算', 'Detailed records and budgets')}</summary>
       <section aria-label={l('总预算用量', 'Overall budget usage')} className={css.usageSection}>
         <h3>{l('总预算用量', 'Overall budget usage')}</h3>
         <p className={css.integrationHint}>{global ? `${period(global.budget.period)} · ${l('本期起点', 'Period start')} ${new Date(global.budget.since).toLocaleString()}` : l('尚无总预算记账记录，首次报告用量后开始累计。', 'No overall budget usage yet. Tracking starts when usage is reported.')}</p>
@@ -95,6 +98,7 @@ export function UsagePage({ face, english, connectionError, back, openBudget }: 
           </div>)}
         </article>)}</div> : <p className={css.usageEmpty}>{l('尚无预算记录，可点击「管理预算」设置额度。', 'No budgets yet. Choose “Manage budgets” to set limits.')}</p>}
       </section>
+      </details>
     </>}
   </main>
 }

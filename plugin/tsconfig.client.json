@@ -57,7 +57,8 @@
     "src/client/ModelPicker.tsx",
     "src/feishu/permissions.ts",
     "src/collaboration-types.ts",
-    "src/client/InviteBotDialog.tsx"
+    "src/client/InviteBotDialog.tsx",
+    "src/client/UsageOverview.tsx"
   ],
   "references": [
     {
